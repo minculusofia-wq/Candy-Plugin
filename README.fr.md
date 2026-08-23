@@ -49,6 +49,29 @@ vérifier (tests, lint, types, build) et rend trois verdicts possibles :
 - `2` **aucun moyen de vérification n'existe dans ce projet** — le cas le plus
   utile, celui que personne ne signale d'habitude
 
+## Pour quels projets ? Bots, apps, et tout le reste
+
+Ces règles sont nées sur deux terrains : des **bots de trading** qui tournent en
+continu sur un serveur, et une **app iOS** construite phase par phase. La plus
+grande partie ne dépend ni de l'un ni de l'autre.
+
+| Ce qui marche partout | Spécifique aux bots et services qui tournent | Spécifique aux apps découpées en phases |
+|---|---|---|
+| **Règles** : vérifier avant d'affirmer · honnêteté brutale · discipline de code · réflexes de travail · choix du modèle · routage des commandes | La section « stratégies de bots » de `brutal-honesty.md` | `porte-de-phase.md` |
+| **Commandes** : `/verifier` · `/maj-docs` | `/debug` (mode simulation, jamais sur le serveur) · `/fin-session` | `/fin-phase` |
+| **Agents** : `relecteur-securite` | Sa section « fonds et transactions » | `relecteur-de-phase` |
+| **Hooks** : contrôle du projet, protection des secrets, garde avant écriture, README avant push, relecture de la réponse, audit des `.md` | `rule5-debug-local-only.sh` (bloque SSH sauf lecture seule) · `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
+
+**En clair :** si vous ne faites ni bot ni app à phases, prenez la première
+colonne — c'est déjà l'essentiel. Rien n'oblige à tout installer : les règles se
+copient une par une, et un hook se retire en supprimant sa ligne dans
+`hooks/hooks.json`.
+
+Les exemples parlent de trading et d'iPhone parce que c'est là que ces règles ont
+été payées cher. Le principe, lui, ne change pas : **rien n'est vrai parce que
+Claude l'a écrit** — ni sur un bot, ni sur une app, ni sur un script de trois
+lignes.
+
 ## `/fin-session` ou `/fin-phase` ? La question qu'on se pose le plus
 
 Les deux ferment un travail. Elles ne ferment pas la même chose.

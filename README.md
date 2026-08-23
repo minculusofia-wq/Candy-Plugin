@@ -52,6 +52,27 @@ lint, types, build) and returns one of three verdicts:
 - `2` **there is no way to verify this project** — the most useful case, and the
   one nothing else tells you about
 
+## Which projects is this for? Bots, apps, and everything else
+
+These rules were forged on two fronts: **trading bots** running non-stop on a
+server, and an **iOS app** built phase by phase. Most of it depends on neither.
+
+| Works anywhere | Specific to bots and long-running services | Specific to apps built in phases |
+|---|---|---|
+| **Rules**: verify before asserting · brutal honesty · code discipline · working reflexes · model choice · command routing | The "bot strategies" section of `brutal-honesty.md` | `porte-de-phase.md` |
+| **Commands**: `/verifier` · `/maj-docs` | `/debug` (dry-run mode, never on the server) · `/fin-session` | `/fin-phase` |
+| **Agents**: `relecteur-securite` | Its "funds and transactions" section | `relecteur-de-phase` |
+| **Hooks**: project check, secret protection, pre-write guard, README before push, answer review, `.md` audit | `rule5-debug-local-only.sh` (blocks SSH except read-only) · `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
+
+**In short:** if you build neither bots nor phased apps, take the first column —
+that's already the heart of it. Nothing forces you to install everything: rules
+are copied one at a time, and a hook is removed by deleting its line in
+`hooks/hooks.json`.
+
+The examples talk about trading and iPhones because that's where these rules were
+paid for. The principle doesn't change: **nothing is true because Claude wrote
+it** — not on a bot, not on an app, not on a three-line script.
+
 ## `/fin-session` or `/fin-phase`? The question that comes up most
 
 Both close a piece of work. They don't close the same thing.
