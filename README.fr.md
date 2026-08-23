@@ -2,6 +2,16 @@
 
 *[English version](README.md) · Français*
 
+[![MIT](https://img.shields.io/github/license/minculusofia-wq/Candy-Plugin?style=flat-square&color=555)](LICENSE)
+![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-8A63D2?style=flat-square)
+![Langue](https://img.shields.io/badge/contenu-fran%C3%A7ais-1f6feb?style=flat-square)
+
+<p align="center">
+  <img src="docs/apercu.svg" alt="Le contrôle universel rend un verdict : TOUT PASSE sur un projet, AUCUN MOYEN DE VERIFICATION TROUVE sur un autre" width="100%">
+</p>
+
+<p align="center"><i>Le même contrôle, sur deux projets. Il ne dit jamais « ça a l'air bon ».</i></p>
+
 Un plugin Claude Code, en français, qui empêche trois choses :
 
 1. **Que Claude affirme sans avoir lu.** Chaque chiffre, chaque nom de fichier,

@@ -2,6 +2,16 @@
 
 *English · [Version française](README.fr.md)*
 
+[![MIT](https://img.shields.io/github/license/minculusofia-wq/Candy-Plugin?style=flat-square&color=555)](LICENSE)
+![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-8A63D2?style=flat-square)
+![Language](https://img.shields.io/badge/content-French-1f6feb?style=flat-square)
+
+<p align="center">
+  <img src="docs/apercu.svg" alt="The universal check returns a verdict: everything passes on one project, no way to verify on another" width="100%">
+</p>
+
+<p align="center"><i>The same check, on two projects. It never says "looks good".</i></p>
+
 A Claude Code plugin that stops three things:
 
 1. **Claude asserting things it hasn't read.** Every number, filename and technical
