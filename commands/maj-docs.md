@@ -18,7 +18,7 @@ Mettre à jour **tous** les fichiers `.md` du projet courant, pas seulement le R
 Lancer le script d'audit sur le projet :
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/hooks/session-end-md-audit.sh "$PWD"
+bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-md-audit.sh "$PWD"
 ```
 
 Le script vérifie 4 choses :

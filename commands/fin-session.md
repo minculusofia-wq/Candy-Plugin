@@ -24,7 +24,7 @@ Attendre sa réponse avant de continuer.
 - Si **non** → passer directement à l'étape 1
 
 > **Cette commande est celle des bots.** Une app dont le travail est découpé en
-> phases se clot avec `/fin-phase`, qui relit la porte de sortie de la phase et
+> phases se clôt avec `/fin-phase`, qui relit la porte de sortie de la phase et
 > refuse de la déclarer terminée sans vérification sur l'appareil réel.
 
 ## 0.5 Audit automatique des .md (OBLIGATOIRE)
@@ -32,7 +32,7 @@ Attendre sa réponse avant de continuer.
 Avant toute mise à jour manuelle, lancer le script d'audit qui scanne tous les .md du projet et détecte les obsolescences :
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/hooks/session-end-md-audit.sh "$CLAUDE_PROJECT_DIR"
+bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-md-audit.sh "$CLAUDE_PROJECT_DIR"
 ```
 
 Le script vérifie 4 choses :
