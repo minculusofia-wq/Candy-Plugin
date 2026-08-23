@@ -53,7 +53,7 @@ Lancer le contrôle du projet, **détecté et non supposé**, dans cet ordre :
    (c'est la forme documentée comme porte de sortie ; la lancer telle qu'elle est
    écrite, au moins une fois).
 2. Sinon, un `Makefile` avec une cible `verifier` ou `test` à la racine.
-3. Sinon, repli : `${CLAUDE_PLUGIN_ROOT}/hooks/verifier-projet.sh "$PWD"`.
+3. Sinon, repli : `bash ${CLAUDE_PLUGIN_ROOT}/hooks/verifier-projet.sh "$PWD"`.
 
 **Afficher la sortie réelle**, pas un résumé. « Les tests passent » n'est pas un
 verdict.
