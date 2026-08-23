@@ -7,7 +7,7 @@ description: Lancer le controle complet du projet courant (tests, qualite, types
 Lancer le contrôle universel sur le projet courant :
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/hooks/verifier-projet.sh "$PWD"
+bash ${CLAUDE_PLUGIN_ROOT}/hooks/verifier-projet.sh "$PWD"
 ```
 
 Le script détecte seul comment vérifier le projet — Makefile, tests Python, projet Node — sans configuration préalable.

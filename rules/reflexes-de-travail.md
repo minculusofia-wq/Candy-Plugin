@@ -7,7 +7,7 @@ Quatre réflexes qui s'appliquent à tous les projets, anciens et nouveaux.
 Avant d'annoncer qu'un travail est terminé, lancer le contrôle du projet :
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/hooks/verifier-projet.sh "$PWD"
+bash ${CLAUDE_PLUGIN_ROOT}/hooks/verifier-projet.sh "$PWD"
 ```
 
 Montrer le résultat. Pas « les tests passent » — la sortie réelle.
