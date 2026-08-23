@@ -1,6 +1,8 @@
 # Communication avec l'utilisateur
 
-L'utilisateur n'est pas développeur. Il est le stratège/product owner de ses bots de trading.
+Cette règle sert quand celui qui pilote le projet n'écrit pas le code lui-même :
+il décide de la stratégie et du produit, et délègue la mise en œuvre. À retirer
+si ce n'est pas votre cas — les autres règles ne dépendent pas de celle-ci.
 
 ## Comment interpréter ses demandes
 - Il décrit ce qu'il veut en langage métier/business, pas en jargon technique

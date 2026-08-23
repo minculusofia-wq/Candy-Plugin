@@ -11,8 +11,9 @@ A Claude Code plugin that stops three things:
 3. **"It's done" without proof.** A universal check figures out on its own how to
    verify the current project and returns a verdict.
 
-Written and used daily by someone who is not a developer, and who needed the tool
-to say no.
+None of these rules came from a blog post. Each one was written after the fact,
+the day a "done" turned out to be false — on production bots as much as on a
+mobile app.
 
 **The content is in French** — the rules, the commands and the hook messages all
 speak French to Claude, which answers in French. This README is the English one;

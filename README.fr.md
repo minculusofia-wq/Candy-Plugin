@@ -11,8 +11,9 @@ Un plugin Claude Code, en français, qui empêche trois choses :
 3. **Que « c'est fait » soit dit sans preuve.** Un contrôle universel détecte tout
    seul comment vérifier le projet courant et rend un verdict.
 
-Écrit et éprouvé au quotidien par quelqu'un qui n'est pas développeur, et qui
-avait besoin que l'outil dise non.
+Aucune de ces règles ne sort d'un article de blog. Chacune a été écrite après
+coup, le jour où un « c'est fait » s'est révélé faux — sur des bots en production
+comme sur une app mobile.
 
 ## Installation
 
