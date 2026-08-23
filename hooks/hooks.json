@@ -1,0 +1,35 @@
+{
+  "description": "Garde-fous : rappels au démarrage, contrôles avant écriture et avant push, relecture en fin de tour.",
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/ouverture-de-phase.sh\"'" } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [
+        { "type": "command", "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/rule13-source-or-silence.sh\"'" },
+        { "type": "command", "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/skills-reminder.sh\"'" }
+      ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [
+        { "type": "command", "command": "bash -c 'INPUT=$(cat); CMD=$(echo \"$INPUT\" | jq -r \".tool_input.command // empty\"); if [[ \"$CMD\" == *\"git push\"* ]]; then bash \"${CLAUDE_PLUGIN_ROOT}/hooks/validate-before-push.sh\"; fi'" },
+        { "type": "command", "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/rule12-phase-debug-required.sh\"'" },
+        { "type": "command", "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/rule5-debug-local-only.sh\"'" },
+        { "type": "command", "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/rule7-readme-before-push.sh\"'" },
+        { "type": "command", "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/protect-secrets.sh\"'" }
+      ] },
+      { "matcher": "Write|Edit", "hooks": [
+        { "type": "command", "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-edit-guard.sh\"'" },
+        { "type": "command", "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/rule9-code-discipline.sh\"'" },
+        { "type": "command", "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/protect-secrets.sh\"'" }
+      ] }
+    ],
+    "Stop": [
+      { "hooks": [
+        { "type": "command", "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/controle-si-code-modifie.sh\"'" },
+        { "type": "command", "command": "bash -c 'cat | python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/relire-ma-reponse.sh\"'" },
+        { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/rule6-session-end.sh\"" }
+      ] }
+    ]
+  }
+}
