@@ -1,0 +1,7 @@
+{
+  "name": "candy-plugin",
+  "version": "0.1.0",
+  "description": "Garde-fous en français pour Claude Code : vérifier avant d'affirmer, honnêteté brutale, portes de phase, contrôle universel du projet. / French guardrails for Claude Code: verify before asserting, brutal honesty, phase gates, universal project check.",
+  "author": { "name": "turing80" },
+  "homepage": "https://github.com/minculusofia-wq/Candy-Plugin"
+}

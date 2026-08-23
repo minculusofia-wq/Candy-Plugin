@@ -1,0 +1,13 @@
+{
+  "name": "candy-plugin",
+  "description": "Candy Plugin — garde-fous pour Claude Code / guardrails for Claude Code",
+  "owner": { "name": "turing80" },
+  "plugins": [
+    {
+      "name": "candy-plugin",
+      "source": "./",
+      "description": "Vérifier avant d'affirmer, honnêteté brutale, portes de phase, contrôle universel du projet.",
+      "category": "workflow"
+    }
+  ]
+}
