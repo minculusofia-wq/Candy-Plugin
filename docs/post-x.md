@@ -1,8 +1,31 @@
 # Textes pour le partage
 
-Deux angles, deux images. Le second raconte mieux, le premier explique mieux.
-Chaque affirmation ci-dessous a été vérifiée dans le dépôt — ne rien ajouter qui
-ne soit pas dans le code.
+Trois angles, trois images. Chaque affirmation ci-dessous a été vérifiée dans le
+dépôt — ne rien ajouter qui ne soit pas dans le code.
+
+## Les images
+
+| fichier | quand l'utiliser |
+|---|---|
+| `candy-fr.png` · `candy-en.png` | l'identité : le bonbon, le nom, ce que fait l'outil. La plus douce, la plus lisible en aperçu. |
+| `post-x-audit.png` | l'histoire de l'audit : ce que chaque garde-fou annonçait, ce qu'il faisait. |
+| `post-x.png` | le produit : les trois verdicts et leurs codes de sortie. |
+
+Le dessin du bonbon est original. Ne jamais le remplacer par une image du dessin
+animé Candy Candy : l'œuvre appartient à ses autrices et à son studio, et un
+dépôt public qui la reprend s'expose à un retrait.
+
+---
+
+## Angle 0 — l'identité · image `candy-fr.png`
+
+> Claude annonce que c'est fait. Sur quoi tu te bases pour le croire ?
+>
+> J'ai écrit un plugin qui ajoute à Claude Code un contrôle tout bête : il
+> cherche seul comment vérifier le projet courant, lance tout ce qu'il trouve, et
+> rend un verdict. Il ne dit jamais que ça a l'air bon.
+>
+> github.com/minculusofia-wq/Candy-Plugin
 
 ---
 
