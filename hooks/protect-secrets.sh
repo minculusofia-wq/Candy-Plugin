@@ -100,7 +100,10 @@ fi
 # --- Garde .env : refuser de suivre un .env qui n'est pas ignore ---
 COMMAND=$(printf '%s' "$INPUT" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('tool_input',{}).get('command',''))" 2>/dev/null)
 
-if [[ -n "$COMMAND" ]] && echo "$COMMAND" | grep -qE 'git\s+add.*\.env($|\s)|git\s+add\s+-A|git\s+add\s+\.'; then
+# Le point doit etre le chemin ENTIER. Sans l'ancre de fin, le motif attrapait
+# aussi « git add .claude-plugin/... » et bloquait une commande parfaitement normale
+# des lors qu'un .env trainait dans le dossier.
+if [[ -n "$COMMAND" ]] && echo "$COMMAND" | grep -qE 'git\s+add\s+.*\.env($|\s)|git\s+add\s+(-A|--all)($|\s)|git\s+add\s+\.($|\s)'; then
     PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
     if [[ -f "$PROJECT_DIR/.env" ]]; then
         if [[ ! -f "$PROJECT_DIR/.gitignore" ]] || ! grep -q '\.env' "$PROJECT_DIR/.gitignore" 2>/dev/null; then

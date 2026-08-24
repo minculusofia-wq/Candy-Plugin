@@ -1,7 +1,11 @@
 {
   "name": "candy-plugin",
-  "description": "Candy Plugin — garde-fous pour Claude Code / guardrails for Claude Code",
-  "owner": { "name": "turing80" },
+  "metadata": {
+    "description": "Candy Plugin — garde-fous pour Claude Code / guardrails for Claude Code"
+  },
+  "owner": {
+    "name": "turing80"
+  },
   "plugins": [
     {
       "name": "candy-plugin",
