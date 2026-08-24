@@ -94,7 +94,11 @@ if [ -z "$PYTEST" ] && command -v pytest >/dev/null 2>&1; then PYTEST="pytest"; 
 # cas de ce depot-ci, dont les tests sont des scripts shell.
 if [ -n "$PYTEST" ]; then
     CODE_NEUTRE=5
-    lancer "pytest" "$PYTEST" -q
+    # -p no:cacheprovider : ne rien ecrire dans le projet. Sans cette option,
+    # pytest depose un dossier .pytest_cache chez l'utilisateur — y compris dans
+    # un projet qui n'a pas une seule ligne de Python. Un controle ne salit pas
+    # ce qu'il controle.
+    lancer "pytest" "$PYTEST" -q -p no:cacheprovider
 fi
 
 for r in .venv/bin/ruff venv/bin/ruff; do

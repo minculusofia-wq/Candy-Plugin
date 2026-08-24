@@ -93,6 +93,20 @@ for cas in "tests/unit" "backend/tests" "src/tests"; do
     verifie "  et le Makefile qui passe ne la masque pas" 1 "$CODE"
 done
 
+# --- le contrôle ne laisse aucune trace dans le projet ---
+# Lancer pytest partout a un effet de bord : il dépose un dossier de cache dans
+# le projet, même sans une seule ligne de Python. Un contrôle ne salit pas ce
+# qu'il contrôle — et ce dossier finit enregistré par erreur.
+section "Contrôle universel — il ne laisse rien derrière lui"
+
+mkdir -p "$BAC/propre/tests"
+printf 'test:\n\t@true\n' > "$BAC/propre/Makefile"
+printf '#!/bin/bash\nexit 0\n' > "$BAC/propre/tests/cas.sh"
+AVANT=$(ls -a "$BAC/propre" | sort)
+bash "$CONTROLE" "$BAC/propre" >/dev/null 2>&1
+APRES=$(ls -a "$BAC/propre" | sort)
+verifie "aucun fichier créé dans le projet contrôlé" "$AVANT" "$APRES"
+
 # --- rien à quoi se fier : le cas que rien d'autre ne signale ---
 mkdir -p "$BAC/vide"
 bash "$CONTROLE" "$BAC/vide" >/dev/null 2>&1

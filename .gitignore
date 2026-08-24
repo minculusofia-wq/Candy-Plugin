@@ -1,0 +1,4 @@
+# Le controle universel lance pytest sans ecrire de cache, mais un
+# contributeur peut en creer un en lancant pytest a la main.
+.pytest_cache/
+.DS_Store
