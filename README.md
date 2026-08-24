@@ -148,7 +148,7 @@ starts. A phase never closes without you, and the next never opens on a false st
 make test
 ```
 
-Six groups, 89 cases: *send this to that hook, expect that verdict*. Each one
+Six groups, 87 cases: *send this to that hook, expect that verdict*. Each one
 was checked by putting the original defect back — a test that always passes is
 worth nothing. See [tests/README.md](tests/README.md).
 
@@ -161,7 +161,7 @@ worth nothing. See [tests/README.md](tests/README.md).
   `last_assistant_message` field, which earlier versions don't always send.
   Below that version it catches about one slip in two.
 - `pytest` and `npm` are **optional**, and only for the package's own tests:
-  thirteen cases check that the universal control does run those families.
+  fourteen cases check that the universal control does run those families.
   Without them those cases are skipped out loud, and the suite stays green.
 - Tested on macOS. The hooks are plain bash; Linux should work, untested.
 - `skills-reminder.sh` suggests `/grill-with-docs` and `/tdd`, third-party skills

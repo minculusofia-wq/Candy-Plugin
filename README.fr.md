@@ -149,7 +149,7 @@ s'ouvre pas sur un état faux.
 make test
 ```
 
-Six groupes, 89 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Chacun a
+Six groupes, 87 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Chacun a
 été vérifié en remettant le défaut d'origine — un test qui passe toujours ne
 vaut rien. Voir [tests/README.md](tests/README.md).
 
@@ -163,7 +163,7 @@ vaut rien. Voir [tests/README.md](tests/README.md).
   lit le champ `last_assistant_message`, que les versions antérieures n'envoient
   pas toujours. En dessous, elle ne signale qu'une faute sur deux.
 - `pytest` et `npm` sont **facultatifs**, et seulement pour les tests du paquet :
-  treize cas vérifient que le contrôle universel lance bien ces familles. Sans
+  quatorze cas vérifient que le contrôle universel lance bien ces familles. Sans
   eux, ces cas sont sautés en le disant, et la suite reste verte.
 - Testé sur macOS. Les hooks sont du bash POSIX-ish ; Linux devrait passer, non testé.
 - Le hook `skills-reminder.sh` propose `/grill-with-docs` et `/tdd`, qui sont des

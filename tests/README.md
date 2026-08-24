@@ -4,7 +4,7 @@
 make test
 ```
 
-Six groupes, 89 cas. Chacun dit la même chose : *j'envoie ceci à ce hook,
+Six groupes, 87 cas. Chacun dit la même chose : *j'envoie ceci à ce hook,
 j'attends ce verdict*.
 
 | groupe | ce qu'il garde |
@@ -18,7 +18,7 @@ j'attends ce verdict*.
 
 ## Les cas sautés
 
-Le paquet ne dépend que de `python3`. Treize cas ont besoin de `pytest` ou de
+Le paquet ne dépend que de `python3`. Quatorze cas ont besoin de `pytest` ou de
 `npm` pour exister — ils vérifient que le contrôle universel lance bien ces
 familles. Sans ces outils, ces cas sont **sautés en le disant** (« pytest absent
 de cette machine »), pas comptés pour verts. Le bilan affiche alors le nombre de
