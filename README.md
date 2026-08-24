@@ -153,20 +153,8 @@ Six groups, 89 cases: *send this to that hook, expect that verdict*. Each one
 was checked by putting the original defect back — a test that always passes is
 worth nothing. See [tests/README.md](tests/README.md).
 
-### Your project, at the end of a turn
-
-Nothing to do by default: the check runs your project's full suite, as before.
-If that suite is too slow to run every turn, declare a `test-rapide` target in
-your `Makefile` — that one runs instead, and the verdict says out loud that the
-full suite did not run:
-
-```
-SOUS-ENSEMBLE PASSE — la suite complete n'a PAS tourne.
-Ne pas annoncer que le travail est fini sans avoir lance /verifier.
-```
-
-Never "all passing" on partial coverage: that is the very lie this plugin
-exists to prevent.
+At the end of a turn the check prefers the project's `test-rapide` target when
+it exists. The full suite stays in `/verifier`.
 
 ## Requirements
 
