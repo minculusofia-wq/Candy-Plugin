@@ -165,7 +165,7 @@ alerte.
 
 ---
 
-## PRIORITÉ 5 — deux choix à trancher, pas des défauts
+## PRIORITÉ 5 — deux choix « à trancher », pas des défauts
 
 ### 5a. La suite exige des outils que le README dit ne pas exiger
 Vérifié : sans `pytest` ni `npm` accessibles, trois cas de
@@ -187,7 +187,7 @@ contrôle avant push : « un contrôle qu'on attend finit contourné ». L'argum
 vaut davantage pour un contrôle à chaque tour que pour un contrôle à chaque
 push.
 
-À trancher : accepter les quatorze secondes, ou réserver la suite complète à
+Décision « à trancher » : accepter les quatorze secondes, ou réserver la suite complète à
 `/verifier` et ne garder qu'un sous-ensemble rapide en fin de tour.
 
 ---
