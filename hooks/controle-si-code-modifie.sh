@@ -22,7 +22,11 @@ if echo "$INPUT" | grep -q '"stop_hook_active"[[:space:]]*:[[:space:]]*true'; th
     exit 0
 fi
 
-PROJET=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+# python3 et non jq : jq n'est pas installe par defaut sur macOS. Un hook qui
+# depend d'un binaire absent echoue en SILENCE — ici il aurait controle le mauvais
+# dossier, ou rien du tout, sans le moindre message. python3 est deja requis par
+# tous les autres hooks du paquet.
+PROJET=$(printf '%s' "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('cwd',''))" 2>/dev/null)
 [ -z "$PROJET" ] && PROJET="${CLAUDE_PROJECT_DIR:-$PWD}"
 cd "$PROJET" 2>/dev/null || exit 0
 
