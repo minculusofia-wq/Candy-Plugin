@@ -74,7 +74,19 @@ for p in .venv/bin/pytest venv/bin/pytest backend/.venv/bin/pytest; do
 done
 if [ -z "$PYTEST" ] && command -v pytest >/dev/null 2>&1; then PYTEST="pytest"; fi
 
-if [ -n "$PYTEST" ] && { [ -d tests ] || [ -d test ] || ls test_*.py >/dev/null 2>&1; }; then
+# Un dossier « tests » ne veut pas dire des tests PYTHON : il peut contenir des
+# scripts shell, des fixtures, n'importe quoi. Sans ce controle, pytest est
+# lance sur un projet qui n'a aucun test Python, ne collecte rien, sort en 5 —
+# et le projet est declare en echec alors que tout va bien.
+A_DES_TESTS_PYTHON=0
+for d in . tests test; do
+    [ -d "$d" ] || continue
+    if ls "$d"/test_*.py >/dev/null 2>&1 || ls "$d"/*_test.py >/dev/null 2>&1; then
+        A_DES_TESTS_PYTHON=1; break
+    fi
+done
+
+if [ -n "$PYTEST" ] && [ "$A_DES_TESTS_PYTHON" -eq 1 ]; then
     lancer "pytest" "$PYTEST" -q
 fi
 

@@ -142,6 +142,16 @@ what `/fin-phase` exists to prevent, and why it refuses to conclude on its own.
 one, and the `ouverture-de-phase.sh` hook repeats it when the next conversation
 starts. A phase never closes without you, and the next never opens on a false state.
 
+## Tests
+
+```
+make test
+```
+
+Six groups, around sixty cases: *send this to that hook, expect that verdict*.
+Each one was checked by putting the original defect back — a test that always
+passes is worth nothing. See [tests/README.md](tests/README.md).
+
 ## Requirements
 
 - `python3` (used by the hooks). **No `jq`** — it isn't installed by default

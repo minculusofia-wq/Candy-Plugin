@@ -143,6 +143,16 @@ suivante, et le hook `ouverture-de-phase.sh` la rappelle au démarrage de la
 conversation d'après. Une phase ne se ferme pas sans vous, et la suivante ne
 s'ouvre pas sur un état faux.
 
+## Tests
+
+```
+make test
+```
+
+Six groupes, une soixantaine de cas : *j'envoie ceci à ce hook, j'attends ce
+verdict*. Chacun a été vérifié en remettant le défaut d'origine — un test qui
+passe toujours ne vaut rien. Voir [tests/README.md](tests/README.md).
+
 ## Prérequis
 
 - `python3` (utilisé par les hooks). **Pas de `jq`** — il n'est pas installé
