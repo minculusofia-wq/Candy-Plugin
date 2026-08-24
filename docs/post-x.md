@@ -3,6 +3,40 @@
 Trois angles, trois images. Chaque affirmation ci-dessous a été vérifiée dans le
 dépôt — ne rien ajouter qui ne soit pas dans le code.
 
+## Version retenue
+
+Publiée avec `candy-fr.png` (ou `candy-en.png`).
+
+**Français**
+
+> J'ai mis ma config Claude Code dans un plugin.
+>
+> Le cœur, c'est un contrôle qui cherche seul comment vérifier le projet ouvert,
+> lance tout ce qu'il trouve, et rend un verdict. Il ne dit jamais que ça a l'air bon.
+>
+> Sorti de mon usage réel : bots de trading et app iOS.
+>
+> github.com/minculusofia-wq/Candy-Plugin
+
+**English**
+
+> I put my Claude Code config into a plugin.
+>
+> At its core: a check that figures out on its own how to verify the project you
+> have open, runs everything it finds, and returns a verdict. It never says it
+> looks good.
+>
+> Comes straight out of my own work: trading bots and an iOS app.
+>
+> Heads up: the rules and messages are in French.
+>
+> github.com/minculusofia-wq/Candy-Plugin
+
+Aucun point après l'URL : collé à la fin d'un lien, il finit parfois inclus
+dedans et le lien casse.
+
+---
+
 ## Les images
 
 | fichier | quand l'utiliser |
