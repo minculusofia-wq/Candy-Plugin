@@ -36,6 +36,12 @@ ecriture "un gabarit shell"                      0 "$CLE_PRIVEE=\${$CLE_PRIVEE}"
 ecriture "un exemple à remplir"                  0 "$CLE_API = \"your_${CLE_API}_here_xxxx\""
 ecriture "une phrase en français"                0 "$MOT_DE_PASSE = \"a definir avec l equipe\""
 
+# Deux formes très courantes, cassées en resserrant les filtres puis remises :
+# elles passaient avant, elles doivent passer après. Un garde-fou qui bloque du
+# code ordinaire finit désinstallé, et c'est alors le vrai secret qui passe.
+ecriture "une clé passée en argument nommé"      0 "client = Client($CLE_API=reglages.cle_de_production)"
+ecriture "un emplacement à remplir en majuscules" 0 "$CLE_API: \"REMPLACER_PAR_VOTRE_CLE\""
+
 section "Secrets — ce qui doit BLOQUER (une vraie valeur)"
 ecriture "une clé privée écrite en dur"          2 "$CLE_PRIVEE = \"$HEX64\""
 ecriture "une clé d'API écrite en dur"           2 "$CLE_API = \"sk-proj-9Fj2LmQ8xT4vB7nR1cW0\""

@@ -1,8 +1,7 @@
 # Les tests
 
 ```
-make test          # les six groupes, 89 cas, environ 18 secondes
-make test-rapide   # le sous-ensemble de fin de tour, environ 8 secondes
+make test
 ```
 
 Six groupes, 89 cas. Chacun dit la même chose : *j'envoie ceci à ce hook,
@@ -16,14 +15,6 @@ j'attends ce verdict*.
 | `04-blocages.sh` | les hooks qui annoncent bloquer sortent bien en 2 |
 | `05-audit-md.sh` | l'audit des `.md` compte juste et ignore ce qui est cité |
 | `06-paquet.sh` | le paquet reste installable et ne dépend que de `python3` |
-
-## Deux modes
-
-`make test` joue tout. `make test-rapide` écarte les deux groupes les plus longs
-(`01` et `02`) et les nomme à l'écran : c'est le contrôle de fin de tour, huit
-secondes au lieu de dix-huit. Un contrôle qu'on attend finit contourné — mais
-une couverture réduite qu'on ne dit pas se lit comme une couverture complète,
-d'où les noms affichés et le renvoi vers `/verifier`.
 
 ## Les cas sautés
 

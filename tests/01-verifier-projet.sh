@@ -93,33 +93,6 @@ for cas in "tests/unit" "backend/tests" "src/tests"; do
     verifie "  et le Makefile qui passe ne la masque pas" 1 "$CODE"
 done
 
-# --- la cible rapide de fin de tour ---
-# En fin de tour, la suite complète du projet fait attendre. Un projet peut
-# déclarer un sous-ensemble sous le nom « test-rapide » : c'est lui qui tourne
-# alors, et lui seul. Sans le drapeau, rien ne change.
-section "Contrôle universel — le sous-ensemble de fin de tour"
-
-mkdir -p "$BAC/rapide"
-printf 'test:\n\t@echo SUITE-COMPLETE\n\ntest-rapide:\n\t@echo SOUS-ENSEMBLE\n' > "$BAC/rapide/Makefile"
-
-NORMAL=$(bash "$CONTROLE" "$BAC/rapide" 2>&1)
-verifie "sans le drapeau, c'est la suite complète qui tourne" \
-        1 "$(echo "$NORMAL" | grep -c 'SUITE-COMPLETE')"
-verifie "  et le sous-ensemble n'est pas lancé deux fois" \
-        0 "$(echo "$NORMAL" | grep -c 'SOUS-ENSEMBLE')"
-
-VITE=$(bash "$CONTROLE" "$BAC/rapide" --rapide 2>&1)
-verifie "avec le drapeau, c'est le sous-ensemble qui tourne" \
-        1 "$(echo "$VITE" | grep -c 'SOUS-ENSEMBLE')"
-verifie "  et la suite complète n'est PAS lancée" \
-        0 "$(echo "$VITE" | grep -c 'SUITE-COMPLETE')"
-
-# Un projet sans cible rapide ne doit rien perdre : le drapeau est sans effet.
-mkdir -p "$BAC/sans-rapide"
-printf 'test:\n\t@echo SUITE-COMPLETE\n' > "$BAC/sans-rapide/Makefile"
-verifie "un projet sans cible rapide garde sa suite complète" \
-        1 "$(bash "$CONTROLE" "$BAC/sans-rapide" --rapide 2>&1 | grep -c 'SUITE-COMPLETE')"
-
 # --- rien à quoi se fier : le cas que rien d'autre ne signale ---
 mkdir -p "$BAC/vide"
 bash "$CONTROLE" "$BAC/vide" >/dev/null 2>&1

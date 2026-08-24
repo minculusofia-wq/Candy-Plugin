@@ -61,15 +61,21 @@ GABARIT = re.compile(r"""
     | <[^>]+>                     # <a_remplacer>
     | %\([^)]*\)s                  # %(nom)s
     | \{[A-Za-z_]\w*\}              # {nom}
+    | [()]                        # une parenthese : du code, pas une valeur
     | ^(?:os\.|process\.|env\.|import\b)
-    | ^[A-Za-z_][\w.]*\(            # un appel de fonction
 """, re.I | re.X)
+
+# Un nom en majuscules avec des tirets bas et sans aucun chiffre est un
+# emplacement a remplir (REMPLACER_PAR_VOTRE_CLE), pas une cle : une vraie cle
+# en majuscules porte des chiffres et pas de tiret bas.
+A_REMPLIR = re.compile(r"^[A-Z][A-Z_]*_[A-Z_]+$")
 
 # « secret » a ete retire de cette liste : une valeur commencant par ce mot
 # n a rien d un exemple, et la vraie cle « secretvalue9Xk2... » passait.
 FACTICE = re.compile(r"^(?:x{3,}|\.{3,}|\*{3,}|-{3,}|none|null|nil|true|false|"
                      r"your[_-]|my[_-]|the[_-]|test|dummy|fake|sample|example|"
                      r"placeholder|changeme|change[_-]me|todo|fixme|"
+                     r"remplacer|remplir|votre[_-]|vos[_-]|a[_-]definir|"
                      r"redacted|hidden|masked)", re.I)
 
 def ressemble_a_un_secret(v):
@@ -79,6 +85,8 @@ def ressemble_a_un_secret(v):
     if GABARIT.search(v):
         return False
     if FACTICE.match(v):
+        return False
+    if A_REMPLIR.match(v):
         return False
     mots = v.split()
     if len(mots) >= 8:

@@ -145,16 +145,12 @@ starts. A phase never closes without you, and the next never opens on a false st
 ## Tests
 
 ```
-make test          # everything: six groups, 89 cases, about 18 seconds
-make test-rapide   # the end-of-turn subset, about 8 seconds
+make test
 ```
 
 Six groups, 89 cases: *send this to that hook, expect that verdict*. Each one
 was checked by putting the original defect back — a test that always passes is
 worth nothing. See [tests/README.md](tests/README.md).
-
-At the end of a turn the check prefers the project's `test-rapide` target when
-it exists. The full suite stays in `/verifier`.
 
 ## Requirements
 

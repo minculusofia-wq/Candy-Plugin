@@ -8,10 +8,7 @@
 # Fonctionne sans configuration sur n'importe quel projet, ancien ou nouveau.
 #
 # Usage :
-#   ./verifier-projet.sh [PROJECT_DIR] [--rapide]
-#
-# --rapide : mode fin de tour. Si le projet declare une cible « test-rapide »
-# dans son Makefile, elle remplace « test ». Sans cette cible, rien ne change.
+#   ./verifier-projet.sh [PROJECT_DIR]
 #
 # Codes retour :
 #   0 = tout passe
@@ -21,12 +18,7 @@
 
 set -u
 
-PROJET=""
-RAPIDE=0
-for arg in "$@"; do
-    if [ "$arg" = "--rapide" ]; then RAPIDE=1; else PROJET="$arg"; fi
-done
-[ -n "$PROJET" ] || PROJET="$PWD"
+PROJET="${1:-$PWD}"
 cd "$PROJET" 2>/dev/null || { echo "Dossier introuvable : $PROJET"; exit 2; }
 
 echo "=== CONTROLE DU PROJET ==="
@@ -67,16 +59,8 @@ lancer() {
 }
 
 # --- Makefile : la source de vérité si elle existe ---
-# En fin de tour, un projet peut proposer un sous-ensemble rapide de sa suite
-# sous le nom « test-rapide » : c'est alors lui qui tourne, pas la suite
-# complete. Un controle qu'on attend finit contourne.
-CIBLE_TEST=test
-if [ "$RAPIDE" -eq 1 ] && [ -f Makefile ] && grep -qE "^test-rapide:" Makefile; then
-    CIBLE_TEST=test-rapide
-fi
-
 if [ -f Makefile ]; then
-    for cible in "$CIBLE_TEST" lint typecheck audit; do
+    for cible in test lint typecheck audit; do
         if grep -qE "^${cible}:" Makefile; then
             lancer "make $cible" make "$cible"
         fi

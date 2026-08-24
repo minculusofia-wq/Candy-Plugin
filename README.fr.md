@@ -146,16 +146,12 @@ s'ouvre pas sur un état faux.
 ## Tests
 
 ```
-make test          # tout : six groupes, 89 cas, environ 18 secondes
-make test-rapide   # le sous-ensemble de fin de tour, environ 8 secondes
+make test
 ```
 
 Six groupes, 89 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Chacun a
 été vérifié en remettant le défaut d'origine — un test qui passe toujours ne
 vaut rien. Voir [tests/README.md](tests/README.md).
-
-En fin de tour, le contrôle préfère la cible `test-rapide` du projet quand elle
-existe. La suite complète reste celle de `/verifier`.
 
 ## Prérequis
 
