@@ -7,10 +7,10 @@
 ![Langue](https://img.shields.io/badge/contenu-fran%C3%A7ais-1f6feb?style=flat-square)
 
 <p align="center">
-  <img src="docs/apercu.png" alt="Sortie réelle : make test passe, pytest échoue, npm test échoue, sortie 1 — et sur un autre projet, aucun moyen de vérification, sortie 2" width="100%">
+  <img src="docs/apercu-fr.png" alt="Le même contrôle sur trois projets : tout passe (sortie 0), deux contrôles échouent et tous sont listés (sortie 1), aucun moyen de vérifier ce projet (sortie 2)" width="100%">
 </p>
 
-<p align="center"><i>Le même contrôle, sur deux projets. Il ne dit jamais « ça a l'air bon ».</i></p>
+<p align="center"><i>Trois projets, trois verdicts. Il ne dit jamais « ça a l'air bon ».</i></p>
 
 Un plugin Claude Code, en français, qui empêche trois choses :
 

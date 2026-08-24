@@ -7,10 +7,10 @@
 ![Language](https://img.shields.io/badge/content-French-1f6feb?style=flat-square)
 
 <p align="center">
-  <img src="docs/apercu.png" alt="Real output: make test passes, pytest fails, npm test fails, exit 1 — and on another project, no way to verify at all, exit 2" width="100%">
+  <img src="docs/apercu-en.png" alt="The same check on three projects: everything passed (exit 0), two checks failed and all are listed (exit 1), no way to verify this project at all (exit 2)" width="100%">
 </p>
 
-<p align="center"><i>The same check, on two projects. It never says "looks good".</i></p>
+<p align="center"><i>Three projects, three verdicts. It never says "looks good".</i></p>
 
 A Claude Code plugin that stops three things:
 
