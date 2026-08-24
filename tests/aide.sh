@@ -14,6 +14,7 @@
 
 TOTAL=0
 ECHECS=0
+SAUTES=0
 SECTION=""
 
 if [ -t 1 ]; then
@@ -33,6 +34,18 @@ verifie() {
         ECHECS=$((ECHECS + 1))
         printf '  %s✗%s %s %s(attendu %s, obtenu %s)%s\n' "$ROUGE" "$NC" "$1" "$GRIS" "$2" "$3" "$NC"
     fi
+}
+
+# outil <nom> — vrai si l'outil est utilisable sur cette machine.
+outil() { command -v "$1" >/dev/null 2>&1; }
+
+# saute <description> <raison> — un cas qu'on ne peut pas jouer ici.
+# Le paquet ne dépend que de python3 ; quelques cas ont besoin de pytest ou de
+# npm pour exister. Plutôt que de les compter pour verts ou de laisser une suite
+# rouge sans explication, on les saute EN LE DISANT.
+saute() {
+    SAUTES=$((SAUTES + 1))
+    printf '  %s·%s %s %s(%s)%s\n' "$GRIS" "$NC" "$1" "$GRIS" "$2" "$NC"
 }
 
 # code_hook <chemin du hook> <json d'entree> [variables d'env...]
@@ -63,15 +76,37 @@ entree_fin_de_tour() {
     python3 -c 'import json,sys; print(json.dumps({"cwd":sys.argv[1],"last_assistant_message":"Voila.","session_id":"test"}))' "$1"
 }
 
-# lignes_injectees <chemin du hook> <json d'entree> — pour les hooks qui
-# n'ont pas de code de sortie parlant : ce qui compte est ce qu'ils écrivent.
+# texte_injecte <chemin du hook> <json d'entree> — ce que le hook écrit sur la
+# SORTIE NORMALE, la seule que Claude Code lit comme du contexte injecté.
+#
+# La sortie d'erreur est mise de côté volontairement : elle était fusionnée avec
+# l'autre, si bien qu'un hook qui se plaignait passait pour un hook qui parle —
+# vérifié, un simple avertissement faisait échouer les cinq cas qui attendent le
+# silence.
+texte_injecte() {
+    printf '%s' "$2" | bash "$1" 2>/dev/null
+}
+
+# lignes_injectees <chemin du hook> <json d'entree> — combien de lignes le hook
+# écrit sur la sortie normale.
 lignes_injectees() {
-    printf '%s' "$2" | bash "$1" 2>&1 | grep -c . || true
+    texte_injecte "$1" "$2" | grep -c . || true
+}
+
+# contient <chemin du hook> <json d'entree> <texte attendu> — rend 1 si le hook
+# a bien injecté CE texte-là. Compter les lignes ne suffit pas : n'importe quelle
+# ligne comptait, même sans rapport avec la règle.
+contient() {
+    texte_injecte "$1" "$2" | grep -qF "$3" && echo 1 || echo 0
 }
 
 bilan() {
     printf '\n%s%s=== BILAN ===%s\n' "$GRAS" "$GRIS" "$NC"
-    printf '  %s cas joués, %s en échec\n' "$TOTAL" "$ECHECS"
+    if [ "$SAUTES" -gt 0 ]; then
+        printf '  %s cas joués, %s en échec, %s%s sauté(s)%s\n' "$TOTAL" "$ECHECS" "$GRIS" "$SAUTES" "$NC"
+    else
+        printf '  %s cas joués, %s en échec\n' "$TOTAL" "$ECHECS"
+    fi
     if [ "$ECHECS" -eq 0 ]; then
         printf '  %sTout passe.%s\n\n' "$VERT" "$NC"
         return 0

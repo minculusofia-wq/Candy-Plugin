@@ -42,6 +42,14 @@ ecriture "une clé d'API écrite en dur"           2 "$CLE_API = \"sk-proj-9Fj2L
 ecriture "le même secret au format .env"         2 "$CLE_PRIVEE=$HEX64"
 ecriture "une phrase de récupération de douze mots" 2 "$MNEMO = \"$DOUZE_MOTS\""
 
+# Trois contournements trouvés à la relecture. Chacun passait (code 0) alors
+# qu'une valeur équivalente avec un chiffre, sans accolade et sans le mot
+# « secret » était bien bloquée : la protection marchait, ses trois filtres
+# étaient seulement trop larges.
+ecriture "une clé de vingt lettres, sans aucun chiffre" 2 "$CLE_API = \"abcdefghijklmnopqrst\""
+ecriture "une valeur qui commence par le mot secret"    2 "$CLE_API = \"secretvalue9Xk2Lm4pQr\""
+ecriture "une clé contenant une accolade"               2 "$CLE_PRIVEE = \"aZ4{9Fj2LmQ8xT4vB7nR1cW0\""
+
 section "Secrets — le garde .env"
 GIT_AJOUT="$(printf 'g%st a' 'i')dd"
 mkdir -p "$BAC/env" && echo "CLE=valeur" > "$BAC/env/.env"

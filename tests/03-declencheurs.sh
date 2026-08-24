@@ -13,8 +13,10 @@ HOOK="$RACINE/hooks/rule13-source-or-silence.sh"
 
 # muet <description> <prompt> — le hook ne doit rien écrire
 muet()      { verifie "$1" 0 "$(lignes_injectees "$HOOK" "$(entree_prompt "$2")" | awk '{print ($1>0)?1:0}')"; }
-# parle <description> <prompt> — le hook doit injecter la règle
-parle()     { verifie "$1" 1 "$(lignes_injectees "$HOOK" "$(entree_prompt "$2")" | awk '{print ($1>0)?1:0}')"; }
+# parle <description> <prompt> — le hook doit injecter LA RÈGLE, pas juste une
+# ligne quelconque : on vérifie le texte, pas seulement qu'il y en a un.
+REGLE="=== REGLE 13 ACTIVE: SOURCE-OR-SILENCE ==="
+parle()     { verifie "$1" 1 "$(contient "$HOOK" "$(entree_prompt "$2")" "$REGLE")"; }
 
 section "Déclencheurs — le silence sur le travail ordinaire"
 muet  "un mot qui en contient un autre"      "ajoute un champ knowledge au formulaire"

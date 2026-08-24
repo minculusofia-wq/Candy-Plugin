@@ -1,11 +1,12 @@
 # Les tests
 
 ```
-make test
+make test          # les six groupes, 89 cas, environ 18 secondes
+make test-rapide   # le sous-ensemble de fin de tour, environ 8 secondes
 ```
 
-Six groupes, une soixantaine de cas. Chacun dit la même chose : *j'envoie ceci
-à ce hook, j'attends ce verdict*.
+Six groupes, 89 cas. Chacun dit la même chose : *j'envoie ceci à ce hook,
+j'attends ce verdict*.
 
 | groupe | ce qu'il garde |
 |---|---|
@@ -16,12 +17,33 @@ Six groupes, une soixantaine de cas. Chacun dit la même chose : *j'envoie ceci
 | `05-audit-md.sh` | l'audit des `.md` compte juste et ignore ce qui est cité |
 | `06-paquet.sh` | le paquet reste installable et ne dépend que de `python3` |
 
+## Deux modes
+
+`make test` joue tout. `make test-rapide` écarte les deux groupes les plus longs
+(`01` et `02`) et les nomme à l'écran : c'est le contrôle de fin de tour, huit
+secondes au lieu de dix-huit. Un contrôle qu'on attend finit contourné — mais
+une couverture réduite qu'on ne dit pas se lit comme une couverture complète,
+d'où les noms affichés et le renvoi vers `/verifier`.
+
+## Les cas sautés
+
+Le paquet ne dépend que de `python3`. Treize cas ont besoin de `pytest` ou de
+`npm` pour exister — ils vérifient que le contrôle universel lance bien ces
+familles. Sans ces outils, ces cas sont **sautés en le disant** (« pytest absent
+de cette machine »), pas comptés pour verts. Le bilan affiche alors le nombre de
+cas sautés.
+
 ## Ce que ces tests prouvent, et ce qu'ils ne prouvent pas
 
 Ils prouvent qu'un défaut corrigé ne revient pas. Chacun a été vérifié en
-remettant le défaut d'origine : les cinq défauts majeurs du chantier font
-tomber les tests quand on les réintroduit. Un test qui passe toujours ne sert à
-rien — il doit savoir dire non.
+remettant le défaut d'origine : les défauts des deux chantiers font tomber les
+tests quand on les réintroduit. Un test qui passe toujours ne sert à rien — il
+doit savoir dire non.
+
+Une relecture a montré que cette exigence se vérifie mal soi-même : trois de ces
+tests passaient toujours, et l'un d'eux couvrait le seul cas que son auteur avait
+en tête pendant que le défaut revenait par un autre chemin. Remettre le défaut
+ne suffit pas : il faut le remettre AILLEURS que là où on l'attend.
 
 Ils ne prouvent rien sur ce qui n'est pas couvert. Ils ne remplacent pas une
 installation réelle : deux des défauts trouvés pendant le chantier — le

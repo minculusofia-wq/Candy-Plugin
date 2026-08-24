@@ -28,6 +28,13 @@ verifie "avec le témoin de clôture, le commit passe" \
 verifie "le témoin est consommé : il ne vaut pas deux fois" \
         2 "$(code_hook "$PHASE" "$COMMIT_PHASE" CLAUDE_PROJECT_DIR="$BAC/avec")"
 
+# Le témoin a une date de péremption : trente minutes. Sans ce cas, on pouvait
+# retirer la fenêtre du hook sans qu'aucun test ne s'en aperçoive — un témoin
+# oublié d'un chantier de la veille aurait alors ouvert la porte.
+mkdir -p "$BAC/perime" && touch -t 202001010000 "$BAC/perime/.claude-phase-debug-done"
+verifie "un témoin trop vieux ne vaut plus : le commit est REFUSÉ" \
+        2 "$(code_hook "$PHASE" "$COMMIT_PHASE" CLAUDE_PROJECT_DIR="$BAC/perime")"
+
 verifie "un commit ordinaire n'est jamais gêné" \
         0 "$(code_hook "$PHASE" "$(entree_commande 'git commit -m \"fix: petite correction\"')" CLAUDE_PROJECT_DIR="$BAC/sans")"
 
@@ -72,8 +79,14 @@ depot doc && echo "# suite" >> "$BAC/doc/README.md"
 verifie "seule la doc bouge : le hook se tait" \
         0 "$(code_hook "$FIN" "$(entree_fin_de_tour "$BAC/doc")")"
 
-depot code && printf 'def test_ko():\n    assert False\n' > "$BAC/code/tests/test_ko.py"
-verifie "du code casse : la fin de tour est REFUSÉE" \
-        2 "$(code_hook "$FIN" "$(entree_fin_de_tour "$BAC/code")")"
+# Ce cas repose sur une suite Python cassée : sans pytest, il n'y a rien à
+# casser. Sauté en le disant plutôt que rouge sans raison.
+if outil pytest; then
+    depot code && printf 'def test_ko():\n    assert False\n' > "$BAC/code/tests/test_ko.py"
+    verifie "du code casse : la fin de tour est REFUSÉE" \
+            2 "$(code_hook "$FIN" "$(entree_fin_de_tour "$BAC/code")")"
+else
+    saute "du code casse : la fin de tour est REFUSÉE" "pytest absent de cette machine"
+fi
 
 bilan

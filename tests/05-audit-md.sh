@@ -60,6 +60,33 @@ verifie "un statut entre guillemets français est ignoré" \
 verifie "aucune ligne n'est affichée deux fois" \
         1 "$(echo "$SORTIE" | grep -c 'A.md:3')"
 
+section "Audit des .md — les deux contrôles qui lisent l'historique"
+# Le dépôt d'exemple ci-dessus n'a aucun commit : les contrôles 2 (références à
+# un fichier supprimé) et 3 (date de mise à jour périmée) lisent l'historique
+# git et ne s'exécutaient donc jamais. Le groupe prétendait couvrir quatre
+# contrôles et n'en exerçait que deux.
+mkdir -p "$BAC/historique/docs"
+(
+  cd "$BAC/historique"
+  git init -q && git config user.email t@t.t && git config user.name t
+  echo "# Guide" > docs/GUIDE.md
+  echo "# Document parti" > docs/PARTI.md
+  printf '# Suivi\n\nDernière mise à jour : 2020-01-01\n\nLe détail est dans docs/PARTI.md\n' > SUIVI.md
+  git add docs SUIVI.md && git commit -qm depart
+  git rm -q docs/PARTI.md && git commit -qm suppression
+) >/dev/null 2>&1
+
+HISTO=$(bash "$AUDIT" "$BAC/historique" 2>&1)
+
+verifie "une mention d'un fichier supprimé est comptée" \
+        1 "$(echo "$HISTO" | grep -c 'Fichiers supprimes    : 1')"
+verifie "  et la ligne fautive est montrée" \
+        1 "$(echo "$HISTO" | grep -c "SUIVI.md:5 → mention de 'docs/PARTI.md'")"
+verifie "une date de mise à jour périmée est comptée" \
+        1 "$(echo "$HISTO" | grep -c 'Dates obsoletes       : 1')"
+verifie "  le bilan additionne bien les deux" \
+        1 "$(echo "$HISTO" | grep -c 'TOTAL : 2 point')"
+
 section "Audit des .md — le dépôt lui-même sort propre"
 bash "$AUDIT" "$RACINE" >/dev/null 2>&1
 verifie "aucun signalement sur Candy-Plugin" 0 $?

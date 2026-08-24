@@ -50,10 +50,26 @@ NOM = (r"(?:private[_-]?key|secret[_-]?key|api[_-]?key|api[_-]?secret|"
 CITE = re.compile(NOM + r"\s*[:=]\s*([\"\x27])(?P<v>(?:(?!\1).)*)\1", re.I)
 NUE  = re.compile(NOM + r"\s*=\s*(?P<v>[^\s\"\x27#;]+)\s*$", re.I | re.M)
 
-GABARIT = re.compile(r"[$<>{}()\[\]]|^(?:os\.|process\.|env\.|import\b)", re.I)
+# Un gabarit, c est un TROU a remplir, pas un caractere isole. La version
+# precedente exemptait toute valeur contenant une accolade, une parenthese ou
+# un chevron, ou qu il soit : une vraie cle contenant une accolade passait.
+GABARIT = re.compile(r"""
+      \$\{[^}]*\}                  # ${VARIABLE}
+    | \$\([^)]*\)                  # $(commande)
+    | \{\{[^}]*\}\}                 # {{ modele }}
+    | \$[A-Za-z_]\w*               # $VARIABLE
+    | <[^>]+>                     # <a_remplacer>
+    | %\([^)]*\)s                  # %(nom)s
+    | \{[A-Za-z_]\w*\}              # {nom}
+    | ^(?:os\.|process\.|env\.|import\b)
+    | ^[A-Za-z_][\w.]*\(            # un appel de fonction
+""", re.I | re.X)
+
+# « secret » a ete retire de cette liste : une valeur commencant par ce mot
+# n a rien d un exemple, et la vraie cle « secretvalue9Xk2... » passait.
 FACTICE = re.compile(r"^(?:x{3,}|\.{3,}|\*{3,}|-{3,}|none|null|nil|true|false|"
                      r"your[_-]|my[_-]|the[_-]|test|dummy|fake|sample|example|"
-                     r"placeholder|changeme|change[_-]me|todo|fixme|secret|"
+                     r"placeholder|changeme|change[_-]me|todo|fixme|"
                      r"redacted|hidden|masked)", re.I)
 
 def ressemble_a_un_secret(v):
@@ -69,7 +85,10 @@ def ressemble_a_un_secret(v):
         return all(m.isalpha() for m in mots)
     if len(mots) > 1:
         return False
-    return any(c.isdigit() for c in v) and any(c.isalpha() for c in v)
+    # Un seul bloc de seize caracteres ou plus, sans espace : ce n est pas une
+    # phrase, c est une valeur. Exiger en plus un chiffre laissait passer une
+    # cle de vingt lettres — verifie.
+    return any(c.isalpha() for c in v)
 
 for source, texte in morceaux:
     if not texte:

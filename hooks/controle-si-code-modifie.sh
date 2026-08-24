@@ -48,7 +48,9 @@ done <<< "$MODIFIES"
 [ "$CODE_TOUCHE" -eq 0 ] && exit 0
 
 # 4. Du code a bouge -> controle
-SORTIE=$(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/hooks/verifier-projet.sh" "$PROJET" 2>&1)
+# --rapide : si le projet declare une cible « test-rapide », c'est elle qui
+# tourne ici. La suite complete reste celle de /verifier.
+SORTIE=$(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/hooks/verifier-projet.sh" "$PROJET" --rapide 2>&1)
 CODE=$?
 
 case "$CODE" in

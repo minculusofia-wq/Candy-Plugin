@@ -15,6 +15,12 @@ trap 'rm -rf "$BAC"' EXIT
 
 section "Contrôle universel — les quatre verdicts"
 
+# Ces cas ont besoin de pytest et de npm pour EXISTER : ils vérifient que le
+# contrôle lance bien ces deux familles. Le paquet, lui, ne dépend que de
+# python3 — sur une machine sans ces outils, les cas sont sautés en le disant
+# plutôt que d'afficher une suite rouge sans explication.
+if outil pytest && outil npm; then
+
 # --- un Makefile qui passe, une suite Python et une suite Node en échec ---
 mkdir -p "$BAC/melange/tests"
 printf 'test:\n\t@true\n' > "$BAC/melange/Makefile"
@@ -47,6 +53,11 @@ printf '{"name":"v","scripts":{"test":"exit 0"}}\n' > "$BAC/vert/package.json"
 bash "$CONTROLE" "$BAC/vert" >/dev/null 2>&1
 verifie "un projet sain sort en 0" 0 $?
 
+else
+    saute "les sept cas qui font tourner une suite Python et une suite Node" \
+          "pytest ou npm absent de cette machine"
+fi
+
 # --- un dossier « tests » qui ne contient PAS de tests Python ---
 # Trouvé en écrivant ces tests : le contrôle lançait pytest dès qu'un dossier
 # tests existait. Sur ce dépôt-ci, dont les tests sont des scripts shell, pytest
@@ -58,6 +69,56 @@ SORTIE=$(bash "$CONTROLE" "$BAC/shell" 2>&1); CODE=$?
 verifie "un dossier tests sans test Python ne déclenche pas pytest" \
         0 "$(echo "$SORTIE" | grep -c 'pytest')"
 verifie "  et le projet reste au vert" 0 "$CODE"
+
+# --- une suite Python rangée en sous-dossier ---
+# Le contrôle cherchait les fichiers de test dans trois dossiers seulement :
+# « . », « tests » et « test ». Les trois dispositions ci-dessous — les plus
+# répandues — n'étaient pas vues : pytest n'était pas lancé, et un Makefile qui
+# passe suffisait à décrocher un « TOUT PASSE » sur une suite cassée.
+section "Contrôle universel — les tests rangés en sous-dossier"
+
+if ! outil pytest; then
+    saute "les six cas de suites rangées en sous-dossier" "pytest absent de cette machine"
+fi
+for cas in "tests/unit" "backend/tests" "src/tests"; do
+    outil pytest || continue
+    DOSSIER="$BAC/imbrique-$(echo "$cas" | tr / -)"
+    mkdir -p "$DOSSIER/$cas"
+    printf 'test:\n\t@true\n' > "$DOSSIER/Makefile"
+    printf 'def test_ko():\n    assert False\n' > "$DOSSIER/$cas/test_ko.py"
+
+    SORTIE=$(bash "$CONTROLE" "$DOSSIER" 2>&1); CODE=$?
+    verifie "une suite en échec dans $cas/ est vue" \
+            1 "$(echo "$SORTIE" | grep -c 'ECHEC  pytest')"
+    verifie "  et le Makefile qui passe ne la masque pas" 1 "$CODE"
+done
+
+# --- la cible rapide de fin de tour ---
+# En fin de tour, la suite complète du projet fait attendre. Un projet peut
+# déclarer un sous-ensemble sous le nom « test-rapide » : c'est lui qui tourne
+# alors, et lui seul. Sans le drapeau, rien ne change.
+section "Contrôle universel — le sous-ensemble de fin de tour"
+
+mkdir -p "$BAC/rapide"
+printf 'test:\n\t@echo SUITE-COMPLETE\n\ntest-rapide:\n\t@echo SOUS-ENSEMBLE\n' > "$BAC/rapide/Makefile"
+
+NORMAL=$(bash "$CONTROLE" "$BAC/rapide" 2>&1)
+verifie "sans le drapeau, c'est la suite complète qui tourne" \
+        1 "$(echo "$NORMAL" | grep -c 'SUITE-COMPLETE')"
+verifie "  et le sous-ensemble n'est pas lancé deux fois" \
+        0 "$(echo "$NORMAL" | grep -c 'SOUS-ENSEMBLE')"
+
+VITE=$(bash "$CONTROLE" "$BAC/rapide" --rapide 2>&1)
+verifie "avec le drapeau, c'est le sous-ensemble qui tourne" \
+        1 "$(echo "$VITE" | grep -c 'SOUS-ENSEMBLE')"
+verifie "  et la suite complète n'est PAS lancée" \
+        0 "$(echo "$VITE" | grep -c 'SUITE-COMPLETE')"
+
+# Un projet sans cible rapide ne doit rien perdre : le drapeau est sans effet.
+mkdir -p "$BAC/sans-rapide"
+printf 'test:\n\t@echo SUITE-COMPLETE\n' > "$BAC/sans-rapide/Makefile"
+verifie "un projet sans cible rapide garde sa suite complète" \
+        1 "$(bash "$CONTROLE" "$BAC/sans-rapide" --rapide 2>&1 | grep -c 'SUITE-COMPLETE')"
 
 # --- rien à quoi se fier : le cas que rien d'autre ne signale ---
 mkdir -p "$BAC/vide"

@@ -8,7 +8,10 @@
 # Fonctionne sans configuration sur n'importe quel projet, ancien ou nouveau.
 #
 # Usage :
-#   ./verifier-projet.sh [PROJECT_DIR]
+#   ./verifier-projet.sh [PROJECT_DIR] [--rapide]
+#
+# --rapide : mode fin de tour. Si le projet declare une cible « test-rapide »
+# dans son Makefile, elle remplace « test ». Sans cette cible, rien ne change.
 #
 # Codes retour :
 #   0 = tout passe
@@ -18,7 +21,12 @@
 
 set -u
 
-PROJET="${1:-$PWD}"
+PROJET=""
+RAPIDE=0
+for arg in "$@"; do
+    if [ "$arg" = "--rapide" ]; then RAPIDE=1; else PROJET="$arg"; fi
+done
+[ -n "$PROJET" ] || PROJET="$PWD"
 cd "$PROJET" 2>/dev/null || { echo "Dossier introuvable : $PROJET"; exit 2; }
 
 echo "=== CONTROLE DU PROJET ==="
@@ -29,14 +37,23 @@ TROUVE=0
 ECHECS=0
 RESUME=""
 
+# CODE_NEUTRE : code retour qui signifie « ce controle n'a rien a faire ici ».
+# Un seul outil en a un aujourd'hui : pytest, dont le 5 veut dire « aucun test
+# collecte ». Se remet a vide apres chaque appel — il ne vaut que pour le
+# controle qui suit.
+CODE_NEUTRE=""
+
 lancer() {
     local nom="$1"; shift
-    echo "--- $nom ---"
-    if "$@" 2>&1 | tail -25; then
-        local code=${PIPESTATUS[0]}
-    else
-        local code=${PIPESTATUS[0]}
+    local neutre="$CODE_NEUTRE"; CODE_NEUTRE=""
+    local sortie code
+    sortie="$("$@" 2>&1)"
+    code=$?
+    if [ -n "$neutre" ] && [ "$code" -eq "$neutre" ]; then
+        return 0
     fi
+    echo "--- $nom ---"
+    printf '%s\n' "$sortie" | tail -25
     if [ "$code" -eq 0 ]; then
         echo "  [OK] $nom"
         RESUME="${RESUME}  OK     $nom\n"
@@ -50,8 +67,16 @@ lancer() {
 }
 
 # --- Makefile : la source de vérité si elle existe ---
+# En fin de tour, un projet peut proposer un sous-ensemble rapide de sa suite
+# sous le nom « test-rapide » : c'est alors lui qui tourne, pas la suite
+# complete. Un controle qu'on attend finit contourne.
+CIBLE_TEST=test
+if [ "$RAPIDE" -eq 1 ] && [ -f Makefile ] && grep -qE "^test-rapide:" Makefile; then
+    CIBLE_TEST=test-rapide
+fi
+
 if [ -f Makefile ]; then
-    for cible in test lint typecheck audit; do
+    for cible in "$CIBLE_TEST" lint typecheck audit; do
         if grep -qE "^${cible}:" Makefile; then
             lancer "make $cible" make "$cible"
         fi
@@ -74,19 +99,17 @@ for p in .venv/bin/pytest venv/bin/pytest backend/.venv/bin/pytest; do
 done
 if [ -z "$PYTEST" ] && command -v pytest >/dev/null 2>&1; then PYTEST="pytest"; fi
 
-# Un dossier « tests » ne veut pas dire des tests PYTHON : il peut contenir des
-# scripts shell, des fixtures, n'importe quoi. Sans ce controle, pytest est
-# lance sur un projet qui n'a aucun test Python, ne collecte rien, sort en 5 —
-# et le projet est declare en echec alors que tout va bien.
-A_DES_TESTS_PYTHON=0
-for d in . tests test; do
-    [ -d "$d" ] || continue
-    if ls "$d"/test_*.py >/dev/null 2>&1 || ls "$d"/*_test.py >/dev/null 2>&1; then
-        A_DES_TESTS_PYTHON=1; break
-    fi
-done
-
-if [ -n "$PYTEST" ] && [ "$A_DES_TESTS_PYTHON" -eq 1 ]; then
+# On ne devine PAS a la place de pytest ou vivent les tests. Lister des dossiers
+# ( . tests test ) rate les dispositions les plus repandues — tests/unit/,
+# backend/tests/, src/tests/ — et laisse alors une suite cassee passer pour
+# verte. Pytest, lui, sait deja lire les dossiers imbriques, conftest.py, le
+# testpaths d'un pyproject.toml et les nommages personnalises.
+#
+# Son code 5 signifie « aucun test collecte » : le projet n'a pas de tests
+# Python, ce controle n'existe pas ici — ni echec, ni controle trouve. C'est le
+# cas de ce depot-ci, dont les tests sont des scripts shell.
+if [ -n "$PYTEST" ]; then
+    CODE_NEUTRE=5
     lancer "pytest" "$PYTEST" -q
 fi
 

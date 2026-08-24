@@ -146,12 +146,16 @@ s'ouvre pas sur un état faux.
 ## Tests
 
 ```
-make test
+make test          # tout : six groupes, 89 cas, environ 18 secondes
+make test-rapide   # le sous-ensemble de fin de tour, environ 8 secondes
 ```
 
-Six groupes, une soixantaine de cas : *j'envoie ceci à ce hook, j'attends ce
-verdict*. Chacun a été vérifié en remettant le défaut d'origine — un test qui
-passe toujours ne vaut rien. Voir [tests/README.md](tests/README.md).
+Six groupes, 89 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Chacun a
+été vérifié en remettant le défaut d'origine — un test qui passe toujours ne
+vaut rien. Voir [tests/README.md](tests/README.md).
+
+En fin de tour, le contrôle préfère la cible `test-rapide` du projet quand elle
+existe. La suite complète reste celle de `/verifier`.
 
 ## Prérequis
 
@@ -162,6 +166,9 @@ passe toujours ne vaut rien. Voir [tests/README.md](tests/README.md).
 - **Claude Code 2.1.196 ou plus récent** pour la relecture de la réponse : elle
   lit le champ `last_assistant_message`, que les versions antérieures n'envoient
   pas toujours. En dessous, elle ne signale qu'une faute sur deux.
+- `pytest` et `npm` sont **facultatifs**, et seulement pour les tests du paquet :
+  treize cas vérifient que le contrôle universel lance bien ces familles. Sans
+  eux, ces cas sont sautés en le disant, et la suite reste verte.
 - Testé sur macOS. Les hooks sont du bash POSIX-ish ; Linux devrait passer, non testé.
 - Le hook `skills-reminder.sh` propose `/grill-with-docs` et `/tdd`, qui sont des
   skills tierces non fournies ici. Sans elles, il ne fait que suggérer.
