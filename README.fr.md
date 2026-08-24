@@ -48,7 +48,7 @@ Elles fonctionnent séparément — prenez-en une, pas les huit.
 | **8 règles** | vérifier avant d'affirmer · honnêteté brutale · discipline de code · porte de phase · choix du modèle · réflexes de travail · style de communication · routage des commandes |
 | **5 commandes** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` |
 | **2 agents** | `relecteur-securite` · `relecteur-de-phase` (contexte neuf, ne consomment pas la conversation) |
-| **13 hooks + 2 scripts** | rappel d'ouverture de phase, garde avant écriture, protection des secrets, contrôle avant push, relecture de la réponse en fin de tour |
+| **11 hooks + 2 scripts** | rappel d'ouverture de phase, garde avant écriture, protection des secrets, contrôle avant push, relecture de la réponse en fin de tour |
 
 ### La pièce la plus utile : `hooks/verifier-projet.sh`
 
@@ -71,12 +71,17 @@ grande partie ne dépend ni de l'un ni de l'autre.
 | **Règles** : vérifier avant d'affirmer · honnêteté brutale · discipline de code · réflexes de travail · choix du modèle · routage des commandes | La section « stratégies de bots » de `brutal-honesty.md` | `porte-de-phase.md` |
 | **Commandes** : `/verifier` · `/maj-docs` | `/debug` (mode simulation, jamais sur le serveur) · `/fin-session` | `/fin-phase` |
 | **Agents** : `relecteur-securite` | Sa section « fonds et transactions » | `relecteur-de-phase` |
-| **Hooks** : contrôle du projet, protection des secrets, garde avant écriture, README avant push, relecture de la réponse, audit des `.md` | `rule5-debug-local-only.sh` (bloque SSH sauf lecture seule) · `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
+| **Hooks** : contrôle du projet, protection des secrets, garde avant écriture, README avant push, relecture de la réponse, audit des `.md` | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
 
 **En clair :** si vous ne faites ni bot ni app à phases, prenez la première
 colonne — c'est déjà l'essentiel. Rien n'oblige à tout installer : les règles se
 copient une par une, et un hook se retire en supprimant sa ligne dans
 `hooks/hooks.json`.
+
+`/fin-phase` mérite un avertissement à part : ses 300 lignes sont le rituel réel
+de l'auteur sur une app iOS, gardé entier plutôt que vidé en modèle creux. Il
+cite ses propres documents, ses pièges numérotés, ses arbitrages datés. À lire
+comme un exemple à adapter — la forme se réutilise, le contenu non.
 
 Les exemples parlent de trading et d'iPhone parce que c'est là que ces règles ont
 été payées cher. Le principe, lui, ne change pas : **rien n'est vrai parce que
@@ -137,6 +142,9 @@ s'ouvre pas sur un état faux.
 ## Prérequis
 
 - `jq` et `python3` (utilisés par les hooks)
+- **Claude Code 2.1.196 ou plus récent** pour la relecture de la réponse : elle
+  lit le champ `last_assistant_message`, que les versions antérieures n'envoient
+  pas toujours. En dessous, elle ne signale qu'une faute sur deux.
 - Testé sur macOS. Les hooks sont du bash POSIX-ish ; Linux devrait passer, non testé.
 - Le hook `skills-reminder.sh` propose `/grill-with-docs` et `/tdd`, qui sont des
   skills tierces non fournies ici. Sans elles, il ne fait que suggérer.
@@ -145,6 +153,12 @@ s'ouvre pas sur un état faux.
 
 Les règles de trading, les seuils de risque et les patterns de stratégie de
 l'auteur. Ils ne servent qu'à ses bots.
+
+Deux hooks ont été retirés avant publication plutôt que livrés cassés : l'un
+bloquait toute commande `ssh` (contrainte très personnelle, et sa liste
+d'exceptions se désarmait avec n'importe quelle commande contenant le mot
+magique), l'autre réclamait un commit à la fin de *chaque tour* au lieu de
+chaque session.
 
 ## Support
 

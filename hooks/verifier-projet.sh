@@ -59,7 +59,7 @@ if [ -f Makefile ]; then
 fi
 
 # --- Backend dans un sous-dossier ---
-if [ "$TROUVE" -eq 0 ] && [ -f backend/Makefile ]; then
+if [ -f backend/Makefile ]; then
     for cible in test lint typecheck audit; do
         if grep -qE "^${cible}:" backend/Makefile; then
             lancer "backend: make $cible" make -C backend "$cible"
@@ -67,25 +67,23 @@ if [ "$TROUVE" -eq 0 ] && [ -f backend/Makefile ]; then
     done
 fi
 
-# --- Python sans Makefile ---
-if [ "$TROUVE" -eq 0 ]; then
-    PYTEST=""
-    for p in .venv/bin/pytest venv/bin/pytest backend/.venv/bin/pytest; do
-        [ -x "$p" ] && PYTEST="$p" && break
-    done
-    [ -z "$PYTEST" ] && command -v pytest >/dev/null 2>&1 && PYTEST="pytest"
+# --- Python ---
+PYTEST=""
+for p in .venv/bin/pytest venv/bin/pytest backend/.venv/bin/pytest; do
+    [ -x "$p" ] && PYTEST="$p" && break
+done
+if [ -z "$PYTEST" ] && command -v pytest >/dev/null 2>&1; then PYTEST="pytest"; fi
 
-    if [ -n "$PYTEST" ] && { [ -d tests ] || [ -d test ] || ls test_*.py >/dev/null 2>&1; }; then
-        lancer "pytest" "$PYTEST" -q
-    fi
-
-    for r in .venv/bin/ruff venv/bin/ruff; do
-        if [ -x "$r" ]; then lancer "ruff" "$r" check .; break; fi
-    done
+if [ -n "$PYTEST" ] && { [ -d tests ] || [ -d test ] || ls test_*.py >/dev/null 2>&1; }; then
+    lancer "pytest" "$PYTEST" -q
 fi
 
+for r in .venv/bin/ruff venv/bin/ruff; do
+    if [ -x "$r" ]; then lancer "ruff" "$r" check .; break; fi
+done
+
 # --- Node / JS ---
-if [ "$TROUVE" -eq 0 ] && [ -f package.json ]; then
+if [ -f package.json ]; then
     if grep -q '"test"' package.json; then lancer "npm test" npm test --silent; fi
     if grep -q '"lint"' package.json; then lancer "npm run lint" npm run lint --silent; fi
 fi

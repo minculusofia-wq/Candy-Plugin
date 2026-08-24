@@ -39,7 +39,7 @@ Le script vérifie 4 choses :
 1. **Liens markdown cassés** (vers fichiers/dossiers supprimés) — ✗ rouge = à corriger systématiquement
 2. **Mentions de fichiers/dossiers supprimés** dans les 50 derniers commits — ✗ rouge
 3. **Dates "Dernière mise à jour" obsolètes** sur fichiers récemment commités — ⚠ jaune
-4. **Statuts contradictoires** (à créer / à trancher) sur des éléments existants — ⚠ jaune
+4. **Statuts contradictoires** (« à créer », « à trancher ») sur des éléments existants — ⚠ jaune
 
 **Règle absolue :** chaque ligne ✗ rouge DOIT être corrigée avant le commit final. Les ⚠ jaunes doivent être vérifiées au cas par cas (peuvent être légitimes : questions stratégiques ouvertes, sections historiques de CHANGELOG).
 
@@ -52,7 +52,7 @@ Exclure au jugement : dépendances, builds, fichiers générés automatiquement.
 Modifier un .md uniquement si son contenu est devenu obsolète à cause de la session. Sinon le laisser tel quel.
 
 ### CLAUDE.md
-- Description courte (stratégie du bot)
+- Description courte (ce que fait le projet)
 - Comment lancer en local
 - Ports, variables d'environnement
 - Pièges connus, décisions d'architecture
@@ -78,7 +78,9 @@ Vérifier chacun et appliquer le même critère (modifier uniquement si obsolèt
 ## 2. Commit unique + push
 Un SEUL commit final regroupant code (si debug fait) + tous les .md mis à jour.
 - Message clair en français résumant la session
-- Push automatique
+- Le commit se fait sans demander
+- **Le push, lui, se demande** : montrer le message de commit et attendre le
+  feu vert avant d'envoyer
 - Pas de commit "docs: maj" séparé
 
 ## 3. Résumé

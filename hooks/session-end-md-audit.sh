@@ -55,43 +55,86 @@ MD_FILES=$(find "$PROJECT_DIR" -name "*.md" \
     -not -path "*/dist/*" \
     2>/dev/null)
 
+COEUR=$(mktemp -t md-audit-XXXXXX.py)
+trap 'rm -f "$COEUR"' EXIT
+cat > "$COEUR" <<'PYFIN'
+import sys, re, os
+
+MODE = sys.argv[1]
+PROJET = os.path.abspath(sys.argv[2])
+fichiers = [l for l in sys.stdin.read().splitlines() if l.strip()]
+
+# --- Usage vs mention -------------------------------------------------------
+# Meme piege que relire-ma-reponse.sh : un document qui EXPLIQUE ce que ce
+# controle attrape se faisait signaler par lui. Sont donc neutralises avant
+# jugement : blocs de code, extraits entre accents graves, segments entre
+# guillemets francais ou droits. Les blocs sont remplaces par des lignes vides
+# pour que les numeros de ligne restent justes.
+def neutraliser(contenu):
+    contenu = re.sub(r"```.*?```",
+                     lambda m: "\n" * m.group(0).count("\n"),
+                     contenu, flags=re.S)
+    return contenu
+
+def sans_citations(ligne):
+    ligne = re.sub(r"`[^`]*`", " ", ligne)
+    ligne = re.sub(r"«[^»]*»", " ", ligne)
+    ligne = re.sub(r'"[^"\n]*"', " ", ligne)
+    return ligne
+
+LIEN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+STATUTS = re.compile(r"(à créer|a creer|à trancher|a trancher|non commencé|non commence)", re.I)
+
+vus = set()
+for f in fichiers:
+    try:
+        contenu = open(f, encoding="utf-8", errors="replace").read()
+    except OSError:
+        continue
+    rel = os.path.relpath(os.path.abspath(f), PROJET)
+    for num, brute in enumerate(neutraliser(contenu).splitlines(), 1):
+        ligne = sans_citations(brute)
+        if MODE == "liens":
+            for cible in LIEN.findall(ligne):
+                if cible.startswith(("http://", "https://", "mailto:", "#")):
+                    continue
+                chemin = cible.split("#")[0].strip()
+                if not chemin:
+                    continue
+                if os.path.exists(os.path.join(os.path.dirname(f), chemin)):
+                    continue
+                cle = (rel, num, chemin)
+                if cle in vus:
+                    continue
+                vus.add(cle)
+                print("%s:%s\t%s" % (rel, num, chemin))
+        else:
+            m = STATUTS.search(ligne)
+            if not m:
+                continue
+            cle = (rel, num)
+            if cle in vus:
+                continue
+            vus.add(cle)
+            extrait = brute.strip()[:80]
+            print("%s:%s\t%s" % (rel, num, extrait))
+PYFIN
+
 TOTAL_MD=$(echo "$MD_FILES" | wc -l | tr -d ' ')
 echo -e "${CYAN}Scan de $TOTAL_MD fichiers .md...${NC}"
 echo ""
 
 # === CHECK 1 : Liens markdown casses ===
 echo -e "${BOLD}[1/4] Liens markdown casses${NC}"
-BROKEN_LINKS=0
-while IFS= read -r md_file; do
-    [[ -z "$md_file" ]] && continue
-    # Extraire les liens markdown relatifs (pas http/https/mailto)
-    # Format : [texte](chemin) ou [texte](chemin#ancre)
-    grep -nE '\[[^]]+\]\(([^)]+)\)' "$md_file" 2>/dev/null | \
-    while IFS=: read -r line_num line_content; do
-        # Extraire chaque lien sur la ligne
-        echo "$line_content" | grep -oE '\]\(([^)]+)\)' | \
-        sed -E 's/\]\(([^)]+)\)/\1/' | \
-        while IFS= read -r link; do
-            # Ignorer liens externes, ancres pures, mailto
-            [[ "$link" =~ ^https?:// ]] && continue
-            [[ "$link" =~ ^mailto: ]] && continue
-            [[ "$link" =~ ^# ]] && continue
-            # Retirer l'ancre #xxx
-            target="${link%%#*}"
-            [[ -z "$target" ]] && continue
-            # Resolve relative path
-            md_dir=$(dirname "$md_file")
-            full_path="$md_dir/$target"
-            # Verifier existence (fichier OU dossier)
-            if [[ ! -e "$full_path" ]]; then
-                rel_md="${md_file#$PROJECT_DIR/}"
-                echo -e "  ${RED}✗${NC} $rel_md:$line_num → lien casse : $target"
-                BROKEN_LINKS=$((BROKEN_LINKS + 1))
-            fi
-        done
-    done
-done <<< "$MD_FILES"
-if [[ "$BROKEN_LINKS" -eq 0 ]]; then
+LIENS_OUT=$(printf '%s\n' "$MD_FILES" | python3 "$COEUR" liens "$PROJECT_DIR" 2>/dev/null)
+if [[ -n "$LIENS_OUT" ]]; then
+    BROKEN_LINKS=$(printf '%s\n' "$LIENS_OUT" | wc -l | tr -d ' ')
+    while IFS=$'\t' read -r ou quoi; do
+        [[ -z "$ou" ]] && continue
+        echo -e "  ${RED}✗${NC} $ou → lien casse : $quoi"
+    done <<< "$LIENS_OUT"
+else
+    BROKEN_LINKS=0
     echo -e "  ${GREEN}✓ aucun lien casse detecte${NC}"
 fi
 echo ""
@@ -162,30 +205,16 @@ echo ""
 
 # === CHECK 4 : Statuts contradictoires ===
 echo -e "${BOLD}[4/4] Statuts contradictoires (a creer / a trancher / pas commence)${NC}"
-CONTRADICTIONS=0
-# Patterns qui devraient declencher une revue manuelle
-PATTERNS=("à créer" "a creer" "à trancher" "a trancher" "🔴 À CRÉER" "non commencé" "non commence")
-while IFS= read -r md_file; do
-    [[ -z "$md_file" ]] && continue
-    # Exclure CHANGELOG et fichiers de plan (BUILD_PLAN.md a des statuts legitimes)
-    case "$md_file" in
-        *CHANGELOG.md|*BUILD_PLAN.md|*PHASE_0_CHECKLIST.md|*ACTIONS*)
-            continue ;;
-    esac
-    for pattern in "${PATTERNS[@]}"; do
-        hits=$(grep -niE "$pattern" "$md_file" 2>/dev/null | head -3)
-        if [[ -n "$hits" ]]; then
-            rel_md="${md_file#$PROJECT_DIR/}"
-            while IFS= read -r hit; do
-                line_num=$(echo "$hit" | cut -d: -f1)
-                content=$(echo "$hit" | cut -d: -f2- | sed 's/^ *//' | cut -c1-80)
-                echo -e "  ${YELLOW}⚠${NC} $rel_md:$line_num → \"$content...\""
-                CONTRADICTIONS=$((CONTRADICTIONS + 1))
-            done <<< "$hits"
-        fi
-    done
-done <<< "$MD_FILES"
-if [[ "$CONTRADICTIONS" -eq 0 ]]; then
+STATUTS_MD=$(printf '%s\n' "$MD_FILES" | grep -vE 'CHANGELOG\.md|BUILD_PLAN\.md|PHASE_0_CHECKLIST\.md|ACTIONS' || true)
+STATUTS_OUT=$(printf '%s\n' "$STATUTS_MD" | python3 "$COEUR" statuts "$PROJECT_DIR" 2>/dev/null)
+if [[ -n "$STATUTS_OUT" ]]; then
+    CONTRADICTIONS=$(printf '%s\n' "$STATUTS_OUT" | wc -l | tr -d ' ')
+    while IFS=$'\t' read -r ou quoi; do
+        [[ -z "$ou" ]] && continue
+        echo -e "  ${YELLOW}⚠${NC} $ou → \"$quoi\""
+    done <<< "$STATUTS_OUT"
+else
+    CONTRADICTIONS=0
     echo -e "  ${GREEN}✓ aucun statut contradictoire detecte${NC}"
 fi
 echo ""

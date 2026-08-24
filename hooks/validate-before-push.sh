@@ -52,50 +52,17 @@ if find "$PROJECT_DIR" -maxdepth 3 -name "*.xcodeproj" -print -quit 2>/dev/null 
 fi
 
 # =====================
-# RUN TESTS (if available)
+# PAS DE SUITE DE TESTS ICI
 # =====================
-echo -e "${YELLOW}🧪 Checking for tests...${NC}"
-
-# Python tests
-if [[ -f "$PROJECT_DIR/pytest.ini" ]] || [[ -d "$PROJECT_DIR/tests" ]] || find "$PROJECT_DIR" -name "test_*.py" -o -name "*_test.py" 2>/dev/null | head -1 | grep -q .; then
-    echo "Found Python tests, running pytest..."
-    if command -v pytest &> /dev/null; then
-        if pytest "$PROJECT_DIR" --tb=short -q 2>/dev/null; then
-            echo -e "${GREEN}✓ Python tests passed${NC}"
-        else
-            echo -e "${RED}✗ Python tests failed${NC}"
-            FAILURES=$((FAILURES + 1))
-        fi
-    elif command -v python &> /dev/null && python -m pytest --version &> /dev/null; then
-        if python -m pytest "$PROJECT_DIR" --tb=short -q 2>/dev/null; then
-            echo -e "${GREEN}✓ Python tests passed${NC}"
-        else
-            echo -e "${RED}✗ Python tests failed${NC}"
-            FAILURES=$((FAILURES + 1))
-        fi
-    else
-        echo -e "${YELLOW}⚠ pytest not installed, skipping Python tests${NC}"
-    fi
-fi
-
-# Node.js tests
-if [[ -f "$PROJECT_DIR/package.json" ]]; then
-    if command -v jq &> /dev/null && jq -e '.scripts.test' "$PROJECT_DIR/package.json" &> /dev/null; then
-        TEST_SCRIPT=$(jq -r '.scripts.test' "$PROJECT_DIR/package.json")
-        if [[ "$TEST_SCRIPT" != "null" ]] && [[ "$TEST_SCRIPT" != *"no test"* ]]; then
-            echo "Found npm test script, running..."
-            cd "$PROJECT_DIR"
-            if npm test 2>/dev/null; then
-                echo -e "${GREEN}✓ Node.js tests passed${NC}"
-            else
-                echo -e "${RED}✗ Node.js tests failed${NC}"
-                FAILURES=$((FAILURES + 1))
-            fi
-        fi
-    fi
-fi
-
-echo ""
+#
+# Cette etape lancait pytest ET npm test sur tout le projet, a chaque push.
+# Sur un projet reel, un push devenait plusieurs minutes d'attente — et un
+# controle qu'on attend finit contourne par --no-verify.
+#
+# Le controle complet a deja sa place, deux fois : /verifier a la demande, et
+# la porte de sortie de phase tenue par /fin-phase. Ici on garde ce qui coute
+# moins d'une seconde et attrape ce qu'un push ne devrait jamais emporter :
+# une erreur de syntaxe.
 
 # =====================
 # SYNTAX CHECK
@@ -107,7 +74,7 @@ PYTHON_FILES=$(find "$PROJECT_DIR" -name "*.py" -not -path "*venv*" -not -path "
 if [[ -n "$PYTHON_FILES" ]]; then
     SYNTAX_ERRORS=0
     for file in $PYTHON_FILES; do
-        if ! python -m py_compile "$file" 2>/dev/null; then
+        if ! python3 -m py_compile "$file" 2>/dev/null; then
             echo -e "${RED}✗ Syntax error in $file${NC}"
             SYNTAX_ERRORS=$((SYNTAX_ERRORS + 1))
         fi
@@ -128,7 +95,7 @@ if [[ $FAILURES -gt 0 ]]; then
     echo ""
     echo -e "${RED}❌ Validation failed with $FAILURES error(s)${NC}"
     echo -e "${RED}Push blocked. Fix the issues and try again.${NC}"
-    exit 1
+    exit 2
 fi
 
 echo -e "${GREEN}✅ All validations passed! Push proceeding...${NC}"

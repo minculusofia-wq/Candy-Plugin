@@ -19,24 +19,24 @@ fi
 
 PROMPT_LOWER=$(echo "$PROMPT" | tr '[:upper:]' '[:lower:]')
 
+# Mots ENTIERS uniquement. En sous-chaine, « edge » se declenchait sur
+# « knowledge » : le prompt « ajoute un champ knowledge au formulaire » recevait
+# le pave complet de la regle. Les mots de jargon trading (edge, sweep, longshot,
+# scanner, mm, market maker) ont ete retires : trop generiques hors de ce domaine,
+# inutiles dedans puisque « rapport » et « analyse » couvrent le vrai declencheur.
 TRIGGERS=(
-    'rapport'
-    'analyse'
-    'pertinence'
-    'revue'
-    'critique'
-    'strategie'
-    'que penses'
-    "qu.en penses"
-    'pourquoi le bot'
-    'comment.*bot'
-    'verifie.*code'
-    'longshot'
-    'edge'
-    'sweep'
-    'market maker'
-    '\bmm\b'
-    'scanner'
+    '\brapports?\b'
+    '\banalyses?\b'
+    '\banalyser\b'
+    '\bpertinence\b'
+    '\brevues?\b'
+    '\bcritiques?\b'
+    '\bstrat[eé]gies?\b'
+    '\bque penses\b'
+    "\\bqu.en penses\\b"
+    '\bpourquoi le bot\b'
+    '\bcomment\b.*\bbot\b'
+    '\bverifie\b.*\bcode\b'
 )
 
 TRIGGERED=false

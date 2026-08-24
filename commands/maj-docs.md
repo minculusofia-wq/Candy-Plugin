@@ -45,8 +45,8 @@ Un `.md` ne se modifie **que si son contenu est devenu obsolète**. Sinon le lai
 ## Étape 4 : mettre à jour chaque fichier selon son rôle
 
 ### README.md
-- **Partie stratégie en premier** (langage business, sans jargon) : ce que fait le bot en une phrase, sur quel marché, sa logique de décision (quand il achète, quand il vend, pourquoi), les paramètres clés avec leur **valeur exacte actuelle** (lue dans le code, pas de mémoire)
-- **Partie technique ensuite** : stack, lancement en local (commandes exactes), ports, variables d'environnement, structure des dossiers principaux, déploiement VPS
+- **À quoi ça sert, en premier** (langage clair, sans jargon) : ce que fait le projet en une phrase, pour qui, la logique qui le gouverne (ce qui le déclenche, ce qu'il décide, pourquoi), les paramètres clés avec leur **valeur exacte actuelle** (lue dans le code, pas de mémoire)
+- **Partie technique ensuite** : stack, lancement en local (commandes exactes), ports, variables d'environnement, structure des dossiers principaux, déploiement
 - Section « Pièges connus » si un piège majeur a été découvert
 - Le créer s'il n'existe pas
 
@@ -87,8 +87,10 @@ Même critère : modifier uniquement si obsolète.
 
 Un seul commit regroupant toutes les mises à jour de documentation.
 - Message clair en français décrivant ce qui a été mis à jour
-- Push automatique
-- Ne PAS demander à l'utilisateur pour le commit/push — le faire directement
+- Le commit se fait sans demander
+- **Le push, lui, se demande** : montrer le message de commit et attendre le
+  feu vert avant d'envoyer. Un push touche ce que d'autres voient ; ça ne se
+  décide pas à la place de quelqu'un.
 
 ## Étape 7 : résumé
 

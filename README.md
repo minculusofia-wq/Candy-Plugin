@@ -51,7 +51,7 @@ They work on their own. Take one, not all eight.
 | **8 rules** | verify before asserting · brutal honesty · code discipline · phase gate · model choice · working reflexes · communication style · command routing |
 | **5 commands** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` |
 | **2 agents** | `relecteur-securite` · `relecteur-de-phase` — security and phase reviewers running in a fresh context, so they don't eat your conversation |
-| **13 hooks + 2 scripts** | phase-opening reminder, pre-write guard, secret protection, pre-push check, answer review at the end of each turn |
+| **11 hooks + 2 scripts** | phase-opening reminder, pre-write guard, secret protection, pre-push check, answer review at the end of each turn |
 
 ### The most useful piece: `hooks/verifier-projet.sh`
 
@@ -73,12 +73,17 @@ server, and an **iOS app** built phase by phase. Most of it depends on neither.
 | **Rules**: verify before asserting · brutal honesty · code discipline · working reflexes · model choice · command routing | The "bot strategies" section of `brutal-honesty.md` | `porte-de-phase.md` |
 | **Commands**: `/verifier` · `/maj-docs` | `/debug` (dry-run mode, never on the server) · `/fin-session` | `/fin-phase` |
 | **Agents**: `relecteur-securite` | Its "funds and transactions" section | `relecteur-de-phase` |
-| **Hooks**: project check, secret protection, pre-write guard, README before push, answer review, `.md` audit | `rule5-debug-local-only.sh` (blocks SSH except read-only) · `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
+| **Hooks**: project check, secret protection, pre-write guard, README before push, answer review, `.md` audit | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
 
 **In short:** if you build neither bots nor phased apps, take the first column —
 that's already the heart of it. Nothing forces you to install everything: rules
 are copied one at a time, and a hook is removed by deleting its line in
 `hooks/hooks.json`.
+
+`/fin-phase` deserves a warning of its own: its 300 lines are the author's real
+iOS ritual, kept whole rather than hollowed out into an empty template. It names
+its own documents, its own numbered pitfalls, its own dated trade-offs. Read it
+as an example to adapt — the shape is reusable, the content is not.
 
 The examples talk about trading and iPhones because that's where these rules were
 paid for. The principle doesn't change: **nothing is true because Claude wrote
@@ -136,6 +141,9 @@ starts. A phase never closes without you, and the next never opens on a false st
 ## Requirements
 
 - `jq` and `python3` (used by the hooks)
+- **Claude Code 2.1.196 or later** for the answer review: it reads the
+  `last_assistant_message` field, which earlier versions don't always send.
+  Below that version it catches about one slip in two.
 - Tested on macOS. The hooks are plain bash; Linux should work, untested.
 - `skills-reminder.sh` suggests `/grill-with-docs` and `/tdd`, third-party skills
   not shipped here. Without them it only suggests.
@@ -144,6 +152,11 @@ starts. A phase never closes without you, and the next never opens on a false st
 
 The author's trading rules, risk thresholds and strategy patterns. They only serve
 their own bots.
+
+Two hooks were removed before publishing rather than shipped broken: one blocked
+every `ssh` command (a personal constraint, and its exception list could be
+disarmed by any command merely containing the magic word), the other nagged for a
+commit at the end of *every* turn instead of every session.
 
 ## Support
 

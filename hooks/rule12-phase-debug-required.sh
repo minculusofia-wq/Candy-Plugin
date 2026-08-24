@@ -83,4 +83,4 @@ la roadmap non fiable.
 === FIN ===
 EOF
 
-exit 1
+exit 2
