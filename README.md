@@ -2,6 +2,10 @@
 
 *English · [Version française](README.fr.md)*
 
+<p align="center">
+  <img src="docs/candy-en.png" alt="Candy Plugin — guardrails for Claude Code. It never says it looks good." width="100%">
+</p>
+
 [![MIT](https://img.shields.io/github/license/minculusofia-wq/Candy-Plugin?style=flat-square&color=555)](LICENSE)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-8A63D2?style=flat-square)
 ![Language](https://img.shields.io/badge/content-French-1f6feb?style=flat-square)

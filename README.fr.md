@@ -2,6 +2,10 @@
 
 *[English version](README.md) · Français*
 
+<p align="center">
+  <img src="docs/candy-fr.png" alt="Candy Plugin — des garde-fous pour Claude Code. Il ne dit jamais que ça a l'air bon." width="100%">
+</p>
+
 [![MIT](https://img.shields.io/github/license/minculusofia-wq/Candy-Plugin?style=flat-square&color=555)](LICENSE)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-8A63D2?style=flat-square)
 ![Langue](https://img.shields.io/badge/contenu-fran%C3%A7ais-1f6feb?style=flat-square)
