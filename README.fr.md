@@ -154,8 +154,20 @@ Six groupes, 89 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Chacun a
 été vérifié en remettant le défaut d'origine — un test qui passe toujours ne
 vaut rien. Voir [tests/README.md](tests/README.md).
 
-En fin de tour, le contrôle préfère la cible `test-rapide` du projet quand elle
-existe. La suite complète reste celle de `/verifier`.
+### Votre projet, en fin de tour
+
+Par défaut, rien à faire : le contrôle lance la suite complète de votre projet,
+comme avant. Si elle est trop longue pour tourner à chaque fin de tour, déclarez
+une cible `test-rapide` dans votre `Makefile` — c'est elle qui tournera alors,
+et le verdict dira explicitement que la suite complète n'a pas tourné :
+
+```
+SOUS-ENSEMBLE PASSE — la suite complete n'a PAS tourne.
+Ne pas annoncer que le travail est fini sans avoir lance /verifier.
+```
+
+Jamais « tout passe » sur une couverture partielle : c'est le mensonge que ce
+plugin existe pour empêcher.
 
 ## Prérequis
 

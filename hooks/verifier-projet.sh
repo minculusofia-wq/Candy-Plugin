@@ -136,6 +136,13 @@ fi
 printf "%b" "$RESUME"
 echo
 if [ "$ECHECS" -eq 0 ]; then
+    # Ne jamais dire « tout passe » quand seul un sous-ensemble a tourne. C'est
+    # le mensonge meme que ce controle existe pour empecher.
+    if [ "$CIBLE_TEST" = "test-rapide" ]; then
+        echo "SOUS-ENSEMBLE PASSE — la suite complete n'a PAS tourne."
+        echo "Ne pas annoncer que le travail est fini sans avoir lance /verifier."
+        exit 0
+    fi
     echo "TOUT PASSE."
     exit 0
 else
