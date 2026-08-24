@@ -7,7 +7,7 @@
 ![Langue](https://img.shields.io/badge/contenu-fran%C3%A7ais-1f6feb?style=flat-square)
 
 <p align="center">
-  <img src="docs/apercu.svg" alt="Le contrôle universel rend un verdict : TOUT PASSE sur un projet, AUCUN MOYEN DE VERIFICATION TROUVE sur un autre" width="100%">
+  <img src="docs/apercu.png" alt="Sortie réelle : make test passe, pytest échoue, npm test échoue, sortie 1 — et sur un autre projet, aucun moyen de vérification, sortie 2" width="100%">
 </p>
 
 <p align="center"><i>Le même contrôle, sur deux projets. Il ne dit jamais « ça a l'air bon ».</i></p>

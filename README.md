@@ -7,7 +7,7 @@
 ![Language](https://img.shields.io/badge/content-French-1f6feb?style=flat-square)
 
 <p align="center">
-  <img src="docs/apercu.svg" alt="The universal check returns a verdict: everything passes on one project, no way to verify on another" width="100%">
+  <img src="docs/apercu.png" alt="Real output: make test passes, pytest fails, npm test fails, exit 1 — and on another project, no way to verify at all, exit 2" width="100%">
 </p>
 
 <p align="center"><i>The same check, on two projects. It never says "looks good".</i></p>
