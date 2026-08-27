@@ -4,7 +4,7 @@
 make test
 ```
 
-Six groupes, 87 cas. Chacun dit la même chose : *j'envoie ceci à ce hook,
+Sept groupes, 109 cas. Chacun dit la même chose : *j'envoie ceci à ce hook,
 j'attends ce verdict*.
 
 | groupe | ce qu'il garde |
@@ -15,6 +15,7 @@ j'attends ce verdict*.
 | `04-blocages.sh` | les hooks qui annoncent bloquer sortent bien en 2 |
 | `05-audit-md.sh` | l'audit des `.md` compte juste et ignore ce qui est cité |
 | `06-paquet.sh` | le paquet reste installable et ne dépend que de `python3` |
+| `07-controle-du-setup.sh` | le contrôle du setup voit chaque panne visée, et ne signale pas ce qui est légitime |
 
 ## Les cas sautés
 

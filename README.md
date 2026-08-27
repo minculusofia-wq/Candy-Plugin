@@ -53,9 +53,9 @@ They work on their own. Take one, not all eight.
 | | |
 |---|---|
 | **8 rules** | verify before asserting · brutal honesty · code discipline · phase gate · model choice · working reflexes · communication style · command routing |
-| **5 commands** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` |
+| **6 commands** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
 | **2 agents** | `relecteur-securite` · `relecteur-de-phase` — security and phase reviewers running in a fresh context, so they don't eat your conversation |
-| **11 hooks + 2 scripts** | phase-opening reminder, pre-write guard, secret protection, pre-push check, answer review at the end of each turn |
+| **11 hooks + 4 scripts** | phase-opening reminder, pre-write guard, secret protection, pre-push check, answer review at the end of each turn, a check on the setup itself |
 
 ### The most useful piece: `hooks/verifier-projet.sh`
 
@@ -75,7 +75,7 @@ server, and an **iOS app** built phase by phase. Most of it depends on neither.
 | Works anywhere | Specific to bots and long-running services | Specific to apps built in phases |
 |---|---|---|
 | **Rules**: verify before asserting · brutal honesty · code discipline · working reflexes · model choice · command routing | The "bot strategies" section of `brutal-honesty.md` | `porte-de-phase.md` |
-| **Commands**: `/verifier` · `/maj-docs` | `/debug` (dry-run mode, never on the server) · `/fin-session` | `/fin-phase` |
+| **Commands**: `/verifier` · `/maj-docs` · `/maintenance` | `/debug` (dry-run mode, never on the server) · `/fin-session` | `/fin-phase` |
 | **Agents**: `relecteur-securite` | Its "funds and transactions" section | `relecteur-de-phase` |
 | **Hooks**: project check, secret protection, pre-write guard, README before push, answer review, `.md` audit | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
 
@@ -148,7 +148,7 @@ starts. A phase never closes without you, and the next never opens on a false st
 make test
 ```
 
-Six groups, 87 cases: *send this to that hook, expect that verdict*. Each one
+Seven groups, 109 cases: *send this to that hook, expect that verdict*. Each one
 was checked by putting the original defect back — a test that always passes is
 worth nothing. See [tests/README.md](tests/README.md).
 

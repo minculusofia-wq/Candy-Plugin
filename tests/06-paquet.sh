@@ -95,10 +95,10 @@ PLANTES=0
 DETAIL=""
 for f in hooks/*.sh; do
     NOM="$(basename "$f")"
-    # Ces deux-là attendent un dossier en argument, pas du JSON : ils ont leurs
-    # propres groupes de cas (01 et 05).
+    # Ceux-là attendent un dossier en argument, pas du JSON : ils ont leurs
+    # propres groupes de cas (01, 05 et 07).
     case "$NOM" in
-        verifier-projet.sh|session-end-md-audit.sh) continue ;;
+        verifier-projet.sh|session-end-md-audit.sh|verifier-setup.sh) continue ;;
     esac
     INTERP=$(echo "$INTERPRETEURS" | awk -v n="$NOM" '$1==n {print $2; exit}')
     [ -n "$INTERP" ] || INTERP=bash

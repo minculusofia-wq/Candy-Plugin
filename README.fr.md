@@ -50,9 +50,9 @@ Elles fonctionnent séparément — prenez-en une, pas les huit.
 | | |
 |---|---|
 | **8 règles** | vérifier avant d'affirmer · honnêteté brutale · discipline de code · porte de phase · choix du modèle · réflexes de travail · style de communication · routage des commandes |
-| **5 commandes** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` |
+| **6 commandes** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
 | **2 agents** | `relecteur-securite` · `relecteur-de-phase` (contexte neuf, ne consomment pas la conversation) |
-| **11 hooks + 2 scripts** | rappel d'ouverture de phase, garde avant écriture, protection des secrets, contrôle avant push, relecture de la réponse en fin de tour |
+| **11 hooks + 4 scripts** | rappel d'ouverture de phase, garde avant écriture, protection des secrets, contrôle avant push, relecture de la réponse en fin de tour, contrôle du setup lui-même |
 
 ### La pièce la plus utile : `hooks/verifier-projet.sh`
 
@@ -73,9 +73,9 @@ grande partie ne dépend ni de l'un ni de l'autre.
 | Ce qui marche partout | Spécifique aux bots et services qui tournent | Spécifique aux apps découpées en phases |
 |---|---|---|
 | **Règles** : vérifier avant d'affirmer · honnêteté brutale · discipline de code · réflexes de travail · choix du modèle · routage des commandes | La section « stratégies de bots » de `brutal-honesty.md` | `porte-de-phase.md` |
-| **Commandes** : `/verifier` · `/maj-docs` | `/debug` (mode simulation, jamais sur le serveur) · `/fin-session` | `/fin-phase` |
+| **Commandes** : `/verifier` · `/maj-docs` · `/maintenance` | `/debug` (mode simulation, jamais sur le serveur) · `/fin-session` | `/fin-phase` |
 | **Agents** : `relecteur-securite` | Sa section « fonds et transactions » | `relecteur-de-phase` |
-| **Hooks** : contrôle du projet, protection des secrets, garde avant écriture, README avant push, relecture de la réponse, audit des `.md` | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
+| **Hooks** : contrôle du projet, contrôle du setup, protection des secrets, garde avant écriture, README avant push, relecture de la réponse, audit des `.md` | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
 
 **En clair :** si vous ne faites ni bot ni app à phases, prenez la première
 colonne — c'est déjà l'essentiel. Rien n'oblige à tout installer : les règles se
@@ -149,7 +149,7 @@ s'ouvre pas sur un état faux.
 make test
 ```
 
-Six groupes, 87 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Chacun a
+Sept groupes, 109 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Chacun a
 été vérifié en remettant le défaut d'origine — un test qui passe toujours ne
 vaut rien. Voir [tests/README.md](tests/README.md).
 
