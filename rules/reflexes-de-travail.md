@@ -28,7 +28,7 @@ Pour tout travail qui touche plusieurs fichiers, ou dont l'approche n'est pas é
 
 Sauter cette étape quand le changement tient en une phrase (corriger une faute, ajouter une ligne de log, renommer quelque chose).
 
-Pour une grosse fonctionnalité : interroger l'utilisateur d'abord avec l'outil de questions — implémentation, cas limites, arbitrages — jusqu'à ce que tout soit couvert, écrire la spec dans un fichier, puis l'exécuter dans une conversation neuve.
+Pour une grosse fonctionnalité : interroger l'utilisateur d'abord avec l'outil de questions — sur le métier seulement : ce que la fonctionnalité doit faire, les cas limites vus côté utilisateur, les arbitrages de stratégie ; l'implémentation, Claude la tranche — jusqu'à ce que tout soit couvert, écrire la spec dans un fichier, puis l'exécuter dans une conversation neuve.
 
 ## 4. Repartir propre après deux échecs
 

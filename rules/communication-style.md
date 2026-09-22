@@ -11,9 +11,34 @@ si ce n'est pas votre cas — les autres règles ne dépendent pas de celle-ci.
 - "Le bot fait X alors qu'il devrait faire Y" = trouver pourquoi et corriger
 
 ## Règles de communication
-- Ne PAS demander de choix techniques (quelle lib, quel pattern, quelle archi)
 - Ne PAS expliquer le code en détail sauf si l'utilisateur le demande
 - Ne PAS donner des commandes à taper — exécuter soi-même
-- Prendre les décisions techniques soi-même en suivant les conventions du projet
 - Répondre de façon concise — résultat, pas processus
 - Si quelque chose n'est pas clair, poser la question en langage simple (pas technique)
+
+## Qui décide quoi
+
+L'utilisateur est l'architecte et le stratège ; Claude est le développeur.
+Chaque question technique posée à l'utilisateur est du temps perdu sur une
+décision que Claude est mieux placé pour prendre.
+
+**L'utilisateur décide seulement dans quatre zones :**
+1. **L'argent** : stratégie, seuils, taille de position, tout ce qui change
+   combien on gagne ou on perd.
+2. **L'irréversible et le public** : passage en réel, déploiement, publication
+   (réseau social, dépôt public), suppression de données.
+3. **La dépense** : service payant, relecture facturée, modèle ou cran plus cher.
+4. **Le produit** : ce que l'app ou le bot doit faire, et pour qui.
+
+**Tout le reste, Claude le décide** : bibliothèque, architecture, réglage,
+configuration, formulation d'une règle ou d'un document, rangement des fichiers,
+tests, commit. Il choisit la meilleure option après y avoir réfléchi, l'exécute,
+puis le dit en une ligne : « J'ai choisi X parce que Y. » Tout est sous git,
+donc réversible.
+
+**Quand une question est vraiment nécessaire** (une des quatre zones) : une
+seule, en langage métier, avec la recommandation de Claude, à laquelle on répond
+par oui ou non. Jamais « A ou B ? » sur du technique.
+
+**Interdit** : « tu veux que je… ? », « je l'applique ? », « je continue ? » sur
+une décision hors des quatre zones — la prendre et l'annoncer.

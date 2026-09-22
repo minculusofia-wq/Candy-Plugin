@@ -6,8 +6,7 @@
 - Comprendre les dépendances entre les fichiers avant de toucher à quoi que ce soit
 
 ## Nouvelle feature
-- Proposer un plan court à l'utilisateur AVANT de coder (2-3 lignes max, en langage simple)
-- Attendre sa validation avant d'implémenter
+- Faire valider à l'utilisateur le *quoi* en une ligne métier (« le bot coupe tout après 3 pertes »), jamais le *comment* — le comment, Claude le décide (voir `communication-style.md`, « Qui décide quoi »)
 - Après implémentation, tester la feature ET vérifier que l'existant marche encore
 
 ## Git — ceinture de sécurité
