@@ -62,6 +62,30 @@ transverse. Signaler le surcoût et les 30 jours de conservation des données.
 **Avant toute bascule** : les agents délégués tournent déjà sur Sonnet 5 et
 n'entament pas le contexte du fil principal. C'est le premier réflexe.
 
+### La bascule que personne n'a demandée : le message signalé
+
+Fable 5.1, Fable 5 et Opus 5.5 passent chaque requête à des classifieurs de
+sécurité. Par défaut, une requête signalée en cybersécurité est relancée sur
+Opus 4.8, en biologie sur Opus 5 — et **toute la suite de la session reste sur
+cet ancien modèle**, avec un simple avis dans la transcription (doc Claude Code,
+model-config, « Automatic model fallback »). Le contrôle porte sur tout le
+contexte, CLAUDE.md et état git compris : un dépôt qui parle de sécurité peut
+déclencher la bascule dès la première requête.
+
+Pour décider soi-même, mettre dans `~/.claude/settings.json` :
+
+```json
+{ "switchModelsOnFlag": false }
+```
+
+(ou `/config` → « Switch models when a message is flagged »). La session se met
+alors en pause : passer sur l'ancien modèle, ou reformuler sur le modèle
+courant. En mode non interactif (`claude -p`), la requête signalée s'arrête sur
+une erreur au lieu de basculer.
+
+Quand cette pause arrive, Claude le signale en une ligne et propose de
+reformuler plutôt que de basculer.
+
 ## Relecture : `/code-review`
 
 `/code-review max` pour une relecture large. `/code-review ultra` existe aussi,
