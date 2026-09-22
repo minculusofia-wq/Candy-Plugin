@@ -1,5 +1,5 @@
 ---
-description: Fin de session — debug optionnel, audit des .md, mise a jour docs, commit unique et push
+description: Fin de session — debug optionnel, audit des .md, chaque information dans son fichier, commit unique et push
 ---
 
 # Fin de session
@@ -45,38 +45,33 @@ Le script vérifie 4 choses :
 
 Si le script retourne code 1 (issues détectées), je traite chaque point ligne par ligne, puis je relance le script jusqu'à ce qu'il retourne 0.
 
-## 1. Mise à jour de TOUS les .md du projet
-Lister tous les fichiers .md du projet et les mettre à jour selon leur rôle.
+## 1. Documentation : chaque information dans son fichier
 
-Exclure au jugement : dépendances, builds, fichiers générés automatiquement.
-Modifier un .md uniquement si son contenu est devenu obsolète à cause de la session. Sinon le laisser tel quel.
+Appliquer `rules/une-info-un-fichier.md`. On ne relit pas tous les `.md` un par
+un : on part de ce que la session a appris ou changé, et chaque fait s'écrit
+**une fois**, dans le fichier qui porte son sujet. Pour un bot ou un service qui
+tourne :
 
-### CLAUDE.md
-- Description courte (ce que fait le projet)
-- Comment lancer en local
-- Ports, variables d'environnement
-- Pièges connus, décisions d'architecture
+| Ce que la session a produit | Où ça va |
+|---|---|
+| Piège, commande, convention encore valables | `CLAUDE.md` — une ligne au sommaire des pièges, qui renvoie au détail |
+| Détail d'un piège lié à des fichiers précis | `.claude/rules/<sujet>.md` avec `paths:` |
+| Logique de décision, paramètres et leurs valeurs **relues dans le code** | `STRATEGY.md` |
+| Récit daté : ce qui a cassé, la cause racine, le correctif, la mise en prod | `JOURNAL.md`, ajouté à la fin sous la date du jour |
+| Déploiement, service, variables attendues (jamais leur valeur) | `DEPLOY.md` |
+| Analyse chiffrée : backtest, résultats, étude | `analyses/<date>-<sujet>.md` |
 
-### README.md
-- Partie stratégie en langage business
-- Partie technique (stack, lancement, ports, .env, structure, déploiement)
-- Créer s'il n'existe pas
+Un fichier ne se modifie que si la session a rendu son contenu faux ou
+incomplet.
 
-### MEMORY.md du projet
-- Nouveaux pitfalls → fiche dédiée
-- Décisions d'architecture de la session
-- Bugs importants + cause racine
-- Créer s'il n'existe pas
-
-### strategy-spec.md (si présent)
-- Logique de décision si elle a évolué
-- Paramètres clés et valeurs actuelles
-
-### Tous les autres .md du projet
-Vérifier chacun et appliquer le même critère (modifier uniquement si obsolète).
+**Projet existant qui s'écarte du jeu** (`MEMORY.md`, `strategy-spec.md`,
+stratégie dans le README, journal sous un autre nom…) : écrire dans le fichier
+qui porte **déjà** le sujet — en créer un du jeu à côté ferait une deuxième
+copie. Signaler l'écart au résumé, sans restructurer : le rangement se fait
+projet par projet, à la demande de l'utilisateur.
 
 ## 2. Commit unique + push
-Un SEUL commit final regroupant code (si debug fait) + tous les .md mis à jour.
+Un SEUL commit final regroupant code (si debug fait) + la documentation mise à jour.
 - Message clair en français résumant la session
 - Le commit se fait sans demander
 - **Le push, lui, se demande** : montrer le message de commit et attendre le
@@ -85,6 +80,7 @@ Un SEUL commit final regroupant code (si debug fait) + tous les .md mis à jour.
 
 ## 3. Résumé
 - Debug fait ou non (et résultat si oui)
-- Quels .md ont été modifiés et pourquoi
-- Quels .md ont été vérifiés mais laissés tels quels
+- Quels fichiers de documentation ont reçu quoi, et pourquoi celui-là
+- Les écarts du projet à la règle, signalés et non corrigés — dont un
+  `CLAUDE.md` au-delà de 200 lignes (`wc -l CLAUDE.md`)
 - État final du projet

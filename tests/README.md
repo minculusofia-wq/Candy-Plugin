@@ -4,18 +4,19 @@
 make test
 ```
 
-Sept groupes, 109 cas. Chacun dit la même chose : *j'envoie ceci à ce hook,
+Huit groupes, 137 cas. Chacun dit la même chose : *j'envoie ceci à ce hook,
 j'attends ce verdict*.
 
 | groupe | ce qu'il garde |
 |---|---|
 | `01-verifier-projet.sh` | le contrôle universel lance TOUS les contrôles trouvés, et rend les quatre verdicts justes |
 | `02-protect-secrets.sh` | la protection des secrets bloque une valeur, jamais un nom de variable |
-| `03-declencheurs.sh` | « source ou silence » se tait sur le travail ordinaire |
+| `03-declencheurs.sh` | « source ou silence » se tait sur le travail ordinaire et sur les messages automatiques |
 | `04-blocages.sh` | les hooks qui annoncent bloquer sortent bien en 2 |
 | `05-audit-md.sh` | l'audit des `.md` compte juste et ignore ce qui est cité |
 | `06-paquet.sh` | le paquet reste installable et ne dépend que de `python3` |
-| `07-controle-du-setup.sh` | le contrôle du setup voit chaque panne visée, et ne signale pas ce qui est légitime |
+| `07-controle-du-setup.sh` | le contrôle du setup voit chaque panne visée — dont un hook branché que personne n'entend — et ne signale pas ce qui est légitime |
+| `08-ouverture-de-session.sh` | l'alerte CLAUDE.md trop long et le rappel de projet parlent au bon endroit, se taisent ailleurs, et rendent un JSON lisible |
 
 ## Les cas sautés
 

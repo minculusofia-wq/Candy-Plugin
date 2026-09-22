@@ -43,16 +43,16 @@ depuis votre dossier personnel. Copiez celles qui vous intéressent :
 cp -R rules/*.md ~/.claude/rules/
 ```
 
-Elles fonctionnent séparément — prenez-en une, pas les huit.
+Elles fonctionnent séparément — prenez-en une, pas les neuf.
 
 ## Ce que ça contient
 
 | | |
 |---|---|
-| **8 règles** | vérifier avant d'affirmer · honnêteté brutale · discipline de code · porte de phase · choix du modèle · réflexes de travail · style de communication · routage des commandes |
+| **9 règles** | vérifier avant d'affirmer · honnêteté brutale · discipline de code · porte de phase · choix du modèle · réflexes de travail · style de communication · routage des commandes · une information, un seul fichier |
 | **6 commandes** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
 | **2 agents** | `relecteur-securite` · `relecteur-de-phase` (contexte neuf, ne consomment pas la conversation) |
-| **11 hooks + 4 scripts** | rappel d'ouverture de phase, garde avant écriture, protection des secrets, contrôle avant push, relecture de la réponse en fin de tour, contrôle du setup lui-même |
+| **10 hooks + 4 scripts** | rappel d'ouverture de phase, rappel des tâches en attente sur un projet, alerte quand un CLAUDE.md dépasse 200 lignes, garde avant écriture, protection des secrets, contrôle avant push, relecture de la réponse en fin de tour, contrôle du setup lui-même |
 
 ### La pièce la plus utile : `hooks/verifier-projet.sh`
 
@@ -72,10 +72,10 @@ grande partie ne dépend ni de l'un ni de l'autre.
 
 | Ce qui marche partout | Spécifique aux bots et services qui tournent | Spécifique aux apps découpées en phases |
 |---|---|---|
-| **Règles** : vérifier avant d'affirmer · honnêteté brutale · discipline de code · réflexes de travail · choix du modèle · routage des commandes | La section « stratégies de bots » de `brutal-honesty.md` | `porte-de-phase.md` |
+| **Règles** : vérifier avant d'affirmer · honnêteté brutale · discipline de code · réflexes de travail · choix du modèle · routage des commandes · une information, un seul fichier | La section « stratégies de bots » de `brutal-honesty.md` | `porte-de-phase.md` |
 | **Commandes** : `/verifier` · `/maj-docs` · `/maintenance` | `/debug` (mode simulation, jamais sur le serveur) · `/fin-session` | `/fin-phase` |
 | **Agents** : `relecteur-securite` | Sa section « fonds et transactions » | `relecteur-de-phase` |
-| **Hooks** : contrôle du projet, contrôle du setup, protection des secrets, garde avant écriture, README avant push, relecture de la réponse, audit des `.md` | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
+| **Hooks** : contrôle du projet, contrôle du setup, protection des secrets, garde avant écriture, relecture de la réponse, audit des `.md`, alerte CLAUDE.md trop long, rappel des tâches en attente | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
 
 **En clair :** si vous ne faites ni bot ni app à phases, prenez la première
 colonne — c'est déjà l'essentiel. Rien n'oblige à tout installer : les règles se
@@ -149,7 +149,7 @@ s'ouvre pas sur un état faux.
 make test
 ```
 
-Sept groupes, 109 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Chacun a
+Huit groupes, 137 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Chacun a
 été vérifié en remettant le défaut d'origine — un test qui passe toujours ne
 vaut rien. Voir [tests/README.md](tests/README.md).
 
@@ -166,8 +166,6 @@ vaut rien. Voir [tests/README.md](tests/README.md).
   quatorze cas vérifient que le contrôle universel lance bien ces familles. Sans
   eux, ces cas sont sautés en le disant, et la suite reste verte.
 - Testé sur macOS. Les hooks sont du bash POSIX-ish ; Linux devrait passer, non testé.
-- Le hook `skills-reminder.sh` propose `/grill-with-docs` et `/tdd`, qui sont des
-  skills tierces non fournies ici. Sans elles, il ne fait que suggérer.
 
 ## Ce qui n'est pas là, volontairement
 
@@ -179,6 +177,16 @@ bloquait toute commande `ssh` (contrainte très personnelle, et sa liste
 d'exceptions se désarmait avec n'importe quelle commande contenant le mot
 magique), l'autre réclamait un commit à la fin de *chaque tour* au lieu de
 chaque session.
+
+Trois autres ont été retirés ensuite, après une mesure sur un mois de
+conversations de l'auteur. `rule7-readme-before-push.sh` et
+`rule9-code-discipline.sh` écrivaient leurs avertissements puis sortaient avec
+le code 0 : Claude Code envoie alors ces messages au seul journal de débogage,
+et personne ne les a jamais vus. `skills-reminder.sh` réagissait à des mots, pas
+au sens : près de trois déclenchements sur quatre venaient de messages
+automatiques (fins de tâches, rapports de sous-agents, commandes dépliées), et sur un échantillon de vrais
+messages, il ne tombait juste qu'une fois sur cinq. Le contrôle du setup
+repère désormais ce genre de hook muet.
 
 ## Support
 

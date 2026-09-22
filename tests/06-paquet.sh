@@ -53,7 +53,8 @@ PY
 verifie "chaque hook branché est présent sur le disque" 0 "$MANQUANTS"
 
 verifie "les hooks retirés du paquet public ne sont pas revenus" \
-        0 "$(ls hooks/rule5-debug-local-only.sh hooks/rule6-session-end.sh 2>/dev/null | grep -c .)"
+        0 "$(ls hooks/rule5-debug-local-only.sh hooks/rule6-session-end.sh hooks/rule7-readme-before-push.sh \
+                hooks/rule9-code-discipline.sh hooks/skills-reminder.sh 2>/dev/null | grep -c .)"
 
 section "Paquet — aucun hook ne plante sur une entrée ordinaire"
 # Chaque hook est lancé avec l'interpréteur que hooks.json lui associe VRAIMENT.

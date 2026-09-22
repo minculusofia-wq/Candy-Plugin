@@ -24,6 +24,13 @@ muet  "un terme technique voisin"            "corrige le scanner de codes-barres
 muet  "une classe à renommer"                "renomme la classe CommandManager"
 muet  "une couleur à changer"                "change la couleur du bouton"
 muet  "un fichier à déplacer"                "deplace ce fichier dans un autre dossier"
+muet  "une relecture de code demandée"       "fais une revue de code de la phase 3"
+muet  "« comment » et « bot » dans la phrase" "comment je garde ca en memoire pour mon bot"
+
+section "Déclencheurs — les messages automatiques ne sont pas des demandes"
+muet  "l'avis de fin d'une tâche de fond"    "<task-notification> <task-id>a1</task-id> rapport : analyse terminee"
+muet  "le rapport d'un sous-agent"           "<agent-message from=\"a1\"> analyse du module"
+muet  "un message d'une autre conversation"  "<cross-session-message from=\"x\"> rapport pret"
 
 section "Déclencheurs — la parole sur une vraie demande d'analyse"
 parle "un rapport demandé"                   "fais-moi un rapport sur cette approche"
@@ -32,5 +39,10 @@ parle "le verbe analyser"                    "peux-tu analyser la logique de cal
 parle "une revue critique"                   "une revue critique de mon approche"
 parle "la pertinence d'un choix"             "quelle est la pertinence de ce choix"
 parle "le pluriel compte aussi"              "fais deux rapports separes"
+parle "« stratégie » avec son accent"        "que vaut cette stratégie ?"
+
+section "Déclencheurs — l'accent tient aussi avec la langue C"
+verifie "« stratégie » reconnue avec LC_ALL=C" 1 \
+        "$(printf '%s' "$(entree_prompt "que vaut cette stratégie ?")" | LC_ALL=C bash "$HOOK" 2>/dev/null | grep -cF "$REGLE")"
 
 bilan

@@ -17,6 +17,15 @@ if [[ -z "$PROMPT" ]]; then
     exit 0
 fi
 
+# Les messages automatiques ne sont pas des demandes de l'utilisateur : avis de
+# fin d'une tache de fond, rapport d'un sous-agent, message d'une autre session.
+# Rejeu d'un mois de messages de l'auteur : pres de trois declenchements sur
+# quatre venaient d'eux.
+DEBUT="${PROMPT#"${PROMPT%%[![:space:]]*}"}"
+case "$DEBUT" in
+    "<task-notification"*|"<agent-message"*|"<cross-session-message"*) exit 0 ;;
+esac
+
 PROMPT_LOWER=$(echo "$PROMPT" | tr '[:upper:]' '[:lower:]')
 
 # Mots ENTIERS uniquement. En sous-chaine, « edge » se declenchait sur
@@ -24,19 +33,20 @@ PROMPT_LOWER=$(echo "$PROMPT" | tr '[:upper:]' '[:lower:]')
 # le pave complet de la regle. Les mots de jargon trading (edge, sweep, longshot,
 # scanner, mm, market maker) ont ete retires : trop generiques hors de ce domaine,
 # inutiles dedans puisque « rapport » et « analyse » couvrent le vrai declencheur.
+# Retires ensuite : « revue », « comment ... bot », « verifie ... code » — ils
+# reagissaient aux consignes de phase et aux demandes de relecture de code, pas
+# a des demandes de rapport. « strat(e|é)gie » s'ecrit en alternative : entre
+# crochets, le « é » (deux octets) n'etait pas reconnu avec la langue C.
 TRIGGERS=(
     '\brapports?\b'
     '\banalyses?\b'
     '\banalyser\b'
     '\bpertinence\b'
-    '\brevues?\b'
     '\bcritiques?\b'
-    '\bstrat[eé]gies?\b'
+    '\bstrat(e|é)gies?\b'
     '\bque penses\b'
     "\\bqu.en penses\\b"
     '\bpourquoi le bot\b'
-    '\bcomment\b.*\bbot\b'
-    '\bverifie\b.*\bcode\b'
 )
 
 TRIGGERED=false

@@ -46,16 +46,16 @@ Rules are not loaded by the plugin — Claude Code reads them from your own fold
 cp -R rules/*.md ~/.claude/rules/
 ```
 
-They work on their own. Take one, not all eight.
+They work on their own. Take one, not all nine.
 
 ## What's inside
 
 | | |
 |---|---|
-| **8 rules** | verify before asserting · brutal honesty · code discipline · phase gate · model choice · working reflexes · communication style · command routing |
+| **9 rules** | verify before asserting · brutal honesty · code discipline · phase gate · model choice · working reflexes · communication style · command routing · one piece of information, one file |
 | **6 commands** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
 | **2 agents** | `relecteur-securite` · `relecteur-de-phase` — security and phase reviewers running in a fresh context, so they don't eat your conversation |
-| **11 hooks + 4 scripts** | phase-opening reminder, pre-write guard, secret protection, pre-push check, answer review at the end of each turn, a check on the setup itself |
+| **10 hooks + 4 scripts** | phase-opening reminder, reminder of the task waiting on a project, warning when a CLAUDE.md goes over 200 lines, pre-write guard, secret protection, pre-push check, answer review at the end of each turn, a check on the setup itself |
 
 ### The most useful piece: `hooks/verifier-projet.sh`
 
@@ -74,10 +74,10 @@ server, and an **iOS app** built phase by phase. Most of it depends on neither.
 
 | Works anywhere | Specific to bots and long-running services | Specific to apps built in phases |
 |---|---|---|
-| **Rules**: verify before asserting · brutal honesty · code discipline · working reflexes · model choice · command routing | The "bot strategies" section of `brutal-honesty.md` | `porte-de-phase.md` |
+| **Rules**: verify before asserting · brutal honesty · code discipline · working reflexes · model choice · command routing · one piece of information, one file | The "bot strategies" section of `brutal-honesty.md` | `porte-de-phase.md` |
 | **Commands**: `/verifier` · `/maj-docs` · `/maintenance` | `/debug` (dry-run mode, never on the server) · `/fin-session` | `/fin-phase` |
 | **Agents**: `relecteur-securite` | Its "funds and transactions" section | `relecteur-de-phase` |
-| **Hooks**: project check, secret protection, pre-write guard, README before push, answer review, `.md` audit | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
+| **Hooks**: project check, secret protection, pre-write guard, answer review, `.md` audit, oversized CLAUDE.md warning, waiting-task reminder | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
 
 **In short:** if you build neither bots nor phased apps, take the first column —
 that's already the heart of it. Nothing forces you to install everything: rules
@@ -148,7 +148,7 @@ starts. A phase never closes without you, and the next never opens on a false st
 make test
 ```
 
-Seven groups, 109 cases: *send this to that hook, expect that verdict*. Each one
+Eight groups, 137 cases: *send this to that hook, expect that verdict*. Each one
 was checked by putting the original defect back — a test that always passes is
 worth nothing. See [tests/README.md](tests/README.md).
 
@@ -164,8 +164,6 @@ worth nothing. See [tests/README.md](tests/README.md).
   fourteen cases check that the universal control does run those families.
   Without them those cases are skipped out loud, and the suite stays green.
 - Tested on macOS. The hooks are plain bash; Linux should work, untested.
-- `skills-reminder.sh` suggests `/grill-with-docs` and `/tdd`, third-party skills
-  not shipped here. Without them it only suggests.
 
 ## Deliberately not included
 
@@ -176,6 +174,15 @@ Two hooks were removed before publishing rather than shipped broken: one blocked
 every `ssh` command (a personal constraint, and its exception list could be
 disarmed by any command merely containing the magic word), the other nagged for a
 commit at the end of *every* turn instead of every session.
+
+Three more were removed later, after measuring a month of the author's
+conversations. `rule7-readme-before-push.sh` and `rule9-code-discipline.sh`
+printed their warnings and exited with code 0: Claude Code then sends those
+messages to the debug log only, and nobody ever saw them. `skills-reminder.sh`
+reacted to words, not meaning: nearly three triggers out of four came from
+automatic messages (task notifications, subagent reports, expanded commands), and on a sample of real
+messages it was right only one time in five. The setup check now spots this
+kind of silent hook.
 
 ## Support
 

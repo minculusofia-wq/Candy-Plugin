@@ -1,8 +1,10 @@
 # Choix du modèle et du niveau d'effort
 
 Conseiller le cran le plus pertinent **au démarrage d'une tâche**, jamais au
-milieu — changer de modèle en cours de session vide le cache et fait re-payer
-tout le contexte accumulé.
+milieu — changer de modèle, et sur la plupart des modèles changer d'effort, en
+cours de session vide le cache et fait re-payer tout le contexte accumulé (doc
+Claude Code, prompt-caching, « Changing effort level » ; Fable 5.1 garde son
+cache quand l'effort change, avec une clé API ou un abonnement Claude).
 
 ## Deux réglages, pas trois
 
@@ -18,6 +20,11 @@ cran ET ultracode dans le même conseil.
 ⚠️ Les deux réglages se mettent **en même temps**, avant le premier message. Le
 curseur ne bouge pas quand un plan est accepté : ultracode tourne pendant le plan
 aussi, et c'est là qu'il sert le plus.
+
+Avant le premier message, c'est là qu'ils ne coûtent rien. Ils ne sont pas
+verrouillés pour autant : `/effort <cran>` change le curseur à tout moment, même
+pendant que Claude travaille, au prix d'une relecture sans cache de toute la
+conversation.
 
 ## Quel cran pour quelle demande
 
@@ -69,15 +76,20 @@ Une ligne, avant de commencer, avec le motif et le gain attendu. Pas une questio
 qui bloque : L'utilisateur applique ou ignore. Ce conseil est écrit par `/fin-phase`
 dans `.claude-phase-suivante` et relu par le hook `ouverture-de-phase.sh`.
 
-Claude ne peut pas changer le cran en cours de conversation. Mais **se taire quand
-il est trop bas est une faute** — le dire en une ligne sans arrêter le travail :
+Claude ne peut pas changer le cran lui-même ; l'utilisateur le peut, avec
+`/effort`. Mais **se taire quand il est trop bas est une faute** — le dire en une
+ligne sans arrêter le travail, avec la commande à taper :
 
-> « Deuxième correction sur le même défaut sans résultat — la cause n'est pas là
->   où je regarde. Ça mérite `max`, dans une conversation neuve. Je continue en
+> « Ce travail touche <zone> : il mérite `max`. Tape `/effort max` — la
+>   prochaine réponse relira la conversation sans cache. Je continue en
 >   attendant. »
 
-Au début d'une phase → rouvrir au bon cran (le code est sur le disque). Presque
-finie → finir et compenser par `/code-review max` à la sortie.
+Au début d'une conversation → `/effort` tout de suite, ça ne coûte presque rien.
+En pleine conversation → le coût est une relecture complète : `/effort` si la
+suite est sensible, sinon finir et compenser par `/code-review max` à la sortie.
+Après deux corrections ratées sur le même défaut, le problème n'est plus le cran
+mais le contexte encombré : conversation neuve, au bon cran (voir
+`reflexes-de-travail.md`, « Repartir propre après deux échecs »).
 
 **Interdit** : proposer une bascule de modèle au milieu d'une tâche engagée ;
 descendre sur une zone sensible ; changer de modèle ou d'effort sans le dire.

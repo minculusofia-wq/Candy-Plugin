@@ -9,6 +9,19 @@
             "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/ouverture-de-phase.sh\"'"
           }
         ]
+      },
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/taille-claude-md.sh\"'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/rappel-projet.sh\"'"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -17,10 +30,6 @@
           {
             "type": "command",
             "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/rule13-source-or-silence.sh\"'"
-          },
-          {
-            "type": "command",
-            "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/skills-reminder.sh\"'"
           }
         ]
       }
@@ -39,10 +48,6 @@
           },
           {
             "type": "command",
-            "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/rule7-readme-before-push.sh\"'"
-          },
-          {
-            "type": "command",
             "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/protect-secrets.sh\"'"
           }
         ]
@@ -53,10 +58,6 @@
           {
             "type": "command",
             "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-edit-guard.sh\"'"
-          },
-          {
-            "type": "command",
-            "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/rule9-code-discipline.sh\"'"
           },
           {
             "type": "command",

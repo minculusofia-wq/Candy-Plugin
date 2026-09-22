@@ -73,7 +73,7 @@ verifie "un script vraiment orphelin est signalé" \
 verifie "un script appelé par une commande ne l'est PAS" \
         0 "$(echo "$SORTIE" | grep -c 'appele-par-commande.sh')"
 verifie "un script branché dans settings.json ne l'est pas non plus" \
-        0 "$(echo "$SORTIE" | grep -c 'hooks/branche.sh')"
+        0 "$(echo "$SORTIE" | grep -c "branche.sh n'est ni branché")"
 
 section "Skills — les trois façons de ne jamais être chargé"
 verifie "un .md à la racine de skills/ est signalé" \
@@ -98,13 +98,61 @@ verifie "une phrase courte ne l'est pas" \
         0 "$(echo "$SORTIE" | grep -c 'Trop court pour compter')"
 
 section "Bilan — il compte ce qu'il affiche"
-# Cinq points : orphelin, trois skills, échéance, duplication, absence de dépôt.
+# Six points : orphelin, hook muet (branche.sh écrit en fin de tour avec le
+# code 0), trois skills, échéance, duplication, absence de dépôt.
 # Le compteur se perdait dans les sous-processus : le bilan annonçait moins.
 AFFICHES=$(echo "$SORTIE" | grep -cE '^  (✗|⚠) ')
 COMPTES=$(echo "$SORTIE" | sed -n 's/^  \([0-9]*\) point(s).*/\1/p')
 verifie "autant de points comptés que de lignes affichées" "$AFFICHES" "$COMPTES"
 bash "$CONTROLE" "$CASSE" >/dev/null 2>&1
 verifie "des problèmes trouvés donnent une sortie non nulle" 1 $?
+
+# --- Hooks entendus, skills synchronisés, date dans un nom de fichier --------
+ENTENDU="$BAC/entendu"
+mkdir -p "$ENTENDU/hooks" "$ENTENDU/rules" "$ENTENDU/skills/synced/abc/pdf" \
+         "$ENTENDU/projects/-projet-C/memory"
+cat > "$ENTENDU/settings.json" <<'JSON'
+{"hooks":{
+ "Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/muet-fin-de-tour.sh"},
+                   {"type":"command","command":"python3 ~/.claude/hooks/relecture.py"}]}],
+ "PreToolUse":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/bloque.sh"},
+                         {"type":"command","command":"bash ~/.claude/hooks/rend-du-json.sh"},
+                         {"type":"command","command":"bash ~/.claude/hooks/teste-seulement.sh"}]}],
+ "UserPromptSubmit":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/ajoute-du-contexte.sh"}]}]}}
+JSON
+printf 'echo "Pensez a commiter." >&2\nexit 0\n'            > "$ENTENDU/hooks/muet-fin-de-tour.sh"
+printf 'echo "Bloque : raison." >&2\nexit 2\n'              > "$ENTENDU/hooks/bloque.sh"
+printf "echo '{\"systemMessage\": \"attention\"}'\nexit 0\n" > "$ENTENDU/hooks/rend-du-json.sh"
+printf 'if echo "$X" | grep -q a; then exit 0; fi\nexit 0\n'  > "$ENTENDU/hooks/teste-seulement.sh"
+printf 'echo "Rappel pour Claude."\nexit 0\n'                > "$ENTENDU/hooks/ajoute-du-contexte.sh"
+printf '#!/usr/bin/env python3\nimport sys\ndef main():\n    sys.stderr.write("corrige\\n")\n    return 2\nsys.exit(main())\n' \
+    > "$ENTENDU/hooks/relecture.py"
+printf -- '---\nname: s\n---\n# skill synchronisé\n' > "$ENTENDU/skills/synced/abc/pdf/SKILL.md"
+printf -- '---\nname: c\n---\n\nPrévue en xhigh, faite en max (analyse-2020-01-01.md:12).\n' \
+    > "$ENTENDU/projects/-projet-C/memory/precedent.md"
+SORTIE_E=$(bash "$CONTROLE" "$ENTENDU" 2>&1)
+
+section "Hooks entendus — branché ne veut pas dire entendu"
+verifie "un hook de fin de tour qui écrit avec le code 0 est signalé muet" \
+        1 "$(echo "$SORTIE_E" | grep -c 'muet-fin-de-tour.sh (Stop) : ses messages sortent avec le code 0')"
+verifie "un hook qui bloque (sortie 2) ne l'est pas" \
+        0 "$(echo "$SORTIE_E" | grep -c 'bloque.sh')"
+verifie "un hook qui rend du JSON ne l'est pas" \
+        0 "$(echo "$SORTIE_E" | grep -c 'rend-du-json.sh')"
+verifie "un echo qui sert de test (echo | grep) n'est pas une sortie" \
+        0 "$(echo "$SORTIE_E" | grep -c 'teste-seulement.sh')"
+verifie "un message normal à l'envoi d'un prompt arrive bien à Claude" \
+        0 "$(echo "$SORTIE_E" | grep -c 'ajoute-du-contexte.sh')"
+verifie "un script python qui renvoie 2 par return est entendu" \
+        0 "$(echo "$SORTIE_E" | grep -c 'relecture.py')"
+verifie "un settings.json sans hook : rien à signaler" \
+        1 "$(bash "$CONTROLE" "$VIERGE" 2>&1 | grep -c '0 branchement(s), aucun hook ne parle dans le vide')"
+
+section "Faux positifs retirés"
+verifie "les skills synchronisés par Claude Code ne sont pas « jamais chargés »" \
+        0 "$(echo "$SORTIE_E" | grep -c 'synced')"
+verifie "une date dans un nom de fichier n'est pas une échéance" \
+        0 "$(echo "$SORTIE_E" | grep -c 'precedent.md')"
 
 section "Comptage des relectures — le grep se comptait lui-même"
 JS="$BAC/projects/-projet/session.jsonl"

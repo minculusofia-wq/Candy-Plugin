@@ -1,17 +1,23 @@
 ---
-description: Mettre a jour tous les fichiers .md du projet courant (README, CLAUDE.md, MEMORY.md, specs, docs) — audit automatique, correction des obsolescences, commit et push
+description: Mettre a jour la documentation (.md) du projet courant selon la regle une-info-un-fichier — audit automatique, chaque information dans son fichier, commit et push
 ---
 
-# Mise à jour de toute la documentation du projet
+# Mise à jour de la documentation du projet
 
-Mettre à jour **tous** les fichiers `.md` du projet courant, pas seulement le README. Exécuter les étapes dans l'ordre, sans en sauter.
+Mettre la documentation du projet courant d'accord avec le code, en appliquant
+`rules/une-info-un-fichier.md` : chaque information dans un seul fichier.
+Exécuter les étapes dans l'ordre, sans en sauter.
 
 ## Étape 1 : identifier le périmètre
 
 1. Déterminer le projet via le working directory courant.
 2. Lister tous les `.md` du projet.
 3. Exclure au jugement : dépendances (`node_modules/`, `venv/`, `.venv/`), builds, fichiers générés automatiquement, dossiers `archives/`.
-4. Annoncer à l'utilisateur le nombre de `.md` dans le périmètre.
+4. Situer le projet dans la règle : bot ou service qui tourne, app par phases,
+   ou petit projet, et le jeu de fichiers qu'elle attend.
+5. Annoncer à l'utilisateur le nombre de `.md` dans le périmètre et les écarts
+   à la règle : fichiers hors du jeu, même sujet traité dans deux fichiers,
+   `CLAUDE.md` au-delà de 200 lignes (`wc -l CLAUDE.md`).
 
 ## Étape 2 : audit automatique (obligatoire)
 
@@ -42,37 +48,31 @@ git diff HEAD~5 --stat
 
 Un `.md` ne se modifie **que si son contenu est devenu obsolète**. Sinon le laisser tel quel — ne pas réécrire pour réécrire.
 
-## Étape 4 : mettre à jour chaque fichier selon son rôle
+## Étape 4 : chaque information dans son fichier
 
-### README.md
-- **À quoi ça sert, en premier** (langage clair, sans jargon) : ce que fait le projet en une phrase, pour qui, la logique qui le gouverne (ce qui le déclenche, ce qu'il décide, pourquoi), les paramètres clés avec leur **valeur exacte actuelle** (lue dans le code, pas de mémoire)
-- **Partie technique ensuite** : stack, lancement en local (commandes exactes), ports, variables d'environnement, structure des dossiers principaux, déploiement
-- Section « Pièges connus » si un piège majeur a été découvert
-- Le créer s'il n'existe pas
+Pour chaque fait qui a bougé (étape 3), trouver **le** fichier qui porte son
+sujet et l'y écrire une fois ; ailleurs, un renvoi, pas une copie. Les rôles de
+`CLAUDE.md`, `.claude/rules/`, `JOURNAL.md` et `CONTEXT.md` sont dans la règle.
+Les autres fichiers du jeu :
 
-### CLAUDE.md
-- Description courte de la stratégie
-- Comment lancer en local
-- Ports, variables d'environnement
-- Pièges connus, décisions d'architecture
-- Le créer s'il n'existe pas
+- `STRATEGY.md` (bot ou service) : la logique de décision, les paramètres et
+  leur **valeur actuelle vérifiée dans le code**.
+- `DEPLOY.md` (bot ou service) : déploiement, service, variables attendues —
+  jamais leur valeur.
+- `analyses/` (bot ou service) : une analyse chiffrée par fichier daté.
+- `SPEC.md` (app) : ce que l'app doit faire. `ROADMAP.md` : l'état, en tête.
+- `DECISIONS.md` (app) : une décision, sa date, son motif — ajoutée à la fin,
+  jamais réécrite.
+- `README.md` : pour quelqu'un d'autre que l'auteur — à quoi sert le projet en
+  langage clair d'abord, puis lancement.
 
-### MEMORY.md
-- Nouveaux pièges découverts → fiche dédiée
-- Décisions d'architecture récentes
-- Bugs importants + cause racine
-- Le créer s'il n'existe pas
+Un fichier ne se modifie **que si son contenu est devenu faux ou incomplet**.
 
-### strategy-spec.md (si présent)
-- Logique de décision si elle a évolué
-- Paramètres clés et **valeurs actuelles vérifiées dans le code**
-
-### CHANGELOG.md (si présent)
-- Ajouter les changements non encore consignés
-- Ne jamais réécrire les entrées historiques
-
-### Tous les autres .md
-Même critère : modifier uniquement si obsolète.
+**Projet existant qui s'écarte du jeu** (`MEMORY.md`, `strategy-spec.md`,
+`CHANGELOG.md`, stratégie dans le README…) : écrire dans le fichier qui porte
+**déjà** le sujet — en créer un du jeu à côté ferait une deuxième copie.
+Signaler l'écart au résumé, sans restructurer : le rangement se fait projet par
+projet, à la demande de l'utilisateur.
 
 ## Étape 5 : règles de rédaction
 
@@ -95,6 +95,6 @@ Un seul commit regroupant toutes les mises à jour de documentation.
 ## Étape 7 : résumé
 
 Rendre compte en trois points :
-1. Quels `.md` ont été modifiés et pourquoi
-2. Quels `.md` ont été vérifiés mais laissés tels quels
+1. Quels fichiers ont reçu quoi, et pourquoi celui-là
+2. Les écarts du projet à la règle, signalés et non corrigés
 3. Ce que l'audit a détecté et corrigé (liens cassés, mentions mortes, dates)

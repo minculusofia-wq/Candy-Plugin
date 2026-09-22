@@ -76,9 +76,11 @@ if [[ -f "$CONSEIL" ]]; then
     echo
     echo "⚠️ DEUX reglages, pas trois : le mode (plan/edit/auto) et le curseur"
     echo "   d'effort, dont ultracode est la DERNIERE position — pas un interrupteur"
-    echo "   a part. Les deux se fixent AVANT le premier message, jamais en suite"
-    echo "   d'etapes. Si le reglage de cette conversation ne correspond pas au"
-    echo "   conseil, le DIRE en une ligne et continuer."
+    echo "   a part. Les deux se fixent AVANT le premier message — c'est la qu'ils"
+    echo "   ne coutent rien — et jamais en suite d'etapes. Si le curseur de cette"
+    echo "   conversation ne correspond pas au conseil, le DIRE en une ligne avec la"
+    echo "   commande a taper (/effort <cran>) : a l'ouverture, le changement est"
+    echo "   presque gratuit ; plus tard, il fait relire la conversation sans cache."
     echo
 fi
 

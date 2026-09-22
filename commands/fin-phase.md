@@ -124,17 +124,30 @@ Lister explicitement, et n'en cocher aucun sans réponse de l'utilisateur :
 
 ## 6. Les documents
 
-Ce que la phase a produit doit être écrit **avant** le commit, pas après :
+Ce que la phase a produit s'écrit **avant** le commit, pas après, en appliquant
+`rules/une-info-un-fichier.md` : chaque fait une seule fois, dans le fichier qui
+porte son sujet.
 
-- **Décisions prises pendant la phase** → `votre-app/DECISIONS.md` (ou le journal
-  de décisions du projet).
-- **Pièges découverts** → section « Pièges connus » de `CLAUDE.md`, numérotés à la
-  suite. Un piège trouvé et non écrit sera retrouvé deux fois.
+| Ce que la phase a produit | Où ça va |
+|---|---|
+| Décision prise | `votre-app/DECISIONS.md`, ou le journal de décisions du projet |
+| Piège découvert | une ligne au sommaire des pièges de `CLAUDE.md`, numérotée à la suite, qui renvoie au détail. Un piège trouvé et non écrit sera retrouvé deux fois |
+| Détail de ce piège | `.claude/rules/<sujet>.md` avec `paths:` s'il est lié à des fichiers, sinon le journal |
+| Récit daté — post-mortem, ce qui a cassé et pourquoi, mise en production | le journal du projet, ajouté à la fin — **jamais `CLAUDE.md`**, chargé à chaque session |
+| Ce que l'app doit faire, s'il a changé | la SPEC |
+| Mot nouveau du métier | `CONTEXT.md`, si le projet en a un |
+
 - **Carnet de bord**, **état du projet**, **changelog** → mis à jour dans le même
   mouvement. Le garde-fou au commit refuse un changement d'état de phase dans
   `ROADMAP.md` si ses documents compagnons ne bougent pas avec.
 - L'entête « Dernière mise à jour » de chaque `.md` touché porte la date du jour —
   le garde-fou au commit le refuse sinon.
+
+**Projet existant qui s'écarte du jeu** : écrire dans le fichier qui porte déjà
+le sujet, ne pas en créer un du jeu à côté. Signaler l'écart dans le verdict —
+dont un `CLAUDE.md` au-delà de 200 lignes (`wc -l CLAUDE.md`) — sans
+restructurer en fin de phase : le rangement se fait projet par projet, à la
+demande de l'utilisateur.
 
 Puis relancer le contrôle de cohérence du projet et montrer son verdict.
 
@@ -183,11 +196,12 @@ demande :
 > « Phase X close. Ouvre une conversation neuve, en mode plan, pour la phase Y —
 >   ne compacte pas celle-ci. Effort conseillé : `<cran>`, parce que <motif>. »
 
-**Le cran d'effort de la phase suivante se conseille ICI, pas là-bas.** Le
-niveau d'effort est fixé avant que Claude reçoive le premier message : dans la
-conversation neuve, il est trop tard pour le conseiller. C'est au moment de
-fermer la phase précédente que la roadmap est ouverte et que le contenu de la
-suivante est connu — le conseil ne coûte alors rien.
+**Le cran d'effort de la phase suivante se conseille ICI, pas là-bas.** C'est au
+moment de fermer la phase précédente que la roadmap est ouverte et que le contenu
+de la suivante est connu — le conseil ne coûte alors rien. L'utilisateur règle le
+curseur avant son premier message, là où le régler est gratuit ; s'il l'oublie,
+`/effort <cran>` le corrige dans la conversation neuve, tôt de préférence :
+chaque changement ultérieur fait relire toute la conversation sans cache.
 
 Lire la section `### Phase Y` de `ROADMAP.md` et appliquer la grille de
 la règle « choix du modèle » :
@@ -220,7 +234,8 @@ phase 12 — « mode plan, effort `xhigh`, ultracode oui » — décrivait une
 combinaison **qui n'existe pas**, et l'utilisateur a dû poser la question une seconde
 fois en deux phases.
 
-**Deux réglages, tous deux fixés AVANT le premier message :**
+**Deux réglages, à fixer tous deux AVANT le premier message** (`/effort` peut
+encore changer le curseur ensuite, au prix d'une relecture sans cache) **:**
 
 | Réglage | Ses positions |
 |---|---|
