@@ -37,7 +37,7 @@ bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-md-audit.sh "$CLAUDE_PROJECT_DIR"
 
 Le script vérifie 4 choses :
 1. **Liens markdown cassés** (vers fichiers/dossiers supprimés) — ✗ rouge = à corriger systématiquement
-2. **Mentions de fichiers/dossiers supprimés** dans les 50 derniers commits — ✗ rouge
+2. **Mentions de fichiers/dossiers supprimés** dans les 50 derniers commits — ✗ rouge (hors journaux, décisions et `analyses/`, qui racontent le passé)
 3. **Dates "Dernière mise à jour" obsolètes** sur fichiers récemment commités — ⚠ jaune
 4. **Statuts contradictoires** (« à créer », « à trancher ») sur des éléments existants — ⚠ jaune
 
@@ -64,11 +64,16 @@ tourne :
 Un fichier ne se modifie que si la session a rendu son contenu faux ou
 incomplet.
 
-**Projet existant qui s'écarte du jeu** (`MEMORY.md`, `strategy-spec.md`,
-stratégie dans le README, journal sous un autre nom…) : écrire dans le fichier
-qui porte **déjà** le sujet — en créer un du jeu à côté ferait une deuxième
-copie. Signaler l'écart au résumé, sans restructurer : le rangement se fait
-projet par projet, à la demande de l'utilisateur.
+**Le jeu de documents** : lancer `python3 ${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh "$PWD"` et reporter sa sortie au résumé.
+
+**Projet existant qui s'écarte du jeu** (`MEMORY.md`, skill projet, stratégie
+dans le README… — une variante de nom comme `strategy-spec.md` n'est pas un
+écart, le contrôle l'accepte) : écrire dans le fichier qui porte **déjà** le
+sujet — en créer un du jeu à côté ferait une deuxième copie. Signaler l'écart au
+résumé, sans restructurer : le rangement se fait projet par projet, à la demande
+de l'utilisateur — **sauf** pour un projet qui a une roadmap : avant sa phase
+suivante, l'alignement est une condition d'entrée, à faire en tête de la
+conversation suivante sans attendre (`une-info-un-fichier.md`, « Exception »).
 
 ## 2. Commit unique + push
 Un SEUL commit final regroupant code (si debug fait) + la documentation mise à jour.
@@ -81,6 +86,6 @@ Un SEUL commit final regroupant code (si debug fait) + la documentation mise à 
 ## 3. Résumé
 - Debug fait ou non (et résultat si oui)
 - Quels fichiers de documentation ont reçu quoi, et pourquoi celui-là
-- Les écarts du projet à la règle, signalés et non corrigés — dont un
-  `CLAUDE.md` au-delà de 200 lignes (`wc -l CLAUDE.md`)
+- Les écarts du projet à la règle, signalés et non corrigés — la sortie du
+  contrôle du jeu de documents
 - État final du projet

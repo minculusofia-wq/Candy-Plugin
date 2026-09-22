@@ -52,7 +52,7 @@ Elles fonctionnent séparément — prenez-en une, pas les neuf.
 | **9 règles** | vérifier avant d'affirmer · honnêteté brutale · discipline de code · porte de phase · choix du modèle · réflexes de travail · style de communication · routage des commandes · une information, un seul fichier |
 | **6 commandes** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
 | **2 agents** | `relecteur-securite` · `relecteur-de-phase` (contexte neuf, ne consomment pas la conversation) |
-| **10 hooks + 4 scripts** | rappel d'ouverture de phase, rappel des tâches en attente sur un projet, alerte quand un CLAUDE.md dépasse 200 lignes, garde avant écriture, protection des secrets, contrôle avant push, relecture de la réponse en fin de tour, contrôle du setup lui-même |
+| **10 hooks + 6 scripts** | rappel d'ouverture de phase, rappel des tâches en attente sur un projet, contrôle du jeu de documents à chaque ouverture (fichiers manquants, hors du jeu, CLAUDE.md trop long), garde avant écriture, protection des secrets, contrôle avant push, relecture de la réponse en fin de tour, contrôle du setup lui-même |
 
 ### La pièce la plus utile : `hooks/verifier-projet.sh`
 
@@ -93,7 +93,7 @@ grande partie ne dépend ni de l'un ni de l'autre.
 | **Règles** : vérifier avant d'affirmer · honnêteté brutale · discipline de code · réflexes de travail · choix du modèle · routage des commandes · une information, un seul fichier | La section « stratégies de bots » de `brutal-honesty.md` | `porte-de-phase.md` |
 | **Commandes** : `/verifier` · `/maj-docs` · `/maintenance` | `/debug` (mode simulation, jamais sur le serveur) · `/fin-session` | `/fin-phase` |
 | **Agents** : `relecteur-securite` | Sa section « fonds et transactions » | `relecteur-de-phase` |
-| **Hooks** : contrôle du projet, contrôle du setup, protection des secrets, garde avant écriture, relecture de la réponse, audit des `.md`, alerte CLAUDE.md trop long, rappel des tâches en attente | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
+| **Hooks** : contrôle du projet, contrôle du setup, protection des secrets, garde avant écriture, relecture de la réponse, audit des `.md`, contrôle du jeu de documents, rappel des tâches en attente | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
 
 **En clair :** si vous ne faites ni bot ni app à phases, prenez la première
 colonne — c'est déjà l'essentiel. Rien n'oblige à tout installer : les règles se
@@ -161,15 +161,24 @@ suivante, et le hook `ouverture-de-phase.sh` la rappelle au démarrage de la
 conversation d'après. Une phase ne se ferme pas sans vous, et la suivante ne
 s'ouvre pas sur un état faux.
 
+Le hook `jeu-de-documents.sh` vérifie à chaque ouverture, dans tout projet, que
+les documents attendus par [une-info-un-fichier.md](rules/une-info-un-fichier.md)
+sont là — il lit le tableau de la règle, il n'en garde pas de copie. Un fichier
+manquant devient un point rouge de la porte d'entrée, et la porte s'applique dès
+l'écriture d'un plan de phases : un plan dont la première phase ne peut pas
+s'ouvrir est un plan faux.
+
 ## Tests
 
 ```
 make test
 ```
 
-Huit groupes, 137 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Chacun a
-été vérifié en remettant le défaut d'origine — un test qui passe toujours ne
-vaut rien. Voir [tests/README.md](tests/README.md).
+Neuf groupes, 160 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Ceux
+des huit premiers groupes ont été vérifiés en remettant le défaut d'origine — un
+test qui passe toujours ne vaut rien. Le neuvième rejoue l'incident qui a fait
+naître le contrôle du jeu de documents, et les pannes qu'il doit signaler au lieu
+de se taire. Voir [tests/README.md](tests/README.md).
 
 ## Prérequis
 

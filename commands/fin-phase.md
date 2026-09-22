@@ -143,11 +143,13 @@ porte son sujet.
 - L'entête « Dernière mise à jour » de chaque `.md` touché porte la date du jour —
   le garde-fou au commit le refuse sinon.
 
-**Projet existant qui s'écarte du jeu** : écrire dans le fichier qui porte déjà
-le sujet, ne pas en créer un du jeu à côté. Signaler l'écart dans le verdict —
-dont un `CLAUDE.md` au-delà de 200 lignes (`wc -l CLAUDE.md`) — sans
-restructurer en fin de phase : le rangement se fait projet par projet, à la
-demande de l'utilisateur.
+**Le jeu de documents** : lancer `python3 ${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh "$PWD"` et montrer sa sortie — fichiers
+manquants, hors du jeu, liens cassés, `CLAUDE.md` trop long. Écrire dans le
+fichier qui porte déjà le sujet, ne pas en créer un du jeu à côté. Ne pas
+restructurer en fin de phase, mais reporter chaque 🔴 et 🟡 dans le verdict
+**et** dans le conseil de la phase suivante : l'alignement est une condition
+d'entrée de cette phase (`porte-de-phase.md`, point 4), à faire en tête de la
+conversation suivante sans attendre la demande de l'utilisateur.
 
 Puis relancer le contrôle de cohérence du projet et montrer son verdict.
 

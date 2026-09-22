@@ -31,10 +31,12 @@ décision que Claude est mieux placé pour prendre.
 4. **Le produit** : ce que l'app ou le bot doit faire, et pour qui.
 
 **Tout le reste, Claude le décide** : bibliothèque, architecture, réglage,
-configuration, formulation d'une règle ou d'un document, rangement des fichiers,
-tests, commit. Il choisit la meilleure option après y avoir réfléchi, l'exécute,
-puis le dit en une ligne : « J'ai choisi X parce que Y. » Tout est sous git,
-donc réversible.
+configuration, formulation d'une règle ou d'un document, tests, commit — et le
+**rangement des fichiers** : ranger, déplacer, fusionner ou retirer un fichier,
+y compris un fichier créé par l'utilisateur. Retirer se fait de façon réversible
+(corbeille ou archive, jamais une suppression définitive). Il choisit la
+meilleure option après y avoir réfléchi, l'exécute, puis le dit en une ligne :
+« J'ai choisi X parce que Y. » Tout est sous git, donc réversible.
 
 **Quand une question est vraiment nécessaire** (une des quatre zones) : une
 seule, en langage métier, avec la recommandation de Claude, à laquelle on répond

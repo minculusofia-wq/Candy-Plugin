@@ -18,7 +18,8 @@
 # suivante, pas a la fin de la precedente.
 #
 # Ce qu'il fait, et rien de plus :
-#   - trouve la prochaine phase non livree dans ROADMAP.md ;
+#   - trouve la prochaine phase non livree dans la roadmap ;
+#   - affiche en point rouge ce que jeu-de-documents.sh trouve de rouge ;
 #   - relit le conseil ecrit par /fin-phase, s'il existe ;
 #   - verifie mecaniquement les deux points de la porte d'entree qu'une
 #     commande peut verifier seule : depot propre, depot pousse.
@@ -27,30 +28,85 @@
 # constats a la source reste le travail de Claude. Il empeche seulement de
 # demarrer sans savoir qu'elle existe.
 #
-# Silencieux hors d'un projet a phases — aucun ROADMAP.md, aucune sortie.
+# Silencieux hors d'un projet a phases — aucune roadmap, aucune sortie.
+#
+# ⚠️ Ce silence a deja laisse passer un plan de phases ecrit AVANT que la
+# roadmap existe, livre sur un jeu de documents incomplet et faux. Le jeu de
+# documents est donc controle dans TOUS les projets, roadmap ou pas, par
+# jeu-de-documents.sh (SessionStart). Ici, ses rouges s'affichent en plus comme
+# points rouges de la porte d'entree.
 #
 
 set -u
 
+# Le dossier de ce hook, lu AVANT le cd vers le projet : apres, un $0 relatif ne
+# mene plus nulle part (vu par tests/06-paquet.sh).
+ICI="$(cd "$(dirname "$0")" && pwd)"
 PROJET="${CLAUDE_PROJECT_DIR:-$PWD}"
 cd "$PROJET" 2>/dev/null || exit 0
 
 # Consomme l'entree JSON du hook sans la lire : on ne depend d'aucun champ.
 cat >/dev/null 2>&1 || true
 
-ROADMAP="$PROJET/ROADMAP.md"
-[[ -f "$ROADMAP" ]] || exit 0
+# La liste des chemins possibles vit dans jeu-de-documents.sh, qui en a aussi
+# besoin pour reconnaitre une app par phases : une seule liste.
+JEU="$ICI/jeu-de-documents.sh"
+ROADMAP=$(python3 "$JEU" --roadmap "$PROJET" 2>/dev/null)
+CODE=$?
+if [[ "$CODE" != 0 ]]; then
+    # --roadmap sort en 0 avec ou sans roadmap : tout autre code est une panne.
+    # Muet ici serait le pire : on croirait qu'il n'y a pas de roadmap — et on
+    # perdrait aussi les controles « propre / pousse » qui suivent.
+    echo "⚠️ ouverture-de-phase : $JEU a echoue (code $CODE) — roadmap non cherchee,"
+    echo "   porte d'entree NON controlee. La faire a la main (porte-de-phase.md)."
+    exit 0
+fi
+[[ -n "$ROADMAP" ]] || exit 0
+ROADMAP_REL="${ROADMAP#$PROJET/}"
+
+# --- Le point 3, pour sa partie mecanique : le jeu de documents --------------
+# Calcule AVANT de chercher la prochaine phase : une roadmap au format non
+# reconnu (« ## Phase N ») faisait sortir le hook avant ce bloc, et le rouge
+# n'arrivait jamais a la porte.
+bloc_documents() {
+    local SORTIE CODE_JEU
+    SORTIE=$(python3 "$JEU" --rouges "$PROJET" 2>&1)
+    CODE_JEU=$?
+    case $CODE_JEU in
+        0) return 1 ;;
+        1)  echo "🔴 POINT ROUGE — jeu de documents (point 3) :"
+            echo "$SORTIE" | sed 's/^/     /'
+            echo "   Le corriger dans cette conversation, avant tout plan et toute ligne"
+            echo "   de code (une-info-un-fichier.md)." ;;
+        *)  echo "⚠️ Controle du jeu de documents hors service (code $CODE_JEU) : $SORTIE"
+            echo "   Le point 3 est donc entierement a verifier a la main." ;;
+    esac
+    echo
+    return 0
+}
+BLOC_DOCS=$(bloc_documents)
 
 # --- La prochaine phase : la premiere ligne « ### Phase N » sans 🟢 ----------
 #
-# Le marqueur fait foi dans ROADMAP.md — c'est la meme source que le controle
+# Le marqueur fait foi dans la roadmap — c'est la meme source que le controle
 # `etat-des-phases` du garde-fou. On ne devine pas depuis un autre document.
 PROCHAINE=$(grep -E '^### Phase [0-9]+' "$ROADMAP" 2>/dev/null \
     | grep -v '🟢' \
     | head -1 \
     | sed -E 's/^### (Phase [0-9]+)[^0-9].*/\1/')
 
-[[ -n "$PROCHAINE" ]] || exit 0
+if [[ -z "$PROCHAINE" ]]; then
+    # Aucune phase ouverte reconnue — toutes livrees, ou format inconnu. Le
+    # rappel de porte n'a pas lieu d'etre, mais un rouge du jeu de documents
+    # doit quand meme se voir : un plan de phases peut etre en train de s'ecrire.
+    if [[ -n "$BLOC_DOCS" ]]; then
+        echo "=== PORTE D'ENTREE — $ROADMAP_REL (aucune phase ouverte reconnue) ==="
+        echo
+        echo "$BLOC_DOCS"
+        echo "=== FIN PORTE D'ENTREE ==="
+    fi
+    exit 0
+fi
 
 NUMERO=$(echo "$PROCHAINE" | grep -oE '[0-9]+')
 
@@ -66,6 +122,10 @@ echo "     moitie faux en allant lire le fichier cite ;"
 echo "  5. ecrire le plan et attendre la validation de l'utilisateur."
 echo
 echo "Un point rouge = la phase ne s'ouvre pas. On le corrige d'abord."
+echo
+[[ -n "$BLOC_DOCS" ]] && { echo "$BLOC_DOCS"; echo; }
+echo "Le reste du point 3 — les documents disent-ils la MEME chose ? — aucun"
+echo "script ne le verifie. « Tu peux demarrer » ne se dit qu'apres l'avoir fait."
 echo
 
 # --- Le conseil de reglage, ecrit par /fin-phase a la cloture precedente -----
@@ -115,7 +175,7 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
     fi
 fi
 
-echo "Roadmap : ROADMAP.md, section « ### $PROCHAINE » (numero $NUMERO)."
+echo "Roadmap : $ROADMAP_REL, section « ### $PROCHAINE » (numero $NUMERO)."
 echo "=== FIN PORTE D'ENTREE ==="
 
 exit 0

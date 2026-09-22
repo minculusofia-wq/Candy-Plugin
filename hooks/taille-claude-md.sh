@@ -1,6 +1,8 @@
 #!/bin/bash
 #
-# taille-claude-md.sh (SessionStart : startup, resume, clear)
+# taille-claude-md.sh — appele par jeu-de-documents.sh, qui tourne au
+# SessionStart (startup, resume, clear) et fond ce message dans son bilan :
+# deux messages d'ouverture sur les memes documents, c'etait un de trop.
 #
 # Une ligne d'avertissement quand le CLAUDE.md du projet depasse 200 lignes.
 # Ne bloque rien, ne corrige rien.

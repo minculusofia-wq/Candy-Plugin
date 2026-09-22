@@ -28,6 +28,8 @@ Pour tout travail qui touche plusieurs fichiers, ou dont l'approche n'est pas é
 
 Sauter cette étape quand le changement tient en une phrase (corriger une faute, ajouter une ligne de log, renommer quelque chose).
 
+**Avant d'écrire un plan**, auditer le jeu de `.md` : `python3 ${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh "$PWD"`, puis relire les documents contre le code. Corriger chaque écart **dans la même conversation, avant de livrer le plan** — jamais en faire une tâche du plan. Un plan de phases suit en plus `porte-de-phase.md` : sa première phase doit pouvoir s'ouvrir le jour où il est livré.
+
 Pour une grosse fonctionnalité : interroger l'utilisateur d'abord avec l'outil de questions — sur le métier seulement : ce que la fonctionnalité doit faire, les cas limites vus côté utilisateur, les arbitrages de stratégie ; l'implémentation, Claude la tranche — jusqu'à ce que tout soit couvert, écrire la spec dans un fichier, puis l'exécuter dans une conversation neuve.
 
 ## 4. Repartir propre après deux échecs

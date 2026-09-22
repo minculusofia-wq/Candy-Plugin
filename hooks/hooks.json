@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/taille-claude-md.sh\"'"
+            "command": "bash -c 'cat | python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh\" --hook || echo \"{\\\"systemMessage\\\": \\\"⚠️ jeu-de-documents.sh a planté : contrôle du jeu de documents HORS SERVICE\\\"}\"'"
           },
           {
             "type": "command",

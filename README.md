@@ -55,7 +55,7 @@ They work on their own. Take one, not all nine.
 | **9 rules** | verify before asserting · brutal honesty · code discipline · phase gate · model choice · working reflexes · communication style · command routing · one piece of information, one file |
 | **6 commands** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
 | **2 agents** | `relecteur-securite` · `relecteur-de-phase` — security and phase reviewers running in a fresh context, so they don't eat your conversation |
-| **10 hooks + 4 scripts** | phase-opening reminder, reminder of the task waiting on a project, warning when a CLAUDE.md goes over 200 lines, pre-write guard, secret protection, pre-push check, answer review at the end of each turn, a check on the setup itself |
+| **10 hooks + 6 scripts** | phase-opening reminder, reminder of the task waiting on a project, document-set check at every session start (missing files, files outside the set, oversized CLAUDE.md), pre-write guard, secret protection, pre-push check, answer review at the end of each turn, a check on the setup itself |
 
 ### The most useful piece: `hooks/verifier-projet.sh`
 
@@ -95,7 +95,7 @@ server, and an **iOS app** built phase by phase. Most of it depends on neither.
 | **Rules**: verify before asserting · brutal honesty · code discipline · working reflexes · model choice · command routing · one piece of information, one file | The "bot strategies" section of `brutal-honesty.md` | `porte-de-phase.md` |
 | **Commands**: `/verifier` · `/maj-docs` · `/maintenance` | `/debug` (dry-run mode, never on the server) · `/fin-session` | `/fin-phase` |
 | **Agents**: `relecteur-securite` | Its "funds and transactions" section | `relecteur-de-phase` |
-| **Hooks**: project check, secret protection, pre-write guard, answer review, `.md` audit, oversized CLAUDE.md warning, waiting-task reminder | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
+| **Hooks**: project check, secret protection, pre-write guard, answer review, `.md` audit, document-set check, waiting-task reminder | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
 
 **In short:** if you build neither bots nor phased apps, take the first column —
 that's already the heart of it. Nothing forces you to install everything: rules
@@ -160,14 +160,22 @@ what `/fin-phase` exists to prevent, and why it refuses to conclude on its own.
 one, and the `ouverture-de-phase.sh` hook repeats it when the next conversation
 starts. A phase never closes without you, and the next never opens on a false state.
 
+The `jeu-de-documents.sh` hook checks at every session start, in every project,
+that the documents expected by [une-info-un-fichier.md](rules/une-info-un-fichier.md)
+are there — it reads the rule's table, it keeps no copy of it. A missing file
+becomes a red point of the entry gate, and the gate applies as soon as a phase
+plan is written: a plan whose first phase cannot open is a wrong plan.
+
 ## Tests
 
 ```
 make test
 ```
 
-Eight groups, 137 cases: *send this to that hook, expect that verdict*. Each one
-was checked by putting the original defect back — a test that always passes is
+Nine groups, 160 cases: *send this to that hook, expect that verdict*. Those in
+the first eight groups were checked by putting the original defect back; the
+ninth replays the incident that gave birth to the document-set check, and the
+failures it must report instead of staying silent. A test that always passes is
 worth nothing. See [tests/README.md](tests/README.md).
 
 ## Requirements

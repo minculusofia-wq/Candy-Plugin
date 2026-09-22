@@ -16,14 +16,42 @@ le recopier. Deux copies finissent toujours par se contredire.
 
 ## Le jeu de fichiers par type de projet
 
-| Type | Fichiers |
-|---|---|
-| Bot ou service qui tourne | CLAUDE, STRATEGY, JOURNAL, DEPLOY, dossier `analyses/` |
-| App par phases | CLAUDE, SPEC, ROADMAP (état en tête), JOURNAL ou DECISIONS, CONTEXT si jargon, README, guides ciblés si le sujet existe |
-| Petit projet | CLAUDE (+ README si quelqu'un d'autre s'en sert) |
+Ce tableau est **la seule liste** : `hooks/jeu-de-documents.sh` le lit tel quel
+à chaque ouverture de session. Garder sa forme — une ligne par type, noms en
+MAJUSCULES séparés par des virgules, `X ou Y` pour une alternative, dossier entre
+backticks terminé par `/`.
+
+| Type | Obligatoires | Facultatifs |
+|---|---|---|
+| Bot ou service qui tourne | CLAUDE, STRATEGY, JOURNAL, DEPLOY | README, CONTEXT, `analyses/` |
+| App par phases | CLAUDE, SPEC, ROADMAP, JOURNAL ou DECISIONS, README | CONTEXT, `docs/` |
+| Petit projet | CLAUDE | README, CONTEXT |
+
+- Un bot est reconnu par `hooks/est-un-bot.sh` : la liste
+  `~/.claude/projets-bots.txt` d'abord, puis le nom du dossier et les
+  bibliothèques de trading. Une app par phases a une roadmap (`ROADMAP.md`,
+  `docs/ROADMAP.md`, `docs/ROADMAP-PROD.md`). Un bot qui a une roadmap cumule
+  son jeu et la ROADMAP.
+- Un nom compte avec ses variantes (`STRATEGY-v2.md`, `docs/ROADMAP-PROD.md`)
+  à la racine ou dans `docs/` ; sous le nom exact dans un autre sous-dossier
+  (`app/DECISIONS.md`) ; un dossier du même nom compte aussi (`specs/` pour
+  SPEC). Sauf CLAUDE et README : à la racine seulement (ou `.claude/CLAUDE.md`)
+  — un `frontend/CLAUDE.md` généré par un framework n'est pas celui du projet.
+- ROADMAP porte l'état en tête. CONTEXT seulement si le projet a son jargon ;
+  README d'un petit projet si quelqu'un d'autre s'en sert ; `docs/` d'une app
+  pour les guides ciblés.
+- `analyses/` devient obligatoire dès qu'une analyse existe dans le projet.
+
+Le contrôle : `python3 ${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh "$PWD"` — 🔴 un fichier obligatoire manque ou un lien est cassé,
+🟡 un fichier est hors du jeu (`MEMORY.md`, skill projet qui redit le contexte
+du projet, `.md` inconnu à la racine).
 
 Une information nouvelle va dans le fichier du jeu qui porte déjà son sujet.
 Un document hors du jeu ne se crée pas sans en donner la raison à l'utilisateur.
 
 Portée : ce qui s'écrit à partir de maintenant. Un projet existant qui s'en
 écarte se signale ; il se range projet par projet, à la demande de l'utilisateur.
+**Exception** : avant l'écriture d'un plan de phases ou l'ouverture d'une phase,
+l'alignement est une condition d'entrée, à faire sans attendre la demande de
+l'utilisateur — dans la même conversation, avant de livrer le plan (voir
+`porte-de-phase.md`).

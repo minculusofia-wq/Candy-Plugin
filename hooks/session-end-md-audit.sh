@@ -151,9 +151,12 @@ if git -C "$PROJECT_DIR" rev-parse --git-dir > /dev/null 2>&1; then
             [[ -z "$deleted" ]] && continue
             # Verifier si le chemin n'existe vraiment plus
             [[ -e "$PROJECT_DIR/$deleted" ]] && continue
-            # Chercher dans les .md (sauf CHANGELOG, archives, sections historiques)
+            # Chercher dans les .md (sauf CHANGELOG, archives, sections historiques).
+            # Journaux, decisions et analyses racontent le passe : y nommer un
+            # fichier supprime est normal (« MEMORY.md supprime » dans un JOURNAL
+            # sortait en rouge).
             HITS=$(echo "$MD_FILES" | xargs grep -lF "$deleted" 2>/dev/null | \
-                grep -v "CHANGELOG" | grep -v "archives" || true)
+                grep -viE "CHANGELOG|archives|JOURNAL|DECISIONS|/analyses/" || true)
             if [[ -n "$HITS" ]]; then
                 while IFS= read -r hit; do
                     [[ -z "$hit" ]] && continue
