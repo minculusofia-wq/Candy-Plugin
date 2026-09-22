@@ -67,6 +67,24 @@ lint, types, build) and returns one of three verdicts:
 - `2` **there is no way to verify this project** — the most useful case, and the
   one nothing else tells you about
 
+### Per-project reminders
+
+When a task has to wait until you next open a project, write it once in
+`~/.claude/rappels-projets.txt`:
+
+```
+~/Desktop/mon-app | ranger la documentation | ~/notes/consigne.md |
+~/Desktop/mon-app | ouvrir la phase 4 | - | ROADMAP.md::^### Phase 3.*🟢
+```
+
+One line per task: the project folder, the task, where to read the details, and
+an optional condition. `file::pattern` only shows the line if that file in the
+project contains the pattern — here, not before phase 3 is marked 🟢.
+
+When you open the project, or one of its subfolders, the task shows up and
+Claude gets it along with its details. Just answer "go". Once the task is done,
+its line gets removed. Without that file, the hook stays silent.
+
 ## Which projects is this for? Bots, apps, and everything else
 
 These rules were forged on two fronts: **trading bots** running non-stop on a

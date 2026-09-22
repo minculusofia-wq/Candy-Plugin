@@ -64,6 +64,24 @@ vérifier (tests, lint, types, build) et rend trois verdicts possibles :
 - `2` **aucun moyen de vérification n'existe dans ce projet** — le cas le plus
   utile, celui que personne ne signale d'habitude
 
+### Les rappels par projet
+
+Quand une tâche doit attendre la prochaine ouverture d'un projet, écrivez-la une
+fois dans `~/.claude/rappels-projets.txt` :
+
+```
+~/Desktop/mon-app | ranger la documentation | ~/notes/consigne.md |
+~/Desktop/mon-app | ouvrir la phase 4 | - | ROADMAP.md::^### Phase 3.*🟢
+```
+
+Une ligne par tâche : le dossier du projet, la tâche, où lire le détail, et une
+condition facultative. `fichier::motif` n'affiche la ligne que si ce fichier du
+projet contient le motif — ici, pas avant que la phase 3 soit marquée 🟢.
+
+À l'ouverture du projet, ou d'un de ses sous-dossiers, la tâche s'affiche et
+Claude la reçoit avec son détail. Il suffit de répondre « go ». Une fois la
+tâche faite, sa ligne se retire. Sans ce fichier, le hook ne dit rien.
+
 ## Pour quels projets ? Bots, apps, et tout le reste
 
 Ces règles sont nées sur deux terrains : des **bots de trading** qui tournent en
