@@ -233,7 +233,7 @@ echo "  ${BOLD}TOTAL : $TOTAL_ISSUES point(s) a verifier${NC}"
 echo ""
 
 if [[ "$TOTAL_ISSUES" -gt 0 ]]; then
-    echo -e "${RED}${BOLD}Action requise :${NC} corriger chaque ligne signalee avant de finaliser la session."
+    echo -e "${RED}${BOLD}Action requise :${NC} corriger chaque ✗ rouge et verifier chaque ⚠ jaune avant de finaliser la session."
     echo "Les ⚠ jaunes sont des avertissements (a verifier au cas par cas)."
     echo "Les ✗ rouges sont des erreurs (a corriger systematiquement)."
     exit 1

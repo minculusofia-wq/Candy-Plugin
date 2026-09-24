@@ -56,6 +56,19 @@ code_hook() {
     echo $?
 }
 
+# raison_hook <chemin du hook> <json d'entree> [variables d'env...]
+# Rend 1 si le hook écrit quelque chose sur stderr, 0 sinon. Quand un hook
+# bloque (code 2), Claude Code transmet à Claude la raison lue sur stderr ; un
+# message laissé sur stdout n'arrive pas (doc hooks, « Exit code 2 »).
+raison_hook() {
+    local hook="$1" entree="$2"; shift 2
+    if [ -n "$(printf '%s' "$entree" | env "$@" bash "$hook" 2>&1 >/dev/null)" ]; then
+        echo 1
+    else
+        echo 0
+    fi
+}
+
 # entree_commande <la commande> -> le JSON qu'envoie Claude Code
 entree_commande() {
     python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]}}))' "$1"

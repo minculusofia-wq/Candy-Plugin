@@ -116,9 +116,10 @@ for evt, groupes in (reglages.get("hooks") or {}).items():
                 branches.setdefault((nom, evt), "python" in interprete)
 
 def muet(nom, evt, lance_en_python):
+    """Rend la raison pour laquelle personne n'entend ce hook, ou None."""
     chemin = os.path.join(claude, "hooks", nom)
     if not os.path.isfile(chemin):
-        return False
+        return None
     lignes = open(chemin, encoding="utf-8", errors="replace").read().splitlines()
     en_py = lance_en_python or bool(lignes and "python" in lignes[0])
     code = [l for l in lignes if not l.lstrip().startswith("#")]
@@ -146,14 +147,30 @@ def muet(nom, evt, lance_en_python):
         (en_py and re.search(r"sys\.exit\(\s*2\s*\)|\breturn\s+2\b", texte))
     erreur = re.search(r"(^|[^\w$])exit\s+[13-9]", texte) or \
         (en_py and re.search(r"sys\.exit\(\s*[13-9]", texte))
-    entendu = bloque or erreur or JSON.search(texte) or (evt in CONTEXTE and stdout)
-    return (stdout or stderr) and not entendu
+    json_ = JSON.search(texte)
+    entendu = bloque or erreur or json_ or (evt in CONTEXTE and stdout)
+    if (stdout or stderr) and not entendu:
+        return ("ses messages sortent avec le code 0 — seul le journal de débogage "
+                "les reçoit, ni Claude ni l'utilisateur ne les voient")
+    # Doc hooks : en code 2, la raison du blocage est lue sur stderr (ou dans le
+    # JSON) ; en code 1, seule la première ligne de stderr s'affiche. Un message
+    # sur stdout n'arrive à personne.
+    if (bloque or erreur) and stdout and not stderr and not json_:
+        return ("sort en code d'erreur avec ses messages sur stdout — la raison "
+                "n'arrive ni à Claude ni à l'utilisateur (il faut stderr)")
+    # Un code 1 ne bloque rien : un hook qui parle de bloquer sans jamais sortir
+    # en code 2 laisse passer ce qu'il croit arrêter.
+    if erreur and not bloque and not json_ and \
+            re.search(r"\bbloqu|\bblock", "\n".join(lignes), re.I):
+        return ("parle de bloquer mais ne sort jamais en code 2 — le code 1 "
+                "laisse passer l'action")
+    return None
 
 n = 0
 for (nom, evt), en_python in sorted(branches.items(), key=lambda x: (x[0][1], x[0][0])):
-    if muet(nom, evt, en_python):
-        print(f"  {J}⚠{N} hooks/{nom} ({evt}) : ses messages sortent avec le code 0 — "
-              f"seul le journal de débogage les reçoit, ni Claude ni l'utilisateur ne les voient")
+    raison = muet(nom, evt, en_python)
+    if raison:
+        print(f"  {J}⚠{N} hooks/{nom} ({evt}) : {raison}")
         n += 1
 if n == 0:
     print(f"  {V}✓{N} {len(branches)} branchement(s), aucun hook ne parle dans le vide")

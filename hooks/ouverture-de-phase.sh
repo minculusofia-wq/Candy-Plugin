@@ -64,7 +64,7 @@ fi
 [[ -n "$ROADMAP" ]] || exit 0
 ROADMAP_REL="${ROADMAP#$PROJET/}"
 
-# --- Le point 3, pour sa partie mecanique : le jeu de documents --------------
+# --- Le point 4, pour sa partie mecanique : le jeu de documents --------------
 # Calcule AVANT de chercher la prochaine phase : une roadmap au format non
 # reconnu (« ## Phase N ») faisait sortir le hook avant ce bloc, et le rouge
 # n'arrivait jamais a la porte.
@@ -74,12 +74,12 @@ bloc_documents() {
     CODE_JEU=$?
     case $CODE_JEU in
         0) return 1 ;;
-        1)  echo "🔴 POINT ROUGE — jeu de documents (point 3) :"
+        1)  echo "🔴 POINT ROUGE — jeu de documents (point 4) :"
             echo "$SORTIE" | sed 's/^/     /'
             echo "   Le corriger dans cette conversation, avant tout plan et toute ligne"
             echo "   de code (une-info-un-fichier.md)." ;;
         *)  echo "⚠️ Controle du jeu de documents hors service (code $CODE_JEU) : $SORTIE"
-            echo "   Le point 3 est donc entierement a verifier a la main." ;;
+            echo "   Le point 4 est donc entierement a verifier a la main." ;;
     esac
     echo
     return 0
@@ -112,19 +112,21 @@ NUMERO=$(echo "$PROCHAINE" | grep -oE '[0-9]+')
 
 echo "=== PORTE D'ENTREE — $PROCHAINE ==="
 echo
-echo "Si cette conversation OUVRE cette phase, avant toute ligne de code :"
+echo "Si cette conversation OUVRE cette phase, avant toute ligne de code (rules/porte-de-phase.md) :"
 echo "  1. lancer le controle du projet et montrer sa sortie reelle ;"
-echo "  2. verifier que le depot est propre ET pousse ;"
-echo "  3. verifier que les documents d'etat disent tous la meme chose ;"
-echo "  4. verifier les constats assignes a cette phase A LA SOURCE — sur"
+echo "  2. verifier que le depot est propre ;"
+echo "  3. verifier qu'il est pousse ;"
+echo "  4. verifier que le jeu de documents est complet et que les documents"
+echo "     d'etat disent tous la meme chose ;"
+echo "  5. verifier les constats assignes a cette phase A LA SOURCE — sur"
 echo "     un projet réel, trois constats d'audit sur quatre se sont reveles faux ou a"
-echo "     moitie faux en allant lire le fichier cite ;"
-echo "  5. ecrire le plan et attendre la validation de l'utilisateur."
+echo "     moitie faux en allant lire le fichier cite."
+echo "Puis ecrire le plan et attendre la validation de l'utilisateur."
 echo
 echo "Un point rouge = la phase ne s'ouvre pas. On le corrige d'abord."
 echo
 [[ -n "$BLOC_DOCS" ]] && { echo "$BLOC_DOCS"; echo; }
-echo "Le reste du point 3 — les documents disent-ils la MEME chose ? — aucun"
+echo "Le reste du point 4 — les documents disent-ils la MEME chose ? — aucun"
 echo "script ne le verifie. « Tu peux demarrer » ne se dit qu'apres l'avoir fait."
 echo
 
@@ -136,11 +138,12 @@ if [[ -f "$CONSEIL" ]]; then
     echo
     echo "⚠️ DEUX reglages, pas trois : le mode (plan/edit/auto) et le curseur"
     echo "   d'effort, dont ultracode est la DERNIERE position — pas un interrupteur"
-    echo "   a part. Les deux se fixent AVANT le premier message — c'est la qu'ils"
-    echo "   ne coutent rien — et jamais en suite d'etapes. Si le curseur de cette"
+    echo "   a part. Les deux se fixent AVANT le premier message — c'est le plus"
+    echo "   simple — et jamais en suite d'etapes. Si le curseur de cette"
     echo "   conversation ne correspond pas au conseil, le DIRE en une ligne avec la"
-    echo "   commande a taper (/effort <cran>) : a l'ouverture, le changement est"
-    echo "   presque gratuit ; plus tard, il fait relire la conversation sans cache."
+    echo "   commande a taper (/effort <cran>) : sur Opus 5.5 et Fable 5.1, le"
+    echo "   changement garde le cache ; sur un autre modele, plus tard, il fait"
+    echo "   relire la conversation sans cache."
     echo
 fi
 
@@ -168,8 +171,8 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
         AVANCE=$(git rev-list --count "origin/$BRANCHE..HEAD" 2>/dev/null || echo 0)
         if [[ "$AVANCE" != "0" ]]; then
             echo "⚠️ $AVANCE COMMIT(S) NON POUSSE(S) sur $BRANCHE."
-            echo "   Le controle avant commit ne peut pas le voir — c'est le seul point"
-            echo "   de la porte d'entree qui reste a la charge de Claude."
+            echo "   Le controle avant commit ne peut pas le voir : ce point (3) est"
+            echo "   a la charge de Claude."
             echo
         fi
     fi

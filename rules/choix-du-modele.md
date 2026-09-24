@@ -1,10 +1,11 @@
 # Choix du modèle et du niveau d'effort
 
-Conseiller le cran le plus pertinent **au démarrage d'une tâche**, jamais au
-milieu — changer de modèle, et sur la plupart des modèles changer d'effort, en
-cours de session vide le cache et fait re-payer tout le contexte accumulé (doc
-Claude Code, prompt-caching, « Changing effort level » ; Fable 5.1 garde son
-cache quand l'effort change, avec une clé API ou un abonnement Claude).
+Conseiller le couple modèle + cran **au démarrage d'une tâche**. Changer de
+**modèle** en cours de session vide le cache et fait re-payer tout le contexte
+accumulé. Changer de **cran d'effort**, non : sur Opus 5.5 et Fable 5.1, avec un
+abonnement Claude ou une clé d'API, le cache reste intact (doc Claude Code,
+prompt-caching, « Changing effort level »). Sur les autres modèles, changer
+d'effort vide encore le cache.
 
 ## Deux réglages, pas trois
 
@@ -21,10 +22,10 @@ cran ET ultracode dans le même conseil.
 curseur ne bouge pas quand un plan est accepté : ultracode tourne pendant le plan
 aussi, et c'est là qu'il sert le plus.
 
-Avant le premier message, c'est là qu'ils ne coûtent rien. Ils ne sont pas
-verrouillés pour autant : `/effort <cran>` change le curseur à tout moment, même
-pendant que Claude travaille, au prix d'une relecture sans cache de toute la
-conversation.
+Avant le premier message, c'est le plus simple. Ils ne sont pas verrouillés pour
+autant : `/effort <cran>` change le curseur à tout moment, même pendant que
+Claude travaille — sur Opus 5.5 et Fable 5.1, sans perdre le cache ; sur un autre
+modèle, au prix d'une relecture sans cache de toute la conversation.
 
 ## Quel cran pour quelle demande
 
@@ -45,7 +46,10 @@ d'app est longue mais pas dure :
 3. Un arbitrage d'architecture qui engage les phases suivantes
 
 **Ultracode** : Claude découpe la tâche, lance des agents en parallèle et les fait
-se contredire. Le plus cher, de loin. À laisser éteint pour les conversations, les
+se contredire. Au modèle, il envoie `xhigh` ; ce qu'il ajoute, c'est
+l'orchestration de workflows par Claude Code (doc model-config). Face à `max`, il
+échange de la profondeur contre de la largeur ; face à `xhigh`, il garde la même
+profondeur. Le plus cher, de loin. À laisser éteint pour les conversations, les
 questions, la documentation, et chaque fois que le goulot est l'appareil physique de l'utilisateur —
 dix agents ne trouvent pas un bouton mort.
 
@@ -59,8 +63,11 @@ clés/wallets/fonds réels, arbitrage d'architecture.
 **Fable 5** : session autonome très longue, problème dur donné d'un bloc, migration
 transverse. Signaler le surcoût et les 30 jours de conservation des données.
 
-**Avant toute bascule** : les agents délégués tournent déjà sur Sonnet 5 et
-n'entament pas le contexte du fil principal. C'est le premier réflexe.
+**Avant toute bascule** : les agents délégués n'entament pas le contexte du fil
+principal. C'est le premier réflexe. Mais déléguer ne fait **pas** passer sur
+Sonnet : Explore, Plan et general-purpose tournent sur le modèle de la
+conversation, tant que `CLAUDE_CODE_SUBAGENT_MODEL` n'est pas réglé (doc Claude
+Code, sub-agents).
 
 ### La bascule que personne n'a demandée : le message signalé
 
@@ -88,10 +95,24 @@ reformuler plutôt que de basculer.
 
 ## Relecture : `/code-review`
 
-`/code-review max` pour une relecture large. `/code-review ultra` existe aussi,
-en nombre d'usages limité par compte — le garder pour ce qui le mérite.
+Proposer à chaque fois **le niveau adapté à ce qui est relu**, avec la commande
+exacte, sa cible et la raison en une ligne — jamais `max` par réflexe :
 
-En complément, gratuits et sans coût de contexte : les subagents
+| Ce qui est relu | Niveau proposé |
+|---|---|
+| Le cœur de l'argent ou d'une clé, sur une cible étroite (passage d'ordre, envoi de fonds, dérivation de clé, format de coffre) | `max` sur cette cible seule |
+| Du code qui touche des fonds, des secrets ou de l'irréversible, sur quelques fichiers ou une phase entière | `xhigh`, ciblé sur les fichiers concernés ou la plage de commits |
+| Le reste, quand les relecteurs gratuits ont remonté du structurel | `high`, ciblé |
+
+**Toujours avec une cible** — une plage `<base>...<fin>` ou un dossier : tout
+étant commité, une relecture sans cible ne relit que ce qui ne l'est pas.
+`/code-review max` sur tout un diff peut buter sur la limite d'usage du compte
+avant la fin ; une relecture ciblée qui va au bout vaut mieux. `/code-review
+ultra` existe aussi, en nombre d'usages limité par compte — le garder pour ce qui
+le mérite.
+
+En complément, sans facturation à part et sans coût de contexte — ils consomment
+tout de même le quota, sur le modèle de la session : les subagents
 `relecteur-securite` et `relecteur-de-phase` (les agents fournis par le plugin).
 
 ## Format du conseil, et quoi faire si le cran se révèle trop bas
@@ -104,13 +125,13 @@ Claude ne peut pas changer le cran lui-même ; l'utilisateur le peut, avec
 `/effort`. Mais **se taire quand il est trop bas est une faute** — le dire en une
 ligne sans arrêter le travail, avec la commande à taper :
 
-> « Ce travail touche <zone> : il mérite `max`. Tape `/effort max` — la
->   prochaine réponse relira la conversation sans cache. Je continue en
->   attendant. »
+> « Ce travail touche <zone> : il mérite `max`. Tape `/effort max`. Je continue
+>   en attendant. »
 
-Au début d'une conversation → `/effort` tout de suite, ça ne coûte presque rien.
-En pleine conversation → le coût est une relecture complète : `/effort` si la
-suite est sensible, sinon finir et compenser par `/code-review max` à la sortie.
+Sur Opus 5.5 et Fable 5.1, `/effort` garde le cache à tout moment : le conseiller
+dès que le cran se révèle trop bas, sans attendre la sortie. Sur un autre modèle,
+le changement fait relire la conversation sans cache : `/effort` si la suite est
+sensible, sinon finir et compenser par une `/code-review` au niveau adapté.
 Après deux corrections ratées sur le même défaut, le problème n'est plus le cran
 mais le contexte encombré : conversation neuve, au bon cran (voir
 `reflexes-de-travail.md`, « Repartir propre après deux échecs »).

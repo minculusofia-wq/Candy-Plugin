@@ -47,6 +47,17 @@ ecriture "une clé privée écrite en dur"          2 "$CLE_PRIVEE = \"$HEX64\""
 ecriture "une clé d'API écrite en dur"           2 "$CLE_API = \"sk-proj-9Fj2LmQ8xT4vB7nR1cW0\""
 ecriture "le même secret au format .env"         2 "$CLE_PRIVEE=$HEX64"
 ecriture "une phrase de récupération de douze mots" 2 "$MNEMO = \"$DOUZE_MOTS\""
+verifie "la raison du blocage arrive à Claude (sur stderr)" \
+        1 "$(raison_hook "$HOOK" "$(entree_ecriture /tmp/exemple.py "$CLE_API = \"sk-proj-9Fj2LmQ8xT4vB7nR1cW0\"")")"
+RAISON_SECRET=$(entree_ecriture /tmp/exemple.py "$CLE_API = \"sk-proj-9Fj2LmQ8xT4vB7nR1cW0\"" | bash "$HOOK" 2>&1 >/dev/null)
+verifie "la raison ne recopie pas la valeur du secret" \
+        0 "$(printf '%s' "$RAISON_SECRET" | grep -c '9Fj2LmQ8xT4vB7nR1cW0')"
+# Un caractère invalide dans le chemin faisait planter le hook en code 1 — et
+# un code 1 laisse passer l'écriture (trouvé par la relecture de sécurité).
+ENTREE_INVALIDE=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"file_path":"/tmp/\ud800.py","content":sys.argv[1]}}))' \
+    "$CLE_API = \"sk-proj-9Fj2LmQ8xT4vB7nR1cW0\"")
+verifie "un caractère invalide dans le chemin ne fait pas passer le secret" \
+        2 "$(code_hook "$HOOK" "$ENTREE_INVALIDE")"
 
 # Trois contournements trouvés à la relecture. Chacun passait (code 0) alors
 # qu'une valeur équivalente avec un chiffre, sans accolade et sans le mot
@@ -66,6 +77,8 @@ commande "un fichier nommé passe"                     0 "$GIT_AJOUT hooks/exemp
 commande "tout ajouter est refusé si .env traîne"     2 "$GIT_AJOUT ."
 commande "l'ajout en masse est refusé"                2 "$GIT_AJOUT -A"
 commande "ajouter le .env lui-même est refusé"        2 "$GIT_AJOUT .env"
+verifie "la raison du refus arrive à Claude (sur stderr)" \
+        1 "$(raison_hook "$HOOK" "$(entree_commande "$GIT_AJOUT .env")" CLAUDE_PROJECT_DIR="$BAC/env")"
 
 echo ".env" > "$BAC/env/.gitignore"
 commande "une fois .env ignoré, tout redevient permis" 0 "$GIT_AJOUT ."

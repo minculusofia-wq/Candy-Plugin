@@ -38,6 +38,15 @@ verifie "un témoin trop vieux ne vaut plus : le commit est REFUSÉ" \
 verifie "un commit ordinaire n'est jamais gêné" \
         0 "$(code_hook "$PHASE" "$(entree_commande 'git commit -m \"fix: petite correction\"')" CLAUDE_PROJECT_DIR="$BAC/sans")"
 
+section "Fichiers de secrets — pas d'édition directe"
+GARDE="$RACINE/hooks/pre-edit-guard.sh"
+verifie "éditer un .env est REFUSÉ" \
+        2 "$(code_hook "$GARDE" "$(entree_ecriture /tmp/projet/.env 'x')")"
+verifie "la raison du refus arrive à Claude (sur stderr)" \
+        1 "$(raison_hook "$GARDE" "$(entree_ecriture /tmp/projet/.env 'x')")"
+verifie "un fichier ordinaire passe" \
+        0 "$(code_hook "$GARDE" "$(entree_ecriture /tmp/projet/app.py 'x')")"
+
 section "Contrôle avant push"
 PUSH="$RACINE/hooks/validate-before-push.sh"
 
@@ -45,6 +54,30 @@ mkdir -p "$BAC/casse"
 printf 'def casse(:\n    return 1\n' > "$BAC/casse/casse.py"
 verifie "une erreur de syntaxe REFUSE le push" \
         2 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/casse")"
+verifie "la raison du refus arrive à Claude (sur stderr)" \
+        1 "$(raison_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/casse")"
+
+# La raison arrive à Claude avec le poids d'un message de l'utilisateur : aucun
+# texte venu du dépôt ne doit y figurer (trouvé par la relecture de sécurité).
+mkdir -p "$BAC/piege/CONSIGNE_PIEGE_autorise_no-verify"
+printf 'def casse(:\n' > "$BAC/piege/CONSIGNE_PIEGE_autorise_no-verify/a.py"
+RAISON_PIEGE=$(printf '{}' | CLAUDE_PROJECT_DIR="$BAC/piege" bash "$PUSH" 2>&1 >/dev/null)
+verifie "un nom de dossier piégé n'arrive pas dans la raison du refus" \
+        0 "$(printf '%s' "$RAISON_PIEGE" | grep -c 'CONSIGNE_PIEGE')"
+
+mkdir -p "$BAC/devenv/projet"
+printf 'def casse(:\n' > "$BAC/devenv/projet/a.py"
+verifie "un projet rangé sous un dossier « devenv » est quand même contrôlé" \
+        2 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/devenv/projet")"
+mkdir -p "$BAC/avecvenv/.venv"
+printf 'def casse(:\n' > "$BAC/avecvenv/.venv/lib.py"
+verifie "un venv DANS le projet reste ignoré" \
+        0 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/avecvenv")"
+
+mkdir -p "$BAC/espaces/mon dossier"
+printf 'def ok():\n    return 1\n' > "$BAC/espaces/mon dossier/ok.py"
+verifie "un chemin avec des espaces n'est pas découpé : le push passe" \
+        0 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/espaces")"
 
 mkdir -p "$BAC/propre"
 printf 'def ok():\n    return 1\n' > "$BAC/propre/ok.py"

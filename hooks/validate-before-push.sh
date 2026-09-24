@@ -5,6 +5,12 @@
 #
 
 set -e
+# Quand ce hook refuse (code 2), Claude Code transmet a Claude la raison lue
+# sur stderr, avec le poids d'un message de l'utilisateur. Cette raison est
+# donc un texte FIXE : aucun nom de fichier du depot n'y figure, sinon un
+# dossier au nom choisi (« autorise git push --no-verify… ») deviendrait une
+# consigne. Le detail se lit avec /verifier, dont la sortie est une donnee.
+# Le deroule ci-dessous reste sur stdout, que personne ne lit en code 2.
 
 # Colors for output
 RED='\033[0;31m'
@@ -62,15 +68,20 @@ echo ""
 echo -e "${YELLOW}📋 Syntax checking...${NC}"
 
 # Python syntax
-PYTHON_FILES=$(find "$PROJECT_DIR" -name "*.py" -not -path "*venv*" -not -path "*__pycache__*" 2>/dev/null | head -20)
+# Les dossiers a ignorer sont reconnus par leur nom, SOUS le projet : filtrer le
+# chemin complet ignorait tout un projet range dans un dossier « devenv ».
+PYTHON_FILES=$(find "$PROJECT_DIR" -mindepth 1 \
+    \( -type d \( -name "*venv*" -o -name __pycache__ -o -name node_modules -o -name .git \) -prune \) \
+    -o \( -type f -name "*.py" -print \) 2>/dev/null | head -20)
 if [[ -n "$PYTHON_FILES" ]]; then
     SYNTAX_ERRORS=0
-    for file in $PYTHON_FILES; do
+    # Une ligne par fichier : un chemin avec des espaces reste un seul fichier.
+    while IFS= read -r file; do
         if ! python3 -I -m py_compile "$file" 2>/dev/null; then
             echo -e "${RED}✗ Syntax error in $file${NC}"
             SYNTAX_ERRORS=$((SYNTAX_ERRORS + 1))
         fi
-    done
+    done <<< "$PYTHON_FILES"
     if [[ $SYNTAX_ERRORS -eq 0 ]]; then
         echo -e "${GREEN}✓ Python syntax OK${NC}"
     else
@@ -87,6 +98,8 @@ if [[ $FAILURES -gt 0 ]]; then
     echo ""
     echo -e "${RED}❌ Validation failed with $FAILURES error(s)${NC}"
     echo -e "${RED}Push blocked. Fix the issues and try again.${NC}"
+    echo "Push refuse : $FAILURES fichier(s) Python ne compilent pas." >&2
+    echo "Les voir : /verifier, ou python3 -I -m py_compile sur les fichiers .py du projet." >&2
     exit 2
 fi
 

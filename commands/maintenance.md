@@ -24,6 +24,11 @@ modèle de la session n'a jamais été audité.
 
 ## Étape 1 — Contrôle mécanique
 
+**Avant de le lancer, noter la date de `~/.claude/.maintenance-dernier-releve`**
+(s'il existe) : le contrôle la réécrit à la date du jour, et c'est la date lue
+avant qui borne l'étape 2b. Relue après, elle donnerait « aujourd'hui », donc une
+relecture vide.
+
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/hooks/verifier-setup.sh
 ```
@@ -90,8 +95,8 @@ Lancer un sous-agent — jamais dans la conversation courante, les transcription
 rempliraient le contexte pour rien.
 
 Périmètre : les fichiers `.jsonl` de `~/.claude/projects/` modifiés depuis le
-dernier entretien (date dans `~/.claude/.maintenance-dernier-releve`), ou à
-défaut sur trente jours.
+dernier entretien (la date notée avant l'étape 1), ou à défaut sur trente
+jours.
 
 Trois questions, et rien d'autre :
 

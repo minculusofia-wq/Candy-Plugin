@@ -79,7 +79,7 @@ Le proposer, avec le niveau d'insistance qui correspond à la phase :
 
 | La phase touche à | Formulation |
 |---|---|
-| Chiffrement, clés, secrets, micro, position, données personnelles | « Cette phase touche à `<quoi>`. Je te conseille de lancer `/code-review max` avant de passer à l'appareil réel. En complément je peux passer les subagents `relecteur-securite` et `relecteur-de-phase`, qui ne coûtent rien. » |
+| Chiffrement, clés, secrets, micro, position, données personnelles | « Cette phase touche à `<quoi>`. Je te conseille `/code-review <niveau> <cible>` avant de passer à l'appareil réel, parce que <raison>. En complément je peux passer les subagents `relecteur-securite` et `relecteur-de-phase`, qui ne sont pas facturés à part. » Niveau et cible : `rules/choix-du-modele.md`, « Relecture ». |
 | Écrans, navigation, réglages seulement | Le mentionner en une ligne, puis passer. |
 
 **Ne jamais la lancer.** C'est une commande de l'utilisateur, facturée à part. Claude n'a
@@ -201,9 +201,10 @@ demande :
 **Le cran d'effort de la phase suivante se conseille ICI, pas là-bas.** C'est au
 moment de fermer la phase précédente que la roadmap est ouverte et que le contenu
 de la suivante est connu — le conseil ne coûte alors rien. L'utilisateur règle le
-curseur avant son premier message, là où le régler est gratuit ; s'il l'oublie,
-`/effort <cran>` le corrige dans la conversation neuve, tôt de préférence :
-chaque changement ultérieur fait relire toute la conversation sans cache.
+curseur avant son premier message ; s'il l'oublie, `/effort <cran>` le corrige
+dans la conversation neuve — à tout moment sur Opus 5.5 et Fable 5.1, qui gardent
+le cache ; tôt de préférence sur un autre modèle, où chaque changement fait
+relire toute la conversation sans cache.
 
 Lire la section `### Phase Y` de `ROADMAP.md` et appliquer la grille de
 la règle « choix du modèle » :
@@ -219,7 +220,8 @@ Une phase d'app descend rarement sous `high`, et `max` ne se conseille **pas**
 parce qu'une phase est longue : une phase est longue, pas dure. En cas de doute
 sur la présence d'une zone sensible : ne pas descendre.
 
-**Ultracode est le cran au-dessus de `max`, sur le même curseur** : Claude découpe la phase et
+**Ultracode est la position qui suit `max`, sur le même curseur — au modèle il envoie `xhigh`,
+et Claude Code y ajoute des workflows** : Claude découpe la phase et
 lance plusieurs agents en parallèle qui se contredisent avant de retenir quoi que
 ce soit. Le plus cher de loin. Ne pas le conseiller quand le goulot d'étranglement
 de la phase est l'appareil de l'utilisateur et non la couverture de Claude — une phase
@@ -237,7 +239,8 @@ combinaison **qui n'existe pas**, et l'utilisateur a dû poser la question une s
 fois en deux phases.
 
 **Deux réglages, à fixer tous deux AVANT le premier message** (`/effort` peut
-encore changer le curseur ensuite, au prix d'une relecture sans cache) **:**
+encore changer le curseur ensuite — sur Opus 5.5 et Fable 5.1, sans perdre le
+cache) **:**
 
 | Réglage | Ses positions |
 |---|---|
@@ -289,7 +292,7 @@ décrit un réglage de session, pas un état du projet.
 
 **Et dire aussi si la phase qui s'ouvre méritera une relecture adversariale à sa
 sortie.** C'est un autre bouton, pas un sixième cran : l'effort règle la
-profondeur pendant la construction, `/code-review max` ajoute des relecteurs
+profondeur pendant la construction, `/code-review` ajoute des relecteurs
 indépendants sur le travail fini. Le signaler dès l'ouverture évite d'y penser
 trop tard — et permet à l'utilisateur de prévoir le coût.
 

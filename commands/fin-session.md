@@ -6,12 +6,12 @@ description: Fin de session — debug optionnel, audit des .md, chaque informati
 
 Quand l'utilisateur écrit "fin de session" :
 
-## 0. Question debug (OBLIGATOIRE en premier)
-Demander à l'utilisateur : "Debug complet avant la suite ? oui/non"
+## 0. Debug (OBLIGATOIRE en premier)
+Décider sans poser la question — les tests sont une décision technique (voir
+`rules/communication-style.md`, « Qui décide quoi ») — et l'annoncer en une
+ligne : debug complet si du code a été modifié pendant la session, rien sinon.
 
-Attendre sa réponse avant de continuer.
-
-- Si **oui** → appliquer la procédure de `/debug`, version **complète**, sans en
+- **Code modifié** → appliquer la procédure de `/debug`, version **complète**, sans en
   sauter une étape (y compris la séquence de fin : tuer les processus locaux).
 
   ⚠️ La procédure de débogage n'est écrite **qu'à un seul endroit** : `/debug`.
@@ -21,7 +21,7 @@ Attendre sa réponse avant de continuer.
 
   Ne PAS passer à l'étape 1 tant que le projet n'est pas sain.
 
-- Si **non** → passer directement à l'étape 1
+- **Rien de modifié** → passer directement à l'étape 1
 
 > **Cette commande est celle des bots.** Une app dont le travail est découpé en
 > phases se clôt avec `/fin-phase`, qui relit la porte de sortie de la phase et
@@ -43,7 +43,7 @@ Le script vérifie 4 choses :
 
 **Règle absolue :** chaque ligne ✗ rouge DOIT être corrigée avant le commit final. Les ⚠ jaunes doivent être vérifiées au cas par cas (peuvent être légitimes : questions stratégiques ouvertes, sections historiques de CHANGELOG).
 
-Si le script retourne code 1 (issues détectées), je traite chaque point ligne par ligne, puis je relance le script jusqu'à ce qu'il retourne 0.
+Si le script retourne code 1 (issues détectées), je traite chaque point ligne par ligne, puis je relancer le script jusqu'à ce qu'il ne reste aucun ✗ rouge. Un ⚠ jaune vérifié et légitime peut rester : le script sort alors encore en code 1, ce n'est pas un échec.
 
 ## 1. Documentation : chaque information dans son fichier
 

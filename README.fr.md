@@ -190,7 +190,7 @@ s'ouvrir est un plan faux.
 make test
 ```
 
-Neuf groupes, 185 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Ceux
+Neuf groupes, 199 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Ceux
 des huit premiers groupes ont été vérifiés en remettant le défaut d'origine — un
 test qui passe toujours ne vaut rien. Le neuvième rejoue l'incident qui a fait
 naître le contrôle du jeu de documents, et les pannes qu'il doit signaler au lieu

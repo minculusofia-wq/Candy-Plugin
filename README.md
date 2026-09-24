@@ -188,7 +188,7 @@ plan is written: a plan whose first phase cannot open is a wrong plan.
 make test
 ```
 
-Nine groups, 185 cases: *send this to that hook, expect that verdict*. Those in
+Nine groups, 199 cases: *send this to that hook, expect that verdict*. Those in
 the first eight groups were checked by putting the original defect back; the
 ninth replays the incident that gave birth to the document-set check, and the
 failures it must report instead of staying silent. A test that always passes is

@@ -31,11 +31,11 @@ BLOCKED_FILES=(
 
 for blocked in "${BLOCKED_FILES[@]}"; do
     if [[ "$BASENAME" == "$blocked" ]]; then
-        echo "BLOCKED"
-        echo ""
-        echo "Modification bloquee: $FILE_PATH"
-        echo "Les fichiers de secrets/credentials ne doivent pas etre modifies par Claude."
-        echo "Editez ce fichier manuellement."
+        echo "BLOCKED" >&2
+        echo "" >&2
+        echo "Modification bloquee: $FILE_PATH" >&2
+        echo "Les fichiers de secrets/credentials ne doivent pas etre modifies par Claude." >&2
+        echo "Editez ce fichier manuellement." >&2
         exit 2
     fi
 done

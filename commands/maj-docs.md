@@ -42,7 +42,7 @@ Le script vérifie 4 choses :
 
 **Règle absolue :** chaque ligne ✗ rouge DOIT être corrigée. Les ⚠ jaunes sont à vérifier au cas par cas — certaines sont légitimes (questions stratégiques ouvertes, sections historiques de CHANGELOG).
 
-Traiter chaque point ligne par ligne, puis relancer le script jusqu'à ce qu'il ne retourne plus d'erreur.
+Traiter chaque point ligne par ligne, puis relancer le script jusqu'à ce qu'il ne reste aucun ✗ rouge. Un ⚠ jaune vérifié et légitime peut rester : le script sort alors encore en code 1, ce n'est pas un échec.
 
 ## Étape 3 : comprendre ce qui a changé
 

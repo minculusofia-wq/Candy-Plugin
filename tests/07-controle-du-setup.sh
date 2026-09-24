@@ -117,7 +117,9 @@ cat > "$ENTENDU/settings.json" <<'JSON'
                    {"type":"command","command":"python3 ~/.claude/hooks/relecture.py"}]}],
  "PreToolUse":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/bloque.sh"},
                          {"type":"command","command":"bash ~/.claude/hooks/rend-du-json.sh"},
-                         {"type":"command","command":"bash ~/.claude/hooks/teste-seulement.sh"}]}],
+                         {"type":"command","command":"bash ~/.claude/hooks/teste-seulement.sh"},
+                         {"type":"command","command":"bash ~/.claude/hooks/stdout-seulement.sh"},
+                         {"type":"command","command":"bash ~/.claude/hooks/code-un.sh"}]}],
  "UserPromptSubmit":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/ajoute-du-contexte.sh"}]}]}}
 JSON
 printf 'echo "Pensez a commiter." >&2\nexit 0\n'            > "$ENTENDU/hooks/muet-fin-de-tour.sh"
@@ -125,6 +127,9 @@ printf 'echo "Bloque : raison." >&2\nexit 2\n'              > "$ENTENDU/hooks/bl
 printf "echo '{\"systemMessage\": \"attention\"}'\nexit 0\n" > "$ENTENDU/hooks/rend-du-json.sh"
 printf 'if echo "$X" | grep -q a; then exit 0; fi\nexit 0\n'  > "$ENTENDU/hooks/teste-seulement.sh"
 printf 'echo "Rappel pour Claude."\nexit 0\n'                > "$ENTENDU/hooks/ajoute-du-contexte.sh"
+printf 'echo "BLOCKED : raison."\nexit 2\n'                > "$ENTENDU/hooks/stdout-seulement.sh"
+printf '# Bloque le push si les tests echouent.\necho "Tests en echec." >&2\nexit 1\n' \
+    > "$ENTENDU/hooks/code-un.sh"
 printf '#!/usr/bin/env python3\nimport sys\ndef main():\n    sys.stderr.write("corrige\\n")\n    return 2\nsys.exit(main())\n' \
     > "$ENTENDU/hooks/relecture.py"
 printf -- '---\nname: s\n---\n# skill synchronisé\n' > "$ENTENDU/skills/synced/abc/pdf/SKILL.md"
@@ -145,6 +150,10 @@ verifie "un message normal à l'envoi d'un prompt arrive bien à Claude" \
         0 "$(echo "$SORTIE_E" | grep -c 'ajoute-du-contexte.sh')"
 verifie "un script python qui renvoie 2 par return est entendu" \
         0 "$(echo "$SORTIE_E" | grep -c 'relecture.py')"
+verifie "un hook qui bloque avec sa raison sur stdout est signalé (la raison se lit sur stderr)" \
+        1 "$(echo "$SORTIE_E" | grep -c 'stdout-seulement.sh (PreToolUse) : sort en code d.erreur avec ses messages sur stdout')"
+verifie "un hook qui parle de bloquer mais sort en code 1 est signalé (il laisse passer)" \
+        1 "$(echo "$SORTIE_E" | grep -c 'code-un.sh (PreToolUse) : parle de bloquer mais ne sort jamais en code 2')"
 verifie "un settings.json sans hook : rien à signaler" \
         1 "$(bash "$CONTROLE" "$VIERGE" 2>&1 | grep -c '0 branchement(s), aucun hook ne parle dans le vide')"
 

@@ -54,9 +54,9 @@ CODE=$?
 case "$CODE" in
     0) exit 0 ;;
     2)
-        echo "=== AUCUN MOYEN DE VERIFICATION DANS CE PROJET ===" >&2
-        echo "Du code a ete modifie mais rien ne permet de savoir si ca casse quelque chose." >&2
-        echo "Le signaler à l'utilisateur et proposer de mettre un controle en place." >&2
+        # Aucun moyen de verification dans ce projet. Un message ici, sorti en
+        # code 0, n'irait qu'au journal de debogage (doc hooks) : la consigne
+        # vit dans rules/reflexes-de-travail.md, point 1.
         exit 0
         ;;
     *)

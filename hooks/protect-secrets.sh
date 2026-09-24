@@ -31,6 +31,10 @@ INPUT=$(cat)
 TROUVE=$(printf '%s' "$INPUT" | python3 -I -c '
 import sys, json, re
 
+# Un caractere invalide (moitie de paire UTF-16 venue du JSON) faisait planter
+# le print : code 1, et le secret passait (relecture de securite).
+sys.stdout.reconfigure(errors="replace")
+
 try:
     d = json.loads(sys.stdin.read())
 except Exception:
@@ -104,7 +108,10 @@ for source, texte in morceaux:
     for motif in (CITE, NUE):
         for m in motif.finditer(texte):
             if ressemble_a_un_secret(m.group("v")):
-                extrait = m.group(0).strip()
+                # La raison du blocage arrive a Claude et s affiche : on y
+                # garde le nom et le debut de la valeur, jamais la valeur.
+                v = m.group("v")
+                extrait = m.group(0).strip().replace(v, v[:4] + "...(masque)")
                 if len(extrait) > 60:
                     extrait = extrait[:57] + "..."
                 print("%s\t%s" % (source, extrait))
@@ -114,13 +121,13 @@ for source, texte in morceaux:
 if [[ -n "$TROUVE" ]]; then
     SOURCE="${TROUVE%%$'\t'*}"
     EXTRAIT="${TROUVE#*$'\t'}"
-    echo "BLOCKED"
-    echo ""
-    echo "Valeur qui ressemble a un secret dans $SOURCE"
-    echo "  $EXTRAIT"
-    echo ""
-    echo "Ne jamais ecrire un secret en clair dans le depot."
-    echo "Le lire depuis une variable d'environnement (.env non suivi par git)."
+    echo "BLOCKED" >&2
+    echo "" >&2
+    echo "Valeur qui ressemble a un secret dans $SOURCE" >&2
+    echo "  $EXTRAIT" >&2
+    echo "" >&2
+    echo "Ne jamais ecrire un secret en clair dans le depot." >&2
+    echo "Le lire depuis une variable d'environnement (.env non suivi par git)." >&2
     exit 2
 fi
 
@@ -134,10 +141,10 @@ if [[ -n "$COMMAND" ]] && echo "$COMMAND" | grep -qE 'git\s+add\s+.*\.env($|\s)|
     PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
     if [[ -f "$PROJECT_DIR/.env" ]]; then
         if [[ ! -f "$PROJECT_DIR/.gitignore" ]] || ! grep -q '\.env' "$PROJECT_DIR/.gitignore" 2>/dev/null; then
-            echo "BLOCKED"
-            echo ""
-            echo "Ce projet a un .env, et .gitignore ne l'ignore pas."
-            echo "Ajouter .env au .gitignore avant de faire un git add."
+            echo "BLOCKED" >&2
+            echo "" >&2
+            echo "Ce projet a un .env, et .gitignore ne l'ignore pas." >&2
+            echo "Ajouter .env au .gitignore avant de faire un git add." >&2
             exit 2
         fi
     fi
