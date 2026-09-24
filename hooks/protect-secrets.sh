@@ -27,6 +27,15 @@ set -e
 
 INPUT=$(cat)
 
+# Si la lecture de l'entree echoue (python3 absent ou en panne), l'action est
+# REFUSEE : sous set -e, le hook sortait en 1 ou 127, que Claude Code traite
+# comme non bloquant, et l'action passait (/code-review du 2026-09-24).
+refuser_illisible() {
+    echo "Action refusee : ce garde-fou n'a pas pu lire l'action (Python introuvable ou en panne)." >&2
+    echo "Reparer Python, puis relancer. Un garde-fou qui ne voit rien ne laisse rien passer." >&2
+    exit 2
+}
+
 # --- Detection : une valeur qui ressemble a un secret ---
 TROUVE=$(printf '%s' "$INPUT" | python3 -I -c '
 import sys, json, re
@@ -38,7 +47,7 @@ sys.stdout.reconfigure(errors="replace")
 try:
     d = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))
 except Exception:
-    sys.exit(0)
+    sys.exit(3)                      # illisible : le hook refuse
 
 ti = d.get("tool_input", {}) or {}
 morceaux = [
@@ -116,7 +125,7 @@ for source, texte in morceaux:
                     extrait = extrait[:57] + "..."
                 print("%s\t%s" % (source, extrait))
                 sys.exit(0)
-' 2>/dev/null)
+' 2>/dev/null) || refuser_illisible
 
 if [[ -n "$TROUVE" ]]; then
     SOURCE="${TROUVE%%$'\t'*}"
@@ -135,7 +144,7 @@ fi
 # Lecture robuste (relecture de securite de la 0.3.4) : un demi-caractere
 # Unicode orphelin faisait planter ce print, le hook sortait en 1 (non
 # bloquant) et le git add du .env passait.
-COMMAND=$(printf '%s' "$INPUT" | python3 -I -c "import sys,json; sys.stdout.reconfigure(errors='replace'); d=json.loads(sys.stdin.buffer.read().decode('utf-8', 'replace')); t=d.get('tool_input') if isinstance(d, dict) else None; print((t if isinstance(t, dict) else {}).get('command') or '')" 2>/dev/null)
+COMMAND=$(printf '%s' "$INPUT" | python3 -I -c "import sys,json; sys.stdout.reconfigure(errors='replace'); d=json.loads(sys.stdin.buffer.read().decode('utf-8', 'replace')); t=d.get('tool_input') if isinstance(d, dict) else None; print((t if isinstance(t, dict) else {}).get('command') or '')" 2>/dev/null) || refuser_illisible
 
 # Le point doit etre le chemin ENTIER. Sans l'ancre de fin, le motif attrapait
 # aussi « git add .claude-plugin/... » et bloquait une commande parfaitement normale

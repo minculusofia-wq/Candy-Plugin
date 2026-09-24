@@ -326,6 +326,66 @@ except subprocess.TimeoutExpired:
     print(1)
 ' "$CONTROLE" "$LENT")"
 
+section "Hooks entendus — /code-review : lignes logiques, fonctions, fichiers absents"
+REVUE="$BAC/revue"
+mkdir -p "$REVUE/hooks"
+python3 -I - "$REVUE" <<'PY'
+import json, os, sys
+d = sys.argv[1]
+perdu = 'echo "Texte simple perdu."'
+hooks = {
+    # doivent être signalés
+    "fonction-multiligne.sh": ('json_get() { python3 -I -c "\nimport sys\nprint(1)\n" <<< "$X" 2>/dev/null; }\n'
+                               'V=$(json_get a)\n' + perdu + '\n[[ -n "$V" ]] || {\n  exit 0\n}\n'),
+    "fonction-stderr-et-texte.sh": ('err() { echo "$*"; } >&2\nif [ -n "$X" ]; then err "Refus."; exit 2; fi\n'
+                                    + perdu + '\nexit 0\n'),
+    "comparaison.sh": '(( X > 0 )) && ' + perdu + '\nexit 0\n',
+    "case.sh": 'case "$x" in a) ' + perdu + ' ;; esac\nexit 0\n',
+    "command-echo.sh": 'command ' + perdu + '\nexit 0\n',
+    "trap.sh": 'fin() { ' + perdu + '; }\ntrap fin EXIT\nexit 0\n',
+    "document-barre.sh": "python3 - <<'PY'\nx = 1 + \\\nPY\n" + perdu + "\nexit 0\n",
+    # ne doivent pas l'être
+    "fonction-stderr.sh": 'err() { echo "$*"; } >&2\nif [ -n "$X" ]; then err "Refus."; exit 2; fi\nexit 0\n',
+    "variable-par-defaut.sh": ('OUT=$(python3 -c \'import json; print(json.dumps({"systemMessage": "x"}))\')\n'
+                               'echo "${OUT:-}"\n'),
+    "echo-capture-puis-json.sh": 'JSON=\'{"systemMessage": "x"}\'\nD=$(echo "Valeur"); echo "$JSON"\n',
+    "printf-v.sh": 'printf -v MSG \'%s\' "x"\nexit 0\n',
+}
+for nom, texte in hooks.items():
+    open(os.path.join(d, "hooks", nom), "w").write(texte)
+commandes = ["bash ~/.claude/hooks/" + n for n in hooks] + ["bash ~/.claude/hooks/absent.sh"]
+json.dump({"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": c} for c in commandes]}]}},
+          open(os.path.join(d, "settings.json"), "w"))
+PY
+SORTIE_R=$(bash "$CONTROLE" "$REVUE" 2>&1)
+for f in fonction-multiligne.sh fonction-stderr-et-texte.sh comparaison.sh case.sh command-echo.sh \
+         trap.sh document-barre.sh; do
+    verifie "message perdu, signalé : $f" 1 "$(echo "$SORTIE_R" | grep -c "$f (PreToolUse)")"
+done
+for f in fonction-stderr.sh variable-par-defaut.sh echo-capture-puis-json.sh printf-v.sh; do
+    verifie "hook légitime, pas signalé : $f" 0 "$(echo "$SORTIE_R" | grep -c "$f")"
+done
+# Doc hooks : un chemin mal tapé désactive le garde-fou sans rien dire.
+verifie "un hook branché dont le fichier n'existe pas est signalé" \
+        1 "$(echo "$SORTIE_R" | grep -c "absent.sh (PreToolUse) : branché, mais le fichier n'existe pas")"
+
+# Une ligne pleine d'echo : les recompter à chaque echo coûtait un temps
+# quadratique (5,5 s pour 200 Ko).
+LIGNE="$BAC/ligne"
+mkdir -p "$LIGNE/hooks"
+python3 -I -c 'import sys; open(sys.argv[1] + "/hooks/l.sh", "w").write("x;" + "echo;" * 120000 + "\n")' "$LIGNE"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/l.sh"}]}]}}' > "$LIGNE/settings.json"
+verifie "une ligne de 600 Ko pleine d'echo : contrôle fini en moins de 5 s" \
+        0 "$(python3 -I -c '
+import subprocess, sys
+try:
+    r = subprocess.run(["bash", sys.argv[1], sys.argv[2]], capture_output=True, timeout=5)
+    sortie = (r.stdout + r.stderr).decode("utf-8", "replace")
+    print(0 if "=== BILAN ===" in sortie and "Traceback" not in sortie else 1)
+except subprocess.TimeoutExpired:
+    print(1)
+' "$CONTROLE" "$LIGNE")"
+
 section "Hooks entendus — un réglage mal formé ne fait pas planter le contrôle"
 FORME="$BAC/forme"
 mkdir -p "$FORME/hooks"

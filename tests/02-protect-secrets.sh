@@ -85,6 +85,8 @@ verifie "la raison du refus arrive à Claude (sur stderr)" \
 ENTREE_ADD_PIEGE=$(python3 -I -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]+" . # \ud800"}}))' "$GIT_AJOUT")
 verifie "tout ajouter reste refusé avec un caractère invalide dans la commande" \
         2 "$(code_hook "$HOOK" "$ENTREE_ADD_PIEGE" CLAUDE_PROJECT_DIR="$BAC/env")"
+verifie "sans python3, le garde-fou refuse au lieu de laisser passer" \
+        2 "$(code_hook "$HOOK" "$(entree_commande "$GIT_AJOUT .")" CLAUDE_PROJECT_DIR="$BAC/env" PATH=/bin:/usr/sbin)"
 
 echo ".env" > "$BAC/env/.gitignore"
 commande "une fois .env ignoré, tout redevient permis" 0 "$GIT_AJOUT ."

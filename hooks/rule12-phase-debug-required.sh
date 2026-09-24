@@ -48,7 +48,7 @@ import json, re, sys
 try:
     commande = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace")).get("tool_input", {}).get("command", "") or ""
 except Exception:
-    sys.exit(0)
+    sys.exit(3)                      # illisible : le hook refuse
 # Tout est lineaire ou borne (relecture de securite de la 0.3.3) : une regex
 # a options repetees s emballait sur une suite de « -C », et les motifs de
 # cloture coutent en carre de la longueur d une ligne. On lit donc au plus
@@ -74,8 +74,15 @@ for ligne in commande.splitlines():
     if any(re.search(m, ligne) for m in marqueurs):
         print("oui")
         break
-' <<< "$INPUT" 2>/dev/null) || CLOTURE=""
+' <<< "$INPUT" 2>/dev/null) || CLOTURE="illisible"
 
+# Si la lecture echoue (python3 absent ou en panne), le commit est REFUSE :
+# « CLOTURE="" » laissait passer une cloture (/code-review du 2026-09-24).
+if [[ "$CLOTURE" == "illisible" ]]; then
+    echo "Action refusee : ce garde-fou n'a pas pu lire la commande (Python introuvable ou en panne)." >&2
+    echo "Reparer Python, puis relancer. Un garde-fou qui ne voit rien ne laisse rien passer." >&2
+    exit 2
+fi
 [[ "$CLOTURE" == "oui" ]] || exit 0
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"

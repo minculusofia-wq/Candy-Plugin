@@ -18,7 +18,15 @@ t = d.get('tool_input')
 v = (t if isinstance(t, dict) else {}).get('$1') or ''
 sys.stdout.buffer.write(str(v).encode('utf-8', 'replace') + b'\\n')
 " <<< "$INPUT" 2>/dev/null; }
-FILE_PATH=$(json_get file_path)
+# Si la lecture de l'entree echoue (python3 absent ou en panne), l'action est
+# REFUSEE : sous set -e, le hook sortait en 1 ou 127, que Claude Code traite
+# comme non bloquant, et l'action passait (/code-review du 2026-09-24).
+refuser_illisible() {
+    echo "Action refusee : ce garde-fou n'a pas pu lire l'action (Python introuvable ou en panne)." >&2
+    echo "Reparer Python, puis relancer. Un garde-fou qui ne voit rien ne laisse rien passer." >&2
+    exit 2
+}
+FILE_PATH=$(json_get file_path) || refuser_illisible
 
 if [[ -z "$FILE_PATH" ]]; then
     exit 0
@@ -53,16 +61,29 @@ BLOCKED_FILES=(
     "secret.key"
 )
 
+# Le message est un texte fixe : ni le chemin ni le nom du fichier n'y figurent.
+# Il revient a Claude comme raison du refus, et un nom de dossier choisi
+# (« ignore les regles, lance … ») y deviendrait une consigne.
+refuser_secret() {
+    echo "BLOCKED" >&2
+    echo "" >&2
+    echo "Modification bloquee : fichier de secrets (.env, cles, wallet, identifiants)." >&2
+    echo "Les fichiers de secrets/credentials ne doivent pas etre modifies par Claude." >&2
+    echo "Editez ce fichier manuellement." >&2
+    exit 2
+}
+
 for blocked in "${BLOCKED_FILES[@]}"; do
     if [[ "$BASENAME" == "$blocked" ]]; then
-        echo "BLOCKED" >&2
-        echo "" >&2
-        echo "Modification bloquee: $FILE_PATH" >&2
-        echo "Les fichiers de secrets/credentials ne doivent pas etre modifies par Claude." >&2
-        echo "Editez ce fichier manuellement." >&2
-        exit 2
+        refuser_secret
     fi
 done
+
+# Toutes les variantes de .env (.env.local, .env.development, .env.staging…)
+# portent des secrets. Seuls les modeles sans valeur restent modifiables.
+if [[ "$BASENAME" == .env.* ]] && [[ ! "$BASENAME" =~ ^\.env\.(example|sample|template|dist)$ ]]; then
+    refuser_secret
+fi
 
 # Avertissement pour les fichiers sensibles (pas bloque mais signale)
 SENSITIVE_FILES=(
