@@ -199,6 +199,58 @@ verifie "un hook qui rend du JSON dans un cas mais du texte simple dans l'autre 
 verifie "un JSON rangé dans une variable puis écrit n'est pas du texte simple" \
         0 "$(echo "$SORTIE_E" | grep -c 'json-en-variable.sh')"
 
+section "Hooks entendus — les formes courantes, dans les deux sens"
+# Seconde relecture de la 0.3.4 : des hooks légitimes (stderr écrit en groupe,
+# sur deux lignes, fonction dont on capture la valeur) étaient signalés à
+# tort, et des messages perdus (|| echo, printf '%s', cat <<EOF, print sur
+# plusieurs lignes, echo sans guillemets) passaient.
+FINS="$BAC/fins"
+mkdir -p "$FINS/hooks"
+cat > "$FINS/settings.json" <<'JSON'
+{"hooks":{"PostToolUse":[{"hooks":[
+ {"type":"command","command":"bash ~/.claude/hooks/groupe-stderr.sh"},
+ {"type":"command","command":"python3 -I ~/.claude/hooks/py-stderr-deux-lignes.py"},
+ {"type":"command","command":"bash ~/.claude/hooks/suite-de-ligne.sh"},
+ {"type":"command","command":"bash ~/.claude/hooks/fonction-capturee.sh"},
+ {"type":"command","command":"bash ~/.claude/hooks/ou-echo.sh"},
+ {"type":"command","command":"bash ~/.claude/hooks/printf-format.sh"},
+ {"type":"command","command":"bash ~/.claude/hooks/cat-heredoc.sh"},
+ {"type":"command","command":"python3 -I ~/.claude/hooks/print-deux-lignes.py"},
+ {"type":"command","command":"bash ~/.claude/hooks/echo-nu.sh"},
+ {"type":"command","command":"bash \"$HOME\"/.claude/hooks/guillemets-fermes.sh"},
+ {"type":"command","command":"bash \"${HOME}\"/.claude/hooks/accolades-fermees.sh"}]}]}}
+JSON
+JSONAILLEURS='if [ -n "$X" ]; then echo '"'"'{"systemMessage": "x"}'"'"'; exit 0; fi'
+printf 'if [ -n "$X" ]; then\n  {\n    echo "Refus : raison."\n    echo "Detail."\n  } >&2\n  exit 2\nfi\nexit 0\n' \
+    > "$FINS/hooks/groupe-stderr.sh"
+printf 'import sys\nif len(sys.argv) > 5:\n    print("Refus : une raison longue, sur deux lignes.",\n          file=sys.stderr)\n    sys.exit(2)\n' \
+    > "$FINS/hooks/py-stderr-deux-lignes.py"
+printf 'if [ -n "$X" ]; then\n  echo "Refus : raison." \\\n    >&2\n  exit 2\nfi\n' > "$FINS/hooks/suite-de-ligne.sh"
+printf 'chemin() {\n  echo "$1/config"\n}\nC=$(chemin /tmp)\nif [ ! -f "$C" ]; then echo "Absent." >&2; exit 2; fi\n' \
+    > "$FINS/hooks/fonction-capturee.sh"
+printf 'test -f /nulle-part || echo "Fichier absent."\nexit 0\n' > "$FINS/hooks/ou-echo.sh"
+printf '%s\nprintf '"'"'%%s\\n'"'"' "Attention, texte perdu."\n' "$JSONAILLEURS" > "$FINS/hooks/printf-format.sh"
+printf '%s\ncat <<EOF\nAttention, texte perdu.\nEOF\n' "$JSONAILLEURS" > "$FINS/hooks/cat-heredoc.sh"
+printf 'import json, sys\nif len(sys.argv) > 5:\n    print(json.dumps({"systemMessage": "x"}))\nprint(\n    "Attention, texte perdu."\n)\n' \
+    > "$FINS/hooks/print-deux-lignes.py"
+printf '%s\necho Attention texte perdu\n' "$JSONAILLEURS" > "$FINS/hooks/echo-nu.sh"
+printf 'echo "Personne ne lira ceci."\nexit 0\n' > "$FINS/hooks/guillemets-fermes.sh"
+printf 'echo "Personne ne lira ceci."\nexit 0\n' > "$FINS/hooks/accolades-fermees.sh"
+SORTIE_FINS=$(bash "$CONTROLE" "$FINS" 2>&1)
+for f in groupe-stderr.sh py-stderr-deux-lignes.py suite-de-ligne.sh fonction-capturee.sh; do
+    verifie "hook légitime, pas signalé : $f" 0 "$(echo "$SORTIE_FINS" | grep -c "$f")"
+done
+verifie "« cmd || echo » est une sortie : signalé" \
+        1 "$(echo "$SORTIE_FINS" | grep -c 'ou-echo.sh (PostToolUse) : ses messages sortent avec le code 0')"
+for f in printf-format.sh cat-heredoc.sh print-deux-lignes.py echo-nu.sh; do
+    verifie "texte perdu malgré un JSON ailleurs, signalé : $f" \
+            1 "$(echo "$SORTIE_FINS" | grep -c "$f (PostToolUse) : une partie de ses messages sort en texte simple")"
+done
+for f in guillemets-fermes.sh accolades-fermees.sh; do
+    verifie "« \"\$HOME\"/… » entre guillemets fermés avant la barre : $f signalé" \
+            1 "$(echo "$SORTIE_FINS" | grep -c "$f (PostToolUse) : ses messages sortent avec le code 0")"
+done
+
 section "Hooks entendus — un réglage mal formé ne fait pas planter le contrôle"
 FORME="$BAC/forme"
 mkdir -p "$FORME/hooks"
@@ -216,17 +268,22 @@ verifie "un hook sans commande (http) n'est pas une forme inattendue" \
 printf '{' > "$FORME/settings.json"
 verifie "settings.json illisible : les hooks du plugin sont quand même contrôlés" \
         1 "$(bash "$CONTROLE" "$FORME" 2>&1 | grep -c 'hooks du plugin : [0-9]* contrôlé(s)')"
+verifie "settings.json illisible : pas de « ✓ 0 branchement(s) » qui contredirait l'alerte" \
+        0 "$(bash "$CONTROLE" "$FORME" 2>&1 | grep -c ' branchement(s), aucun hook ne parle')"
+python3 -I -c 'import sys; open(sys.argv[1], "w").write("[" * 200000 + "]" * 200000)' "$FORME/settings.json"
+verifie "un settings.json imbriqué sur 200 000 niveaux : signalé, sans trace Python" \
+        "1 0" "$(bash "$CONTROLE" "$FORME" 2>&1 | grep -c 'settings.json illisible') $(bash "$CONTROLE" "$FORME" 2>&1 | grep -c Traceback)"
 # La regex du chemin complet prenait 24 s sur 80 000 caractères ; la recopie
 # du préfixe à chaque occurrence, 12 s sur celle-ci. Il en faut moins d'une.
 printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"%s"}]}]}}' \
     "$(python3 -I -c 'print("/" * 300000 + "a/.claude/hooks/" * 20000)')" > "$FORME/settings.json"
-verifie "une commande de 600 000 caractères est lue en moins de 5 s" \
+verifie "une commande de 600 000 caractères est lue en moins de 5 s, jusqu'au bilan" \
         0 "$(python3 -I -c '
 import subprocess, sys
 try:
-    subprocess.run(["bash", sys.argv[1], sys.argv[2]], stdout=subprocess.DEVNULL,
-                   stderr=subprocess.DEVNULL, timeout=5)
-    print(0)
+    r = subprocess.run(["bash", sys.argv[1], sys.argv[2]], capture_output=True, timeout=5)
+    sortie = (r.stdout + r.stderr).decode("utf-8", "replace")
+    print(0 if "=== BILAN ===" in sortie and "Traceback" not in sortie else 1)
 except subprocess.TimeoutExpired:
     print(1)
 ' "$CONTROLE" "$FORME")"
@@ -254,7 +311,7 @@ PIEGE_H="$BAC/depot-piege"
 mkdir -p "$PIEGE_H/hooks"
 python3 -I -c '
 import json, sys
-json.dump({"hooks": {"Post\033[31mX\nFAUX": [{"hooks": [{"type": "command",
+json.dump({"hooks": {"Post\033[31mX\nFAUX\u009b31m\u202eZ": [{"hooks": [{"type": "command",
            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/bavard.sh"}]}]}}, open(sys.argv[1], "w"))
 ' "$PIEGE_H/hooks.json"
 printf 'echo "x"\n' > "$PIEGE_H/bavard.sh"
@@ -265,7 +322,7 @@ verifie "lancé par « bash -s », il ne lit pas le hooks.json du dossier couran
 cp "$PIEGE_H/hooks.json" "$FAUX/hooks/hooks.json"
 printf 'echo "x"\n' > "$FAUX/hooks/bavard.sh"
 verifie "un nom d'événement piégé ne pilote pas le terminal" \
-        "1 0" "$(bash "$FAUX/hooks/verifier-setup.sh" "$VIERGE" 2>&1 | grep -cF 'Post?[31mX?FAUX') $(bash "$FAUX/hooks/verifier-setup.sh" "$VIERGE" 2>&1 | grep -c "$(printf '\033')")"
+        "1 0" "$(bash "$FAUX/hooks/verifier-setup.sh" "$VIERGE" 2>&1 | grep -cF 'Post?[31mX?FAUX?31m?Z') $(bash "$FAUX/hooks/verifier-setup.sh" "$VIERGE" 2>&1 | grep -c "$(printf '\033')")"
 
 section "Faux positifs retirés"
 verifie "les skills synchronisés par Claude Code ne sont pas « jamais chargés »" \

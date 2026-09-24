@@ -4,7 +4,7 @@
 make test
 ```
 
-Neuf groupes, 199 cas. Chacun dit la même chose : *j'envoie ceci à ce hook,
+Neuf groupes ; `make test` affiche le nombre de cas de chacun. Chacun dit la même chose : *j'envoie ceci à ce hook,
 j'attends ce verdict*.
 
 | groupe | ce qu'il garde |

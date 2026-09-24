@@ -137,6 +137,14 @@ verifie "un .env dont le chemin contient un caractère invalide reste REFUSÉ" \
         2 "$(code_hook "$GARDE" "$(python3 -I -c 'import json; print(json.dumps({"tool_input": {"file_path": "/p/\ud800/.env"}}))')")"
 verifie "une entrée sans tool_input : rien à contrôler, pas une erreur" \
         0 "$(code_hook "$GARDE" '{"tool_input": null}')"
+# Sur macOS, les majuscules ne distinguent pas deux fichiers : écrire .ENV
+# écrase .env. Et basename échouait au-delà d'environ 1 000 caractères.
+verifie "« .ENV » est REFUSÉ comme « .env »" \
+        2 "$(code_hook "$GARDE" "$(entree_ecriture /tmp/projet/.ENV 'x')")"
+verifie "« Wallet.JSON » est REFUSÉ comme « wallet.json »" \
+        2 "$(code_hook "$GARDE" "$(entree_ecriture /tmp/projet/Wallet.JSON 'x')")"
+verifie "un .env au bout d'un chemin de 1 500 caractères reste REFUSÉ" \
+        2 "$(code_hook "$GARDE" "$(entree_ecriture "/tmp/$(printf 'a%.0s' $(seq 1500))/.env" 'x')")"
 
 # L'avertissement « fichier sensible » sortait en texte simple avec le code 0 :
 # il ne partait que dans le journal de débogage, personne ne l'a jamais vu, et

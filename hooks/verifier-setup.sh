@@ -103,21 +103,126 @@ R, J, V, N = ("\033[0;31m", "\033[0;33m", "\033[0;32m", "\033[0m") if C else (""
 
 CONTEXTE = {"UserPromptSubmit", "UserPromptExpansion", "SessionStart", "PostModelSwitch"}
 JSON = re.compile(r"systemMessage|additionalContext|permissionDecision|hookSpecificOutput|[\"']decision[\"']")
-AFFICHE = re.compile(r"(^|;|&&|\bthen|\bdo|\belse)\s*(echo|printf|cat)\b")
-# Un texte écrit en toutes lettres sur stdout (echo "…", print("…")) est du
-# texte simple, sauf s'il commence par une accolade. Sans ce repérage, un JSON
-# écrit n'importe où dans le fichier rendait tout le hook « entendu ».
-LITTERAL_SH = re.compile(r"""\b(?:echo|printf)\s+(?:-\w+\s+)*(["'])(.*?)\1""")
-LITTERAL_PY = re.compile(r"""(?:\bprint|sys\.stdout\.write)\(\s*[fFrRbB]{0,2}(["'])(.*?)\1""")
+AFFICHE = re.compile(r"(^|;|&&|\|\||\{|\bthen|\bdo|\belse)\s*(echo|printf|cat)\b")
+# Un texte écrit en toutes lettres sur stdout (echo "…", printf '%s' "…",
+# print("…"), cat <<EOF) est du texte simple, sauf s'il commence par une
+# accolade. Sans ce repérage, un JSON écrit n'importe où dans le fichier
+# rendait tout le hook « entendu ».
 VARIABLE = re.compile(r"\$\{\w+\}|\$\w+|%[-\d.]*[sdif]|\\[ntre]|\\033\[[\d;]*m")
+LITTERAL_PY = re.compile(r"""(?:\bprint|sys\.stdout\.write)\(\s*[fFrRbB]{0,2}(\"\"\"|'''|"|')(.*?)\1""", re.S)
+CHAINES = re.compile(r"\"[^\"]*\"|'[^']*'")
+TRIPLES = re.compile(r"(?s)\"\"\".*?\"\"\"|'''.*?'''")
+HEREDOC = re.compile(r"(?<!<)<<-?\s*(['\"]?)([A-Za-z_]\w*)\1")
+FONCTION = re.compile(r"^\s*(?:function\s+)?([\w-]+)\s*\(\)\s*\{")
 
 def texte_simple(litteral):
-    reste = VARIABLE.sub("", litteral).strip()
+    reste = VARIABLE.sub("", litteral or "").strip()
     return bool(reste) and not reste.startswith("{") and bool(re.search(r"[^\W\d_]", reste))
+
+def litteral_sh(l):
+    for motif, groupe in ((r"""\bprintf\s+(?:-\w+\s+)*(["'])%s(?:\\n)?\1\s+(["'])(.*?)\2""", 3),
+                          (r"""\b(?:echo|printf)\s+(?:-\w+\s+)*(["'])(.*?)\1""", 2),
+                          (r"""\becho\s+(?:-\w+\s+)*([^\s"'$;|&>{(][^;|&>]*)""", 1)):
+        m = re.search(motif, l)
+        if m:
+            return m.group(groupe)
+    return None
 
 def propre(t):
     """Un nom lu dans un fichier de réglages ne pilote pas le terminal."""
-    return re.sub(r"[\x00-\x1f\x7f]", "?", str(t))
+    return re.sub(r"[\x00-\x1f\x7f-\x9f‎‏‪-‮⁦-⁩]", "?", str(t))
+
+def lignes_py(code):
+    """Lignes logiques : un print( sur plusieurs lignes, ou une chaîne entre
+    triples guillemets, forment une seule instruction."""
+    sortie, cur = [], ""
+    for l in code:
+        cur = cur + "\n" + l if cur else l
+        sans = CHAINES.sub('""', TRIPLES.sub('""', cur))
+        if cur.count('"""') % 2 or cur.count("'''") % 2:
+            continue                                    # triple guillemet encore ouvert
+        if sum(sans.count(c) for c in "([{") > sum(sans.count(c) for c in ")]}"):
+            continue                                    # parenthèse encore ouverte
+        sortie.append(cur)
+        cur = ""
+    if cur:
+        sortie.append(cur)
+    return sortie
+
+def sorties_sh(code):
+    """(stdout, stderr, texte simple) d'un script shell, en tenant compte des
+    lignes coupées par « \\ », des groupes { … } >&2, des fonctions dont la
+    sortie est capturée par $(…), et des documents <<EOF."""
+    lignes, cur = [], ""
+    for l in code:                                      # recolle les « \ » de fin de ligne
+        if l.rstrip().endswith("\\"):
+            cur += l.rstrip()[:-1] + " "
+        else:
+            lignes.append(cur + l)
+            cur = ""
+    if cur:
+        lignes.append(cur)
+    texte = "\n".join(lignes)
+
+    # Premier passage : documents <<EOF, groupes et fonctions.
+    corps_heredoc, vers_stderr, vers_fichier, corps_fonction = set(), set(), set(), {}
+    heredocs, pile, fin_heredoc = {}, [], None
+    for i, l in enumerate(lignes):
+        if fin_heredoc is not None:
+            corps_heredoc.add(i)
+            if l.strip() == fin_heredoc:
+                fin_heredoc = None
+            continue
+        m = HEREDOC.search(l)
+        if m:
+            heredocs[i] = i + 1
+            fin_heredoc = m.group(2)
+        nu = CHAINES.sub('""', l)
+        f = FONCTION.match(nu)
+        if f:
+            if re.search(r"\}\s*;?\s*$", nu[f.end():]):
+                corps_fonction.setdefault(f.group(1), set()).add(i)
+            else:
+                pile.append(("f", f.group(1), i))
+        elif re.match(r"^\s*\{\s*$", nu):
+            pile.append(("g", None, i))
+        elif re.match(r"^\s*\}", nu) and pile:
+            genre, nom, debut = pile.pop()
+            if genre == "f":
+                corps_fonction.setdefault(nom, set()).update(range(debut, i + 1))
+            elif ">&2" in nu:
+                vers_stderr.update(range(debut, i + 1))
+            elif ">" in nu:
+                vers_fichier.update(range(debut, i + 1))
+    capturees, vers_stderr_fn = set(), set()
+    for nom, rang in corps_fonction.items():
+        n = re.escape(nom)
+        if re.search(r"\$\(\s*" + n + r"\b|`\s*" + n + r"\b", texte):
+            capturees.update(rang)                      # valeur de retour, pas un message
+        elif re.search(r"(^|[;&|\s])" + n + r"\b[^\n]*>&2", texte):
+            vers_stderr_fn.update(rang)
+
+    stdout = stderr = simple = False
+    for i, l in enumerate(lignes):
+        if i in corps_heredoc or i in capturees or i in vers_fichier:
+            continue
+        nu = CHAINES.sub('""', l)
+        if not AFFICHE.search(nu):
+            continue
+        if re.search(r"(?<!\|)\|(?!\|)", nu):           # echo ... | grep : un test, pas une sortie
+            continue
+        if ">&2" in nu or i in vers_stderr or i in vers_stderr_fn:
+            stderr = True
+        elif ">" in nu.split("<<")[0]:                  # vers un fichier ou /dev/null
+            continue
+        else:
+            stdout = True
+            if i in heredocs:                           # cat <<EOF : le texte est le corps
+                corps = [lignes[k] for k in sorted(corps_heredoc) if k > i and lignes[k].strip()][:1]
+                simple = simple or texte_simple(corps[0] if corps else "")
+            else:
+                simple = simple or texte_simple(litteral_sh(l))
+    return stdout, stderr, simple
 
 # Chemin d'un hook personnel : ~, $HOME, "$HOME" entre guillemets, ${HOME}, ou
 # le chemin complet. Seule la première forme était reconnue : un hook branché
@@ -152,13 +257,19 @@ def perso(commande):
         m = NOM.match(commande, fin)
         debut = mot[i]
         prefixe = commande[debut:i] if i - debut <= 4096 else None
+        if prefixe == "" and debut >= 2 and commande[debut - 1] in "\"'":
+            # « "$HOME"/.claude/hooks/x » : le mot est entre guillemets, fermés
+            # juste avant la barre.
+            ouvre = commande.rfind(commande[debut - 1], max(0, debut - 4097), debut - 1)
+            if ouvre != -1:
+                prefixe, debut = commande[ouvre + 1:debut - 1], ouvre
         # Au-delà de 4 096 caractères, ce n'est pas un chemin de fichier : le
         # recopier à chaque occurrence coûtait un temps quadratique.
         if m and prefixe is not None and m.group() not in (".", ".."):
             nom = m.group()
             if prefixe in ("~", "$HOME", "${HOME}"):
                 yield morceau[debut], debut, os.path.join(claude, "hooks", nom), "hooks/" + nom
-            elif prefixe.startswith("/") or not prefixe:
+            elif prefixe.startswith("/"):
                 # Chemin complet : c'est ce fichier-là qui tourne, lui qu'on lit.
                 yield morceau[debut], debut, prefixe + MARQUE + nom, prefixe + MARQUE + nom
         i = commande.find(MARQUE, fin)
@@ -202,16 +313,18 @@ def lire(hooks, trouver, *args):
     return ok
 
 n_forme = 0
+perso_lu = False          # pas de ✓ sur des hooks qu'on n'a pas pu lire
 chemin_reglages = os.path.join(claude, "settings.json")
 if not os.path.isfile(chemin_reglages):
     print(f"  {V}✓{N} aucun settings.json : aucun hook personnel branché")
 else:
     try:
         reglages = json.load(open(chemin_reglages, encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         reglages = None
         print(f"  {R}✗{N} settings.json illisible : impossible de savoir quels hooks sont branchés")
         n_forme += 1
+    perso_lu = reglages is not None
     if reglages is not None and not (isinstance(reglages, dict) and lire(reglages.get("hooks"), perso)):
         print(f"  {R}✗{N} settings.json : la liste des hooks n'a pas la forme attendue, "
               "une partie n'est pas contrôlée")
@@ -221,7 +334,7 @@ n_perso = len(branches)
 if plugin_hooks and os.path.isfile(plugin_hooks):
     try:
         contenu = json.load(open(plugin_hooks, encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         contenu = None
     if not (isinstance(contenu, dict) and
             lire(contenu.get("hooks"), du_plugin, os.path.dirname(plugin_hooks))):
@@ -239,29 +352,17 @@ def muet(chemin, evt, lance_en_python):
         return None
     en_py = lance_en_python or bool(lignes and "python" in lignes[0])
     code = [l for l in lignes if not l.lstrip().startswith("#")]
-    stdout = stderr = simple = False
-    for l in code:
-        if en_py:
+    if en_py:
+        stdout = stderr = simple = False
+        for l in lignes_py(code):
             if "sys.stderr" in l and re.search(r"print\(|\.write\(", l):
                 stderr = True
             elif re.search(r"\bprint\(|sys\.stdout\.write", l):
                 stdout = True
                 m = LITTERAL_PY.search(l)
                 simple = simple or bool(m and texte_simple(m.group(2)))
-            continue
-        nu = re.sub(r"\"[^\"]*\"|'[^']*'", '""', l)   # le texte entre guillemets ne compte pas
-        if not AFFICHE.search(nu):
-            continue
-        if re.search(r"(?<!\|)\|(?!\|)", nu):           # echo ... | grep : un test, pas une sortie
-            continue
-        if ">&2" in nu:
-            stderr = True
-        elif ">" in nu:                                 # vers un fichier ou /dev/null
-            continue
-        else:
-            stdout = True
-            m = LITTERAL_SH.search(l)
-            simple = simple or bool(m and texte_simple(m.group(2)))
+    else:
+        stdout, stderr, simple = sorties_sh(code)
     texte = "\n".join(code)
     bloque = re.search(r"(^|[^\w$])exit\s+2\b", texte) or \
         (en_py and re.search(r"sys\.exit\(\s*2\s*\)|\breturn\s+2\b", texte))
@@ -305,7 +406,7 @@ for (chemin, etiquette, evt), en_python in sorted(branches.items(), key=lambda x
         print(f"  {J}⚠{N} {propre(etiquette)} ({propre(evt)}) : {raison}")
         n += 1
         n_plugin += etiquette.startswith("plugin:")
-if n - n_plugin == 0:
+if n - n_plugin == 0 and perso_lu:
     print(f"  {V}✓{N} {n_perso} branchement(s), aucun hook ne parle dans le vide")
 if len(branches) > n_perso and n_plugin == 0:
     print(f"  {V}✓{N} hooks du plugin : {len(branches) - n_perso} contrôlé(s), aucun ne parle dans le vide")

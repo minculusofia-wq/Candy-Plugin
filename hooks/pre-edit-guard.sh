@@ -24,8 +24,14 @@ if [[ -z "$FILE_PATH" ]]; then
     exit 0
 fi
 
-BASENAME=$(basename "$FILE_PATH")
-DIRNAME=$(dirname "$FILE_PATH")
+# Nom du fichier par le shell lui-meme : basename et dirname de macOS echouent
+# au-dela d'environ 1 000 caracteres, et le hook sortait alors en 1, avant le
+# test des .env.
+BASENAME="${FILE_PATH##*/}"
+
+# Sans distinction de casse : sur macOS (APFS), ecrire .ENV ecrase .env, et
+# Wallet.json est wallet.json (seconde relecture de la 0.3.4).
+shopt -s nocasematch
 
 # Fichiers bloques (ne jamais editer via Claude)
 BLOCKED_FILES=(
