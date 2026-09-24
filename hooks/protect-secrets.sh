@@ -28,7 +28,7 @@ set -e
 INPUT=$(cat)
 
 # --- Detection : une valeur qui ressemble a un secret ---
-TROUVE=$(printf '%s' "$INPUT" | python3 -c '
+TROUVE=$(printf '%s' "$INPUT" | python3 -I -c '
 import sys, json, re
 
 try:
@@ -125,7 +125,7 @@ if [[ -n "$TROUVE" ]]; then
 fi
 
 # --- Garde .env : refuser de suivre un .env qui n'est pas ignore ---
-COMMAND=$(printf '%s' "$INPUT" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('tool_input',{}).get('command',''))" 2>/dev/null)
+COMMAND=$(printf '%s' "$INPUT" | python3 -I -c "import sys,json; print(json.loads(sys.stdin.read()).get('tool_input',{}).get('command',''))" 2>/dev/null)
 
 # Le point doit etre le chemin ENTIER. Sans l'ancre de fin, le motif attrapait
 # aussi « git add .claude-plugin/... » et bloquait une commande parfaitement normale

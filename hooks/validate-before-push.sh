@@ -34,22 +34,14 @@ echo ""
 # d'une seconde et refuse un depot incoherent : c'est la bonne maille ici.
 # Le controle complet reste la porte de sortie de phase, tenue par /fin-phase.
 
-if find "$PROJECT_DIR" -maxdepth 3 -name "*.xcodeproj" -print -quit 2>/dev/null | grep -q .; then
-    echo -e "${YELLOW}📱 Projet app détecté — contrôle de cohérence...${NC}"
-    if [[ -f "$PROJECT_DIR/scripts/verifier_coherence.py" ]]; then
-        if python3 "$PROJECT_DIR/scripts/verifier_coherence.py" > /dev/null 2>&1; then
-            echo -e "${GREEN}✓ Cohérence documentaire OK${NC}"
-        else
-            echo -e "${RED}✗ Cohérence documentaire ÉCHOUÉE${NC}"
-            python3 "$PROJECT_DIR/scripts/verifier_coherence.py" 2>&1 | grep '✗' | head -10
-            FAILURES=$((FAILURES + 1))
-        fi
-    else
-        echo -e "${YELLOW}⚠ pas de contrôle de cohérence dans ce projet${NC}"
-    fi
-    echo -e "${YELLOW}ℹ Le contrôle complet de l'app (~10 min) est la porte de sortie de phase, pas du push — voir /fin-phase.${NC}"
-    echo ""
-fi
+# Retire dans la 0.3.1 : sur un projet contenant un *.xcodeproj, cette etape
+# lancait scripts/verifier_coherence.py — du code du projet, execute par un hook
+# PreToolUse, donc AVANT que l'utilisateur ait accepte ou refuse la commande, et
+# sur toute commande qui contenait « git push » (un simple grep suffisait). Un
+# depot piege n'avait qu'a fournir un dossier x.xcodeproj/ vide et ce script
+# (trouve par la relecture de securite). Ce controle ne servait qu'a l'app de
+# l'auteur : le controle complet de l'app reste la porte de sortie de phase,
+# tenue par /fin-phase, lancee par l'utilisateur.
 
 # =====================
 # PAS DE SUITE DE TESTS ICI
@@ -74,7 +66,7 @@ PYTHON_FILES=$(find "$PROJECT_DIR" -name "*.py" -not -path "*venv*" -not -path "
 if [[ -n "$PYTHON_FILES" ]]; then
     SYNTAX_ERRORS=0
     for file in $PYTHON_FILES; do
-        if ! python3 -m py_compile "$file" 2>/dev/null; then
+        if ! python3 -I -m py_compile "$file" 2>/dev/null; then
             echo -e "${RED}✗ Syntax error in $file${NC}"
             SYNTAX_ERRORS=$((SYNTAX_ERRORS + 1))
         fi

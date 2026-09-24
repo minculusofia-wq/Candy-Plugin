@@ -190,7 +190,7 @@ s'ouvrir est un plan faux.
 make test
 ```
 
-Neuf groupes, 181 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Ceux
+Neuf groupes, 185 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Ceux
 des huit premiers groupes ont été vérifiés en remettant le défaut d'origine — un
 test qui passe toujours ne vaut rien. Le neuvième rejoue l'incident qui a fait
 naître le contrôle du jeu de documents, et les pannes qu'il doit signaler au lieu
@@ -209,6 +209,11 @@ de se taire. Voir [tests/README.md](tests/README.md).
   quatorze cas vérifient que le contrôle universel lance bien ces familles. Sans
   eux, ces cas sont sautés en le disant, et la suite reste verte.
 - Testé sur macOS. Les hooks sont du bash POSIX-ish ; Linux devrait passer, non testé.
+- **À savoir** : en fin de tour, si un fichier de code a changé dans un dépôt
+  git, le contrôle universel lance la suite de tests du projet — c'est son
+  travail. Dans un dépôt dont vous ne connaissez pas le code, c'est ce code qui
+  tourne. Les hooks, eux, n'exécutent jamais un module Python posé dans le
+  projet (`python3 -I`, vérifié par `tests/06-paquet.sh`).
 
 ## Ce qui n'est pas là, volontairement
 

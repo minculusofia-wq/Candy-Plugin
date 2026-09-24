@@ -87,7 +87,7 @@ fi
 # un fichier) n'est pas concerné.
 echo
 echo "[2/7] Hooks : entendus par quelqu'un"
-python3 - "$CLAUDE" <<'PYMUET'
+python3 -I - "$CLAUDE" <<'PYMUET'
 import json, os, re, sys
 claude = sys.argv[1]
 C = sys.stdout.isatty()
@@ -203,7 +203,7 @@ fi
 echo
 echo "[4/7] Mémoires : échéances et fraîcheur"
 AV=$ALERTES
-python3 - "$CLAUDE" <<'PYMEM'
+python3 -I - "$CLAUDE" <<'PYMEM'
 import os, re, sys, glob, datetime
 claude = sys.argv[1]
 C = sys.stdout.isatty()
@@ -294,7 +294,7 @@ fi
 echo
 echo "[6/7] Duplication règle ↔ hook"
 AV=$ALERTES
-python3 - "$CLAUDE" <<'PYDUP'
+python3 -I - "$CLAUDE" <<'PYDUP'
 import os, sys, glob, unicodedata
 claude = sys.argv[1]
 C = sys.stdout.isatty()

@@ -51,7 +51,7 @@ cat >/dev/null 2>&1 || true
 # La liste des chemins possibles vit dans jeu-de-documents.sh, qui en a aussi
 # besoin pour reconnaitre une app par phases : une seule liste.
 JEU="$ICI/jeu-de-documents.sh"
-ROADMAP=$(python3 "$JEU" --roadmap "$PROJET" 2>/dev/null)
+ROADMAP=$(python3 -I "$JEU" --roadmap "$PROJET" 2>/dev/null)
 CODE=$?
 if [[ "$CODE" != 0 ]]; then
     # --roadmap sort en 0 avec ou sans roadmap : tout autre code est une panne.
@@ -70,7 +70,7 @@ ROADMAP_REL="${ROADMAP#$PROJET/}"
 # n'arrivait jamais a la porte.
 bloc_documents() {
     local SORTIE CODE_JEU
-    SORTIE=$(python3 "$JEU" --rouges "$PROJET" 2>&1)
+    SORTIE=$(python3 -I "$JEU" --rouges "$PROJET" 2>&1)
     CODE_JEU=$?
     case $CODE_JEU in
         0) return 1 ;;

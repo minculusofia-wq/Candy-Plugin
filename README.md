@@ -188,7 +188,7 @@ plan is written: a plan whose first phase cannot open is a wrong plan.
 make test
 ```
 
-Nine groups, 181 cases: *send this to that hook, expect that verdict*. Those in
+Nine groups, 185 cases: *send this to that hook, expect that verdict*. Those in
 the first eight groups were checked by putting the original defect back; the
 ninth replays the incident that gave birth to the document-set check, and the
 failures it must report instead of staying silent. A test that always passes is
@@ -206,6 +206,11 @@ worth nothing. See [tests/README.md](tests/README.md).
   fourteen cases check that the universal control does run those families.
   Without them those cases are skipped out loud, and the suite stays green.
 - Tested on macOS. The hooks are plain bash; Linux should work, untested.
+- **Worth knowing**: at the end of a turn, if a code file changed in a git
+  repo, the universal check runs the project's test suite — that's its job. In
+  a repo whose code you don't know, that code is what runs. The hooks
+  themselves never execute a Python module dropped in the project
+  (`python3 -I`, checked by `tests/06-paquet.sh`).
 
 ## Deliberately not included
 

@@ -26,7 +26,7 @@ fi
 # depend d'un binaire absent echoue en SILENCE — ici il aurait controle le mauvais
 # dossier, ou rien du tout, sans le moindre message. python3 est deja requis par
 # tous les autres hooks du paquet.
-PROJET=$(printf '%s' "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('cwd',''))" 2>/dev/null)
+PROJET=$(printf '%s' "$INPUT" | python3 -I -c "import sys,json; print(json.load(sys.stdin).get('cwd',''))" 2>/dev/null)
 [ -z "$PROJET" ] && PROJET="${CLAUDE_PROJECT_DIR:-$PWD}"
 cd "$PROJET" 2>/dev/null || exit 0
 

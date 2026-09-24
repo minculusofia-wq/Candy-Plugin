@@ -154,11 +154,18 @@ verifie "dossier personnel atteint par un lien symbolique : le rappel parle quan
         1 "$(entretien "$MAISON" - RAPPEL_MAISON="$BAC/lien-maison" | message | grep -c 'il y a 31 jours')"
 verifie "projet ouvert par le lien, dossier personnel par son vrai chemin : idem" \
         1 "$(entretien "$BAC/lien-maison" - | message | grep -c 'il y a 31 jours')"
+# Terminal en latin-1 : un JSON écrit en UTF-8 brut fait planter l'écriture sur
+# l'emoji. Depuis « python3 -I », la variable PYTHONIOENCODING ne peut plus
+# servir de contournement : les trois rappels écrivent en ASCII.
 if locale -a 2>/dev/null | grep -qx 'fr_FR.ISO8859-1'; then
-    verifie "terminal en latin-1 : le rappel s'affiche, pas le message de panne" \
+    verifie "terminal en latin-1 : le rappel d'entretien s'affiche, pas le message de panne" \
             1 "$(entretien "$MAISON" - LC_ALL=fr_FR.ISO8859-1 | message | grep -c 'il y a 31 jours')"
+    verifie "terminal en latin-1 : le rappel de projet s'affiche" \
+            1 "$(sortie "$RAPPEL" "$BAC/app" RAPPELS_PROJETS="$LISTE" LC_ALL=fr_FR.ISO8859-1 | message | grep -c 'ranger la documentation')"
+    verifie "terminal en latin-1 : l'alerte CLAUDE.md trop long s'affiche" \
+            1 "$(sortie "$TAILLE" "$BAC/long" LC_ALL=fr_FR.ISO8859-1 | message | grep -c 'CLAUDE.md : 201 lignes')"
 else
-    saute "terminal en latin-1 : le rappel s'affiche, pas le message de panne" "locale fr_FR.ISO8859-1 absente de cette machine"
+    saute "terminal en latin-1 : les trois rappels s'affichent" "locale fr_FR.ISO8859-1 absente de cette machine"
 fi
 
 bilan

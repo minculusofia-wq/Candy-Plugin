@@ -68,7 +68,7 @@ section "Paquet — aucun hook ne plante sur une entrée ordinaire"
 INTERPRETEURS=$(python3 - <<'FIN_PY_INTERP'
 import json, re
 d = json.dumps(json.load(open("hooks/hooks.json")))
-motif = r'(bash|python3) \\"\$\{CLAUDE_PLUGIN_ROOT\}/hooks/([a-zA-Z0-9._-]+\.sh)\\"'
+motif = r'(bash|python3)(?: -I)? \\"\$\{CLAUDE_PLUGIN_ROOT\}/hooks/([a-zA-Z0-9._-]+\.sh)\\"'
 for interp, nom in re.findall(motif, d):
     print(nom, interp)
 FIN_PY_INTERP
@@ -112,6 +112,75 @@ for f in hooks/*.sh; do
     fi
 done
 verifie "aucun hook ne plante ni ne se plaint :$DETAIL" 0 "$PLANTES"
+
+section "Paquet — un module posé dans le projet ne s'exécute jamais"
+# « python3 -c », « python3 - » et « python3 -m » placent le dossier courant —
+# celui du projet — en tête des chemins de modules ; « python3 script.py » y
+# place le dossier du script. Un json.py à la racine d'un dépôt s'exécutait à
+# chaque message tapé, avec les droits de l'utilisateur, sans rien changer de
+# visible (trouvé par la relecture de sécurité de la 0.3.1). « python3 -I »
+# ferme la porte.
+#
+# Deux contrôles, parce que l'un seul ne suffit pas (vérifié) :
+#   · statique : tout appel à python3 dans les hooks porte -I. C'est lui qui voit
+#     un script lancé depuis le dossier temporaire, qu'on ne peut pas piéger ici ;
+#   · réel : chaque branchement de hooks.json rejoué tel quel dans un projet
+#     piégé — avec de quoi faire parler chaque hook jusqu'à son Python (une
+#     tâche en attente, un CLAUDE.md trop long). Sans elles, quatre appels sur
+#     quatorze restaient verts même privés de -I.
+# verifier-projet.sh n'est pas concerné : faire tourner le code du projet est
+# son travail.
+SANS_I=$(python3 - <<'FIN_PY_I'
+import glob, re
+n = []
+for f in sorted(glob.glob("hooks/*.sh")) + ["hooks/hooks.json"]:
+    for i, ligne in enumerate(open(f, encoding="utf-8"), 1):
+        if ligne.lstrip().startswith("#"):
+            continue
+        for m in re.finditer(r"(?<![\w.-])python3(?![\w.-])", ligne):
+            if not ligne[m.end():].startswith(" -I"):
+                n.append(f"{f}:{i}")
+print(" ".join(n))
+FIN_PY_I
+)
+verifie "tout appel à python3 dans les hooks porte -I :${SANS_I:+ }$SANS_I" "" "$SANS_I"
+
+PIEGE=$(mktemp -d)
+trap 'rm -rf "$PIEGE"' EXIT
+for m in json py_compile re glob datetime unicodedata; do
+    cat > "$PIEGE/$m.py" <<EOF
+open("$PIEGE/.temoin", "a").write("$m\n")
+raise ImportError("module piégé")
+EOF
+done
+printf 'ligne\n%.0s' $(seq 201) > "$PIEGE/CLAUDE.md"
+printf '%s | tâche piégée | - |\n' "$PIEGE" > "$PIEGE/.rappels.txt"
+ENTREE_PIEGE=$(python3 -c 'import json,sys; p=sys.argv[1]; print(json.dumps({"tool_input":{"command":"git push","file_path":p+"/a.txt","content":"x","new_string":"x"},"prompt":"bonjour","cwd":p,"last_assistant_message":"Voila.","session_id":"test","source":"startup"}))' "$PIEGE")
+FAUTIFS=""
+N=0
+while IFS= read -r CMD; do
+    [ -n "$CMD" ] || continue
+    N=$((N + 1))
+    rm -f "$PIEGE/.temoin"
+    ( cd "$PIEGE" && printf '%s' "$ENTREE_PIEGE" \
+        | env CLAUDE_PLUGIN_ROOT="$RACINE" CLAUDE_PROJECT_DIR="$PIEGE" RAPPEL_MAISON="$PIEGE" \
+              RAPPELS_PROJETS="$PIEGE/.rappels.txt" JEU_CACHE="$PIEGE/.cache-jeu" \
+              bash -c "$CMD" >/dev/null 2>&1 )
+    [ -f "$PIEGE/.temoin" ] && FAUTIFS="$FAUTIFS hooks.json#$N($(printf '%s' "$CMD" | grep -oE 'hooks/[a-zA-Z0-9._-]+' | tail -1 | sed 's#hooks/##'))"
+done <<< "$(python3 -c 'import json
+for groupes in json.load(open("hooks/hooks.json"))["hooks"].values():
+    for g in groupes:
+        for h in g["hooks"]:
+            print(h["command"])')"
+# Le contrôle du setup n'est pas branché : /maintenance le lance depuis le
+# dossier où l'on se trouve.
+rm -f "$PIEGE/.temoin"
+mkdir -p "$PIEGE/reglages/projects/p/memory"
+printf 'x\n' > "$PIEGE/reglages/projects/p/memory/a.md"
+printf 'x\n' > "$PIEGE/reglages/settings.json"
+( cd "$PIEGE" && bash "$RACINE/hooks/verifier-setup.sh" "$PIEGE/reglages" >/dev/null 2>&1 )
+[ -f "$PIEGE/.temoin" ] && FAUTIFS="$FAUTIFS verifier-setup.sh"
+verifie "aucun hook n'exécute un module posé dans le projet (json, re, glob…) :$FAUTIFS" "" "$FAUTIFS"
 
 section "Paquet — les images des README existent"
 ABSENTES=$(python3 - <<'PY'

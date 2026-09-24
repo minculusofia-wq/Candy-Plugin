@@ -27,7 +27,7 @@
 set -e
 
 INPUT=$(cat)
-json_get() { python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('tool_input',{}).get('$1',''))" <<< "$INPUT" 2>/dev/null; }
+json_get() { python3 -I -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('tool_input',{}).get('$1',''))" <<< "$INPUT" 2>/dev/null; }
 
 COMMAND=$(json_get command)
 

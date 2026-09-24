@@ -68,8 +68,8 @@ done < "$LISTE"
 
 [ -n "$POUR_UTILISATEUR" ] || exit 0
 
-python3 -c 'import json, sys
+python3 -I -c 'import json, sys
 print(json.dumps({"systemMessage": sys.argv[1],
                   "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": sys.argv[2]}},
-                 ensure_ascii=False))' "${POUR_UTILISATEUR%$'\n'}" "${POUR_CLAUDE%$'\n'}"
+                 ensure_ascii=True))' "${POUR_UTILISATEUR%$'\n'}" "${POUR_CLAUDE%$'\n'}"
 exit 0

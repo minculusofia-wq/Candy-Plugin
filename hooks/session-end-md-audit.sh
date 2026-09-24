@@ -126,7 +126,7 @@ echo ""
 
 # === CHECK 1 : Liens markdown casses ===
 echo -e "${BOLD}[1/4] Liens markdown casses${NC}"
-LIENS_OUT=$(printf '%s\n' "$MD_FILES" | python3 "$COEUR" liens "$PROJECT_DIR" 2>/dev/null)
+LIENS_OUT=$(printf '%s\n' "$MD_FILES" | python3 -I "$COEUR" liens "$PROJECT_DIR" 2>/dev/null)
 if [[ -n "$LIENS_OUT" ]]; then
     BROKEN_LINKS=$(printf '%s\n' "$LIENS_OUT" | wc -l | tr -d ' ')
     while IFS=$'\t' read -r ou quoi; do
@@ -209,7 +209,7 @@ echo ""
 # === CHECK 4 : Statuts contradictoires ===
 echo -e "${BOLD}[4/4] Statuts contradictoires (a creer / a trancher / pas commence)${NC}"
 STATUTS_MD=$(printf '%s\n' "$MD_FILES" | grep -vE 'CHANGELOG\.md|BUILD_PLAN\.md|PHASE_0_CHECKLIST\.md|ACTIONS' || true)
-STATUTS_OUT=$(printf '%s\n' "$STATUTS_MD" | python3 "$COEUR" statuts "$PROJECT_DIR" 2>/dev/null)
+STATUTS_OUT=$(printf '%s\n' "$STATUTS_MD" | python3 -I "$COEUR" statuts "$PROJECT_DIR" 2>/dev/null)
 if [[ -n "$STATUTS_OUT" ]]; then
     CONTRADICTIONS=$(printf '%s\n' "$STATUTS_OUT" | wc -l | tr -d ' ')
     while IFS=$'\t' read -r ou quoi; do

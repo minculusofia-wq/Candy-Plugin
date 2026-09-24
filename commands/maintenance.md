@@ -156,16 +156,18 @@ projets, qui se traitent chacun dans leur propre session.
   une formule vieillie.
 - **Présenter le reste** en une liste courte, une ligne par changement, en
   langage simple, avec ce qui a été écarté et pourquoi. Tout changement dans
-  `hooks/`, ou sur une ligne qui dit « Jamais », « Ne jamais » ou « Toujours »,
-  se montre **en diff exact**, fichier et lignes, pas seulement en une ligne.
+  `hooks/`, ou sur une ligne qui dit « Jamais », « Ne jamais », « Toujours »
+  (ou NEVER, ALWAYS, MUST), se montre **en diff exact**, fichier et lignes, pas seulement en une ligne.
   L'utilisateur valide la liste d'un « go », ou retire des lignes.
 - **Rien ne s'applique si `~/.claude` n'est pas un dépôt git** : aucune
   modification ne serait annulable. Proposer le `git init` local de l'étape 1,
   et s'arrêter là.
 - Appliquer ce qui est validé, un commit par changement. Dans `hooks/`, ne
-  changer que du texte, jamais la logique ; puis `bash -n` sur le hook et un
-  passage avec une entrée ordinaire, sortie montrée — une apostrophe ajoutée
-  dans un bloc `python3 -c '…'` casse le hook sans rien dire.
+  changer que du texte, jamais la logique ; puis `bash -n` sur le hook, et un
+  passage avec une entrée ordinaire qui doit sortir en 0 avec une sortie
+  d'erreur vide, résultat montré. Une apostrophe ajoutée dans un bloc
+  `python3 -I -c '…'` casse le hook : il peut alors bloquer toutes les
+  commandes, ou ne plus rien bloquer du tout.
 
 ### Clore
 

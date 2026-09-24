@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'cat | python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh\" --hook || echo \"{\\\"systemMessage\\\": \\\"⚠️ jeu-de-documents.sh a planté : contrôle du jeu de documents HORS SERVICE\\\"}\"'"
+            "command": "bash -c 'cat | python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh\" --hook || echo \"{\\\"systemMessage\\\": \\\"⚠️ jeu-de-documents.sh a planté : contrôle du jeu de documents HORS SERVICE\\\"}\"'"
           },
           {
             "type": "command",
@@ -44,7 +44,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'INPUT=$(cat); CMD=$(printf \"%s\" \"$INPUT\" | python3 -c \"import sys,json; print(json.load(sys.stdin).get(\\\"tool_input\\\",{}).get(\\\"command\\\",\\\"\\\"))\" 2>/dev/null); if [[ \"$CMD\" == *\"git push\"* ]]; then bash \"${CLAUDE_PLUGIN_ROOT}/hooks/validate-before-push.sh\"; fi'"
+            "command": "bash -c 'INPUT=$(cat); CMD=$(printf \"%s\" \"$INPUT\" | python3 -I -c \"import sys,json; print(json.load(sys.stdin).get(\\\"tool_input\\\",{}).get(\\\"command\\\",\\\"\\\"))\" 2>/dev/null); if [[ \"$CMD\" == *\"git push\"* ]]; then bash \"${CLAUDE_PLUGIN_ROOT}/hooks/validate-before-push.sh\"; fi'"
           },
           {
             "type": "command",
@@ -79,7 +79,7 @@
           },
           {
             "type": "command",
-            "command": "bash -c 'cat | python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/relire-ma-reponse.sh\"'"
+            "command": "bash -c 'cat | python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/relire-ma-reponse.sh\"'"
           }
         ]
       }

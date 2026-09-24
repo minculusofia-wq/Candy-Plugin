@@ -37,9 +37,9 @@ done
 
 LIGNE="⚠️ $TROP — la doc officielle vise moins de $LIMITE lignes par CLAUDE.md. Le surplus se range selon la règle « une information, un seul fichier » (rules/une-info-un-fichier.md)."
 
-python3 -c 'import json, sys
+python3 -I -c 'import json, sys
 m = sys.argv[1]
 print(json.dumps({"systemMessage": m,
                   "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": m}},
-                 ensure_ascii=False))' "$LIGNE"
+                 ensure_ascii=True))' "$LIGNE"
 exit 0

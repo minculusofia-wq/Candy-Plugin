@@ -472,7 +472,7 @@ def main(argv):
         message = f"⚠️ Controle du jeu de documents HORS SERVICE : {e}."
         if mode == "hook":
             print(json.dumps({"systemMessage": message, "hookSpecificOutput": {
-                "hookEventName": "SessionStart", "additionalContext": message}}, ensure_ascii=False))
+                "hookEventName": "SessionStart", "additionalContext": message}}, ensure_ascii=True))
             return 0
         print(message, file=sys.stderr)
         return 2
@@ -505,7 +505,7 @@ def main(argv):
         print(json.dumps({"systemMessage": resume + " · ".join(morceaux),
                           "hookSpecificOutput": {"hookEventName": "SessionStart",
                                                  "additionalContext": contexte}},
-                         ensure_ascii=False))
+                         ensure_ascii=True))
         return 0
 
     print(rapport(b))
@@ -522,7 +522,7 @@ if __name__ == "__main__":
         message = f"⚠️ Controle du jeu de documents HORS SERVICE : plantage ({type(e).__name__}: {e})."
         if "--hook" in sys.argv:
             print(json.dumps({"systemMessage": message, "hookSpecificOutput": {
-                "hookEventName": "SessionStart", "additionalContext": message}}, ensure_ascii=False))
+                "hookEventName": "SessionStart", "additionalContext": message}}, ensure_ascii=True))
             sys.exit(0)
         print(message, file=sys.stderr)
         sys.exit(3)
