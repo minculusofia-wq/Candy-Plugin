@@ -165,16 +165,32 @@ Puis relancer le contrôle de cohérence du projet et montrer son verdict.
 
 **Sauf en `ROUGE`, le commit part.** Ne pas demander l'autorisation.
 
-Le message de commit porte, en clair, la liste des points en attente. Une dette
-écrite vaut mieux qu'un blocage contourné : bloquer ferait sauter le dispositif
-au bout de deux fois.
-
-Puis écrire le témoin que le hook de commit de phase attend, avec le verdict
-dedans :
+D'abord écrire le témoin que le hook de clôture attend, avec le verdict dedans —
+**avant** le commit, sinon le hook le refuse :
 
 ```bash
-printf '%s\n' "<VERDICT> — <points en attente, un par ligne>" > "$PWD/.claude-phase-debug-done"
+RACINE=$(git rev-parse --show-toplevel)
+EXCLU=$(git rev-parse --git-path info/exclude)
+grep -qx '.claude-phase-debug-done' "$EXCLU" 2>/dev/null || echo '.claude-phase-debug-done' >> "$EXCLU"
+printf '%s\n' "<VERDICT> — <points en attente, un par ligne>" > "$RACINE/.claude-phase-debug-done"
 ```
+
+Le témoin va à la racine du dépôt (le hook le cherche à la racine du projet),
+et il est exclu de git localement : un `git add -A` ne doit jamais l'emporter.
+Un témoin suivi par git ne vaut rien.
+
+Puis le commit, dont le message **commence par le marqueur de clôture** :
+
+```
+cloture(phase N): <VERDICT> — <résumé>
+```
+
+suivi, en clair, de la liste des points en attente. Une dette écrite vaut mieux
+qu'un blocage contourné : bloquer ferait sauter le dispositif au bout de deux fois.
+
+Ce marqueur est réservé à ce commit. Le hook `rule12-phase-debug-required.sh`
+refuse tout commit qui le porte sans témoin de moins de 30 minutes, et laisse
+passer tous les autres — `fix(phase N): …` en cours de phase n'est jamais gêné.
 
 ## 9. Fermer la phase — seulement en `VERT`
 

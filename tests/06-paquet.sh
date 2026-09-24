@@ -137,7 +137,10 @@ for f in sorted(glob.glob("hooks/*.sh")) + ["hooks/hooks.json"]:
     for i, ligne in enumerate(open(f, encoding="utf-8"), 1):
         if ligne.lstrip().startswith("#"):
             continue
-        for m in re.finditer(r"(?<![\w.-])python3(?![\w.-])", ligne):
+        # python3 en toutes lettres, et les interpretes choisis par
+        # validate-before-push, lances en tete de commande (« $("$cand" »,
+        # « | "$PY" ») : ceux-la aussi.
+        for m in re.finditer(r"(?<![\w.-])python3(?![\w.-])|(?:\$\(|\|\s*|^\s*)\"\$(?:PY|cand)\"", ligne):
             if not ligne[m.end():].startswith(" -I"):
                 n.append(f"{f}:{i}")
 print(" ".join(n))
@@ -154,6 +157,9 @@ raise ImportError("module piégé")
 EOF
 done
 printf 'ligne\n%.0s' $(seq 201) > "$PIEGE/CLAUDE.md"
+# Un dépôt avec un .py suivi : sans lui, le contrôle avant push s'arrête avant
+# son Python et ce rejeu ne vérifie rien pour lui.
+git -C "$PIEGE" init -q && printf 'x = 1\n' > "$PIEGE/app.py" && git -C "$PIEGE" add app.py
 printf '%s | tâche piégée | - |\n' "$PIEGE" > "$PIEGE/.rappels.txt"
 ENTREE_PIEGE=$(python3 -c 'import json,sys; p=sys.argv[1]; print(json.dumps({"tool_input":{"command":"git push","file_path":p+"/a.txt","content":"x","new_string":"x"},"prompt":"bonjour","cwd":p,"last_assistant_message":"Voila.","session_id":"test","source":"startup"}))' "$PIEGE")
 FAUTIFS=""

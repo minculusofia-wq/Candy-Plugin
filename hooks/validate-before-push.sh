@@ -65,28 +65,90 @@ echo ""
 # =====================
 # SYNTAX CHECK
 # =====================
+#
+# Revu dans la 0.3.3, trois pieges :
+#   - le python3 par defaut de macOS est un 3.9 : il refuse un `match` ou une
+#     f-string 3.12 parfaitement valides. On prend le Python 3 le plus recent
+#     du PATH ;
+#   - le controle fouillait tout le dossier, environnements non suivis compris :
+#     sur un dossier reel, 9 180 fichiers de code tiers et 12 secondes. Seuls
+#     les fichiers suivis par git partent au push : ce sont eux qu'on controle ;
+#   - une session ouverte dans le dossier personnel fouillait tout le disque.
+#     Sans .git a la racine du projet, il n'y a rien a controler.
+# Un environnement suivi par erreur reste ignore, reconnu par le DEBUT du nom
+# d'un dossier (venv, .venv-3.12…) : un « devenv » reste controle.
+# core.fsmonitor coupe : git ne lance aucune commande configuree dans le depot.
+# Compilation en memoire, dans un seul processus : aucun .pyc ecrit.
+# Relecture de securite : seuls les fichiers ordinaires de moins de 2 Mo sont
+# lus (un lien vers /dev/zero ou un tube bloquait le hook), une erreur sur un
+# fichier ne fait plus sauter tout le controle, et un Python qui plante fait
+# refuser le push au lieu de le laisser passer.
 echo -e "${YELLOW}📋 Syntax checking...${NC}"
 
-# Python syntax
-# Les dossiers a ignorer sont reconnus par leur nom, SOUS le projet : filtrer le
-# chemin complet ignorait tout un projet range dans un dossier « devenv ».
-PYTHON_FILES=$(find "$PROJECT_DIR" -mindepth 1 \
-    \( -type d \( -name "*venv*" -o -name __pycache__ -o -name node_modules -o -name .git \) -prune \) \
-    -o \( -type f -name "*.py" -print \) 2>/dev/null | head -20)
-if [[ -n "$PYTHON_FILES" ]]; then
-    SYNTAX_ERRORS=0
-    # Une ligne par fichier : un chemin avec des espaces reste un seul fichier.
-    while IFS= read -r file; do
-        if ! python3 -I -m py_compile "$file" 2>/dev/null; then
-            echo -e "${RED}✗ Syntax error in $file${NC}"
-            SYNTAX_ERRORS=$((SYNTAX_ERRORS + 1))
-        fi
-    done <<< "$PYTHON_FILES"
-    if [[ $SYNTAX_ERRORS -eq 0 ]]; then
-        echo -e "${GREEN}✓ Python syntax OK${NC}"
-    else
-        FAILURES=$((FAILURES + SYNTAX_ERRORS))
-    fi
+[[ -e "$PROJECT_DIR/.git" ]] || exit 0
+
+PY=""
+BEST=0
+# Les noms sont assembles (python3, python3.9…) : ce ne sont pas des appels, et
+# le controle statique de tests/06 exige -I sur tout appel ecrit en toutes
+# lettres. Les deux appels ci-dessous, eux, portent -I.
+CANDIDATS=$(for n in 3 3.{9..20}; do type -a -p "python$n"; done 2>/dev/null | awk '!vu[$0]++')
+while IFS= read -r cand; do
+    [[ -n "$cand" ]] || continue
+    # Chemins absolus seulement, et hors du projet : un dossier relatif du PATH
+    # (« . », « bin ») ferait lancer un python3.X fourni par le depot ouvert,
+    # avant l'accord de l'utilisateur (relecture de securite de la 0.3.3).
+    [[ "$cand" == /* ]] || continue
+    case "$cand" in "$PROJECT_DIR"/*) continue ;; esac
+    v=$("$cand" -I -c 'import sys; print(sys.version_info[0] * 100 + sys.version_info[1])' 2>/dev/null) || continue
+    [[ "$v" =~ ^[0-9]+$ ]] || continue
+    if (( v > BEST )); then BEST=$v; PY=$cand; fi
+done <<< "$CANDIDATS"
+
+[[ -n "$PY" ]] || exit 0
+
+cd "$PROJECT_DIR"
+FAILURES=$(git -c core.fsmonitor=false ls-files -z -- '*.py' 2>/dev/null | "$PY" -I -c '
+import os, stat, sys
+IGNORES = {b"virtualenv", b".virtualenv", b"site-packages", b"__pycache__",
+           b"node_modules"}
+def ignore(nom):
+    return nom in IGNORES or nom.startswith((b"venv", b".venv"))
+casses = 0
+for chemin in sys.stdin.buffer.read().split(b"\0"):
+    if not chemin or any(ignore(x) for x in chemin.split(b"/")[:-1]):
+        continue
+    # O_NOFOLLOW + O_NONBLOCK puis fstat sur le fichier OUVERT : ni lien, ni
+    # tube, ni fichier remplace entre la verification et la lecture.
+    try:
+        fd = os.open(chemin, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        continue
+    with os.fdopen(fd, "rb") as f:
+        infos = os.fstat(f.fileno())
+        if not stat.S_ISREG(infos.st_mode) or infos.st_size > 2_000_000:
+            continue
+        source = f.read(2_000_001)
+    try:
+        compile(source, chemin.decode("utf-8", "replace"), "exec", dont_inherit=True)
+    except (SyntaxError, ValueError, RecursionError, MemoryError):
+        casses += 1
+    except Exception:
+        pass
+print(casses)
+' 2>/dev/null) || FAILURES=""
+
+# Python qui plante sans rendre de compte (le 3.9 de macOS sort en 139 sur
+# certains fichiers) : le controle n'a pas eu lieu, le push ne passe pas.
+if [[ ! "$FAILURES" =~ ^[0-9]+$ ]]; then
+    echo -e "${RED}✗ Python stopped before the end of the check${NC}"
+    echo "Push refuse : le controle de syntaxe Python du projet n'a pas pu aller au bout." >&2
+    echo "Le relancer : /verifier, ou python3 -I -m py_compile sur les fichiers .py du projet." >&2
+    exit 2
+fi
+
+if [[ $FAILURES -eq 0 ]]; then
+    echo -e "${GREEN}✓ Python syntax OK${NC}"
 fi
 
 echo ""

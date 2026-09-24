@@ -79,6 +79,8 @@ conversation suivante sans attendre (`une-info-un-fichier.md`, « Exception »).
 Un SEUL commit final regroupant code (si debug fait) + la documentation mise à jour.
 - Message clair en français résumant la session
 - Le commit se fait sans demander
+- Jamais le marqueur `cloture(phase N)` ni « LIVREE » : ce commit ne clôt pas de
+  phase (c'est `/fin-phase`), et le hook de clôture le refuserait
 - **Le push, lui, se demande** : montrer le message de commit et attendre le
   feu vert avant d'envoyer
 - Pas de commit "docs: maj" séparé
