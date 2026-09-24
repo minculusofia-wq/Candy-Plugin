@@ -14,8 +14,8 @@
 #
 # Sortie JSON : `systemMessage` s'affiche pour l'utilisateur, `additionalContext`
 # arrive dans le contexte de Claude (hooks.md, « JSON output » et « SessionStart
-# decision control »). Construite avec python3 : pas de jq, absent par defaut
-# sur les anciens macOS.
+# decision control »). Construite avec python3 : pas de jq, qui n'est pas
+# garanti sur toutes les machines.
 #
 
 set -u

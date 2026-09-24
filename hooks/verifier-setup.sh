@@ -87,49 +87,167 @@ fi
 # un fichier) n'est pas concerné.
 echo
 echo "[2/7] Hooks : entendus par quelqu'un"
-python3 -I - "$CLAUDE" <<'PYMUET'
+# Les hooks du plugin lui-même sont branchés dans son hooks.json, à côté de ce
+# script, et non dans settings.json : sans cette lecture, le contrôle ne les
+# voyait jamais (l'avertissement de pre-edit-guard est resté muet sans être
+# vu). BASH_SOURCE et non $0 : lancé par « bash -s », $0 vaut « bash » et c'est
+# le hooks.json du dossier courant — peut-être un dépôt piégé — qui était lu.
+python3 -I - "$CLAUDE" "${BASH_SOURCE[0]:-}" <<'PYMUET'
 import json, os, re, sys
-claude = sys.argv[1]
+claude, source = sys.argv[1], sys.argv[2]
+plugin_hooks = ""
+if source and os.path.isfile(source):
+    plugin_hooks = os.path.join(os.path.dirname(os.path.realpath(source)), "hooks.json")
 C = sys.stdout.isatty()
 R, J, V, N = ("\033[0;31m", "\033[0;33m", "\033[0;32m", "\033[0m") if C else ("", "", "", "")
-
-chemin_reglages = os.path.join(claude, "settings.json")
-if not os.path.isfile(chemin_reglages):
-    print(f"  {V}✓{N} aucun settings.json : aucun hook personnel branché")
-    sys.exit(0)
-try:
-    reglages = json.load(open(chemin_reglages, encoding="utf-8"))
-except (OSError, ValueError):
-    print(f"  {R}✗{N} settings.json illisible : impossible de savoir quels hooks sont branchés")
-    sys.exit(1)
 
 CONTEXTE = {"UserPromptSubmit", "UserPromptExpansion", "SessionStart", "PostModelSwitch"}
 JSON = re.compile(r"systemMessage|additionalContext|permissionDecision|hookSpecificOutput|[\"']decision[\"']")
 AFFICHE = re.compile(r"(^|;|&&|\bthen|\bdo|\belse)\s*(echo|printf|cat)\b")
+# Un texte écrit en toutes lettres sur stdout (echo "…", print("…")) est du
+# texte simple, sauf s'il commence par une accolade. Sans ce repérage, un JSON
+# écrit n'importe où dans le fichier rendait tout le hook « entendu ».
+LITTERAL_SH = re.compile(r"""\b(?:echo|printf)\s+(?:-\w+\s+)*(["'])(.*?)\1""")
+LITTERAL_PY = re.compile(r"""(?:\bprint|sys\.stdout\.write)\(\s*[fFrRbB]{0,2}(["'])(.*?)\1""")
+VARIABLE = re.compile(r"\$\{\w+\}|\$\w+|%[-\d.]*[sdif]|\\[ntre]|\\033\[[\d;]*m")
 
-# (nom du script, événement) -> lancé par python3 ?
+def texte_simple(litteral):
+    reste = VARIABLE.sub("", litteral).strip()
+    return bool(reste) and not reste.startswith("{") and bool(re.search(r"[^\W\d_]", reste))
+
+def propre(t):
+    """Un nom lu dans un fichier de réglages ne pilote pas le terminal."""
+    return re.sub(r"[\x00-\x1f\x7f]", "?", str(t))
+
+# Chemin d'un hook personnel : ~, $HOME, "$HOME" entre guillemets, ${HOME}, ou
+# le chemin complet. Seule la première forme était reconnue : un hook branché
+# autrement échappait au contrôle. Recherche par find, en un seul passage :
+# une regex du chemin complet prenait un temps quadratique sur une longue
+# commande.
+MARQUE = "/.claude/hooks/"
+SEPARATEURS = set(" \t\n\"'|;&=(`")
+NOM = re.compile(r"[\w.-]+")
+PLUGIN = re.compile(r"\$\{?CLAUDE_PLUGIN_ROOT\}?/hooks/(?P<nom>[\w.-]+)")
+
+def reperes(commande):
+    """Pour chaque position : début du mot, et début du morceau de commande
+    (après le dernier |, ; ou &) — c'est là qu'on lit l'interprète."""
+    mot, morceau, m1, m2 = [], [], 0, 0
+    for k, c in enumerate(commande):
+        mot.append(m1)
+        morceau.append(m2)
+        if c in SEPARATEURS:
+            m1 = k + 1
+        if c in "|;&":
+            m2 = k + 1
+    return mot, morceau
+
+def perso(commande):
+    if MARQUE not in commande:
+        return
+    mot, morceau = reperes(commande)
+    i = commande.find(MARQUE)
+    while i != -1:
+        fin = i + len(MARQUE)
+        m = NOM.match(commande, fin)
+        debut = mot[i]
+        prefixe = commande[debut:i] if i - debut <= 4096 else None
+        # Au-delà de 4 096 caractères, ce n'est pas un chemin de fichier : le
+        # recopier à chaque occurrence coûtait un temps quadratique.
+        if m and prefixe is not None and m.group() not in (".", ".."):
+            nom = m.group()
+            if prefixe in ("~", "$HOME", "${HOME}"):
+                yield morceau[debut], debut, os.path.join(claude, "hooks", nom), "hooks/" + nom
+            elif prefixe.startswith("/") or not prefixe:
+                # Chemin complet : c'est ce fichier-là qui tourne, lui qu'on lit.
+                yield morceau[debut], debut, prefixe + MARQUE + nom, prefixe + MARQUE + nom
+        i = commande.find(MARQUE, fin)
+
+def du_plugin(commande, dossier):
+    trouves = list(PLUGIN.finditer(commande))
+    if not trouves:
+        return
+    mot, morceau = reperes(commande)
+    for m in trouves:
+        debut = mot[m.start()]
+        yield (morceau[debut], debut, os.path.join(dossier, m.group("nom")),
+               "plugin:hooks/" + m.group("nom"))
+
+# (chemin du script, étiquette, événement) -> lancé par python3 ?
 branches = {}
-for evt, groupes in (reglages.get("hooks") or {}).items():
-    for g in groupes or []:
-        for h in g.get("hooks", []):
-            for interprete, nom in re.findall(r"(\S+)\s+(?:~|\$HOME)/\.claude/hooks/([\w.-]+)", h.get("command", "")):
-                branches.setdefault((nom, evt), "python" in interprete)
+def lire(hooks, trouver, *args):
+    """Rend False si la liste des hooks n'a pas la forme attendue."""
+    if hooks is None:
+        return True
+    if not isinstance(hooks, dict):
+        return False
+    ok = True
+    for evt, groupes in hooks.items():
+        for g in (groupes if isinstance(groupes, list) else [None]):
+            liste = g.get("hooks") if isinstance(g, dict) else None
+            if not isinstance(liste, list):
+                ok = False
+                continue
+            for h in liste:
+                if isinstance(h, dict) and "command" not in h:
+                    continue                    # hook http, prompt… : pas de script
+                commande = h.get("command") if isinstance(h, dict) else None
+                if not isinstance(commande, str):
+                    ok = False
+                    continue
+                for coupe, debut, chemin, etiquette in trouver(commande, *args):
+                    # « cat | python3 -I ~/... » est lancé par python3.
+                    avant = commande[max(coupe, debut - 4096):debut]
+                    branches.setdefault((chemin, etiquette, evt), "python" in avant)
+    return ok
 
-def muet(nom, evt, lance_en_python):
+n_forme = 0
+chemin_reglages = os.path.join(claude, "settings.json")
+if not os.path.isfile(chemin_reglages):
+    print(f"  {V}✓{N} aucun settings.json : aucun hook personnel branché")
+else:
+    try:
+        reglages = json.load(open(chemin_reglages, encoding="utf-8"))
+    except (OSError, ValueError):
+        reglages = None
+        print(f"  {R}✗{N} settings.json illisible : impossible de savoir quels hooks sont branchés")
+        n_forme += 1
+    if reglages is not None and not (isinstance(reglages, dict) and lire(reglages.get("hooks"), perso)):
+        print(f"  {R}✗{N} settings.json : la liste des hooks n'a pas la forme attendue, "
+              "une partie n'est pas contrôlée")
+        n_forme += 1
+n_perso = len(branches)
+
+if plugin_hooks and os.path.isfile(plugin_hooks):
+    try:
+        contenu = json.load(open(plugin_hooks, encoding="utf-8"))
+    except (OSError, ValueError):
+        contenu = None
+    if not (isinstance(contenu, dict) and
+            lire(contenu.get("hooks"), du_plugin, os.path.dirname(plugin_hooks))):
+        print(f"  {R}✗{N} hooks.json du plugin illisible ou mal formé : ses hooks ne sont "
+              "pas tous contrôlés")
+        n_forme += 1
+
+def muet(chemin, evt, lance_en_python):
     """Rend la raison pour laquelle personne n'entend ce hook, ou None."""
-    chemin = os.path.join(claude, "hooks", nom)
     if not os.path.isfile(chemin):
         return None
-    lignes = open(chemin, encoding="utf-8", errors="replace").read().splitlines()
+    try:
+        lignes = open(chemin, encoding="utf-8", errors="replace").read().splitlines()
+    except OSError:
+        return None
     en_py = lance_en_python or bool(lignes and "python" in lignes[0])
     code = [l for l in lignes if not l.lstrip().startswith("#")]
-    stdout = stderr = False
+    stdout = stderr = simple = False
     for l in code:
         if en_py:
             if "sys.stderr" in l and re.search(r"print\(|\.write\(", l):
                 stderr = True
             elif re.search(r"\bprint\(|sys\.stdout\.write", l):
                 stdout = True
+                m = LITTERAL_PY.search(l)
+                simple = simple or bool(m and texte_simple(m.group(2)))
             continue
         nu = re.sub(r"\"[^\"]*\"|'[^']*'", '""', l)   # le texte entre guillemets ne compte pas
         if not AFFICHE.search(nu):
@@ -142,6 +260,8 @@ def muet(nom, evt, lance_en_python):
             continue
         else:
             stdout = True
+            m = LITTERAL_SH.search(l)
+            simple = simple or bool(m and texte_simple(m.group(2)))
     texte = "\n".join(code)
     bloque = re.search(r"(^|[^\w$])exit\s+2\b", texte) or \
         (en_py and re.search(r"sys\.exit\(\s*2\s*\)|\breturn\s+2\b", texte))
@@ -158,6 +278,18 @@ def muet(nom, evt, lance_en_python):
     if (bloque or erreur) and stdout and not stderr and not json_:
         return ("sort en code d'erreur avec ses messages sur stdout — la raison "
                 "n'arrive ni à Claude ni à l'utilisateur (il faut stderr)")
+    # Bloquer quelque part ne rend pas entendu le reste du hook. Hors des
+    # événements de contexte, un texte simple sur stdout n'arrive à personne,
+    # quel que soit le code : en 0 il part au journal de débogage, en 2 la
+    # raison se lit sur stderr, en 1 seule la première ligne de stderr
+    # s'affiche. pre-edit-guard passait ainsi : il bloquait les .env, et son
+    # avertissement « fichier sensible » ne sortait jamais. Et écrire un JSON
+    # ailleurs dans le fichier n'y change rien : un texte en toutes lettres
+    # reste perdu.
+    if (simple or (stdout and not json_)) and evt not in CONTEXTE:
+        return ("une partie de ses messages sort en texte simple sur stdout — sur "
+                "cet événement, ni Claude ni l'utilisateur ne les voient (il faut "
+                "stderr avec un code 2, ou du JSON)")
     # Un code 1 ne bloque rien : un hook qui parle de bloquer sans jamais sortir
     # en code 2 laisse passer ce qu'il croit arrêter.
     if erreur and not bloque and not json_ and \
@@ -166,15 +298,18 @@ def muet(nom, evt, lance_en_python):
                 "laisse passer l'action")
     return None
 
-n = 0
-for (nom, evt), en_python in sorted(branches.items(), key=lambda x: (x[0][1], x[0][0])):
-    raison = muet(nom, evt, en_python)
+n = n_plugin = 0
+for (chemin, etiquette, evt), en_python in sorted(branches.items(), key=lambda x: (x[0][2], x[0][1])):
+    raison = muet(chemin, evt, en_python)
     if raison:
-        print(f"  {J}⚠{N} hooks/{nom} ({evt}) : {raison}")
+        print(f"  {J}⚠{N} {propre(etiquette)} ({propre(evt)}) : {raison}")
         n += 1
-if n == 0:
-    print(f"  {V}✓{N} {len(branches)} branchement(s), aucun hook ne parle dans le vide")
-sys.exit(min(n, 250))
+        n_plugin += etiquette.startswith("plugin:")
+if n - n_plugin == 0:
+    print(f"  {V}✓{N} {n_perso} branchement(s), aucun hook ne parle dans le vide")
+if len(branches) > n_perso and n_plugin == 0:
+    print(f"  {V}✓{N} hooks du plugin : {len(branches) - n_perso} contrôlé(s), aucun ne parle dans le vide")
+sys.exit(min(n + n_forme, 250))
 PYMUET
 ALERTES=$((ALERTES + $?))
 

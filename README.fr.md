@@ -198,10 +198,10 @@ de se taire. Voir [tests/README.md](tests/README.md).
 
 ## Prérequis
 
-- `python3` (utilisé par les hooks). **Pas de `jq`** — il n'est pas installé
-  par défaut sur macOS, et un hook qui dépend d'un binaire absent échoue en
-  silence : le contrôle avant push ne se déclenchait tout simplement jamais.
-  Cette dépendance a été supprimée.
+- `python3` (utilisé par les hooks). **Pas de `jq`** — il n'est pas garanti
+  sur toutes les machines, et un hook qui dépend d'un binaire absent échoue en
+  silence : sur une machine qui ne l'avait pas, le contrôle avant push ne se
+  déclenchait tout simplement jamais. Cette dépendance a été supprimée.
 - **Claude Code 2.1.196 ou plus récent** pour la relecture de la réponse : elle
   lit le champ `last_assistant_message`, que les versions antérieures n'envoient
   pas toujours. En dessous, elle ne signale qu'une faute sur deux.

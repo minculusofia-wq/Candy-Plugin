@@ -7,7 +7,17 @@
 set -e
 
 INPUT=$(cat)
-json_get() { python3 -I -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('tool_input',{}).get('$1',''))" <<< "$INPUT" 2>/dev/null; }
+# Un caractere que la sortie ne sait pas encoder (demi-caractere Unicode
+# orphelin) faisait planter la lecture : sous set -e, le hook sortait en 1, que
+# Claude Code traite comme non bloquant, et l'ecriture d'un .env passait. Il
+# devient un « ? », et le nom du fichier reste reconnu.
+json_get() { python3 -I -c "
+import sys, json
+d = json.loads(sys.stdin.read())
+t = d.get('tool_input')
+v = (t if isinstance(t, dict) else {}).get('$1') or ''
+sys.stdout.buffer.write(str(v).encode('utf-8', 'replace') + b'\\n')
+" <<< "$INPUT" 2>/dev/null; }
 FILE_PATH=$(json_get file_path)
 
 if [[ -z "$FILE_PATH" ]]; then
@@ -52,13 +62,25 @@ SENSITIVE_FILES=(
     "nginx.conf"
 )
 
+# L'avertissement sort en JSON. En texte simple sur stdout avec le code 0, il ne
+# partait que dans le journal de debogage (doc hooks, « Exit code 0 ») : ni
+# Claude ni l'utilisateur ne l'ont jamais vu. systemMessage s'affiche pour
+# l'utilisateur, additionalContext arrive a Claude a cote du resultat de
+# l'outil ; sans permissionDecision, les autorisations suivent leur cours
+# normal. Le texte ne cite que le nom de la liste ci-dessus, jamais le chemin :
+# il reste fixe, un nom de dossier ne peut pas y glisser une consigne.
 for sensitive in "${SENSITIVE_FILES[@]}"; do
     if [[ "$BASENAME" == "$sensitive" ]] || [[ "$FILE_PATH" == *"$sensitive"* ]]; then
-        echo ""
-        echo "FICHIER SENSIBLE: $FILE_PATH"
-        echo "Ce fichier affecte le deploiement/infrastructure."
-        echo "Verifiez attentivement les modifications."
-        break
+        python3 -I -c '
+import json, sys
+msg = ("Fichier sensible (%s) : il touche au déploiement ou à "
+       "l’infrastructure. Vérifier attentivement la modification." % sys.argv[1])
+print(json.dumps({"systemMessage": msg,
+                  "hookSpecificOutput": {"hookEventName": "PreToolUse",
+                                         "additionalContext": msg}},
+                 ensure_ascii=True))
+' "$sensitive"
+        exit 0
     fi
 done
 

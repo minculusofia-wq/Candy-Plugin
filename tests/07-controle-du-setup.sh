@@ -120,8 +120,30 @@ cat > "$ENTENDU/settings.json" <<'JSON'
                          {"type":"command","command":"bash ~/.claude/hooks/teste-seulement.sh"},
                          {"type":"command","command":"bash ~/.claude/hooks/stdout-seulement.sh"},
                          {"type":"command","command":"bash ~/.claude/hooks/code-un.sh"}]}],
+ "PostToolUse":[{"hooks":[{"type":"command","command":"bash \"$HOME/.claude/hooks/guillemets.sh\""},
+                          {"type":"command","command":"bash ${HOME}/.claude/hooks/accolades.sh"},
+                          {"type":"command","command":"bash __ENTENDU__/.claude/hooks/chemin-complet.sh"},
+                          {"type":"command","command":"bash __AILLEURS__/.claude/hooks/ailleurs.sh"},
+                          {"type":"command","command":"bash ~/.claude/hooks/json-et-texte.sh"},
+                          {"type":"command","command":"bash ~/.claude/hooks/json-en-variable.sh"},
+                          {"type":"command","command":"bash ~/.claude/hooks/avertit-et-refuse.sh"},
+                          {"type":"command","command":"bash -c 'cat | python3 -I ~/.claude/hooks/sans-shebang.py'"}]}],
  "UserPromptSubmit":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/ajoute-du-contexte.sh"}]}]}}
 JSON
+# Un chemin complet est lu à ce chemin-là : c'est ce fichier qui tourne.
+mkdir -p "$ENTENDU/.claude/hooks" "$BAC/ailleurs/.claude/hooks"
+sed -i.bak -e "s#__ENTENDU__#$ENTENDU#" -e "s#__AILLEURS__#$BAC/ailleurs#" "$ENTENDU/settings.json"
+for f in guillemets accolades; do
+    printf 'echo "Personne ne lira ceci."\nexit 0\n' > "$ENTENDU/hooks/$f.sh"
+done
+printf 'echo "Personne ne lira ceci."\nexit 0\n' > "$ENTENDU/.claude/hooks/chemin-complet.sh"
+printf 'echo "Personne ne lira ceci."\nexit 0\n' > "$BAC/ailleurs/.claude/hooks/ailleurs.sh"
+printf 'if [ -n "$X" ]; then echo '"'"'{"systemMessage": "x"}'"'"'; exit 0; fi\necho "Attention, fichier sensible."\nexit 0\n' \
+    > "$ENTENDU/hooks/json-et-texte.sh"
+printf 'OUT='"'"'{"systemMessage": "x"}'"'"'\necho "$OUT"\nexit 0\n' > "$ENTENDU/hooks/json-en-variable.sh"
+printf 'if [ -n "$X" ]; then echo "Refus." >&2; exit 2; fi\necho "Attention, fichier sensible."\nexit 0\n' \
+    > "$ENTENDU/hooks/avertit-et-refuse.sh"
+printf 'print("Rappel que personne ne lira.")\n' > "$ENTENDU/hooks/sans-shebang.py"
 printf 'echo "Pensez a commiter." >&2\nexit 0\n'            > "$ENTENDU/hooks/muet-fin-de-tour.sh"
 printf 'echo "Bloque : raison." >&2\nexit 2\n'              > "$ENTENDU/hooks/bloque.sh"
 printf "echo '{\"systemMessage\": \"attention\"}'\nexit 0\n" > "$ENTENDU/hooks/rend-du-json.sh"
@@ -156,6 +178,94 @@ verifie "un hook qui parle de bloquer mais sort en code 1 est signalé (il laiss
         1 "$(echo "$SORTIE_E" | grep -c 'code-un.sh (PreToolUse) : parle de bloquer mais ne sort jamais en code 2')"
 verifie "un settings.json sans hook : rien à signaler" \
         1 "$(bash "$CONTROLE" "$VIERGE" 2>&1 | grep -c '0 branchement(s), aucun hook ne parle dans le vide')"
+
+# Seul « ~/.claude/hooks/… » sans guillemets était reconnu : le même hook muet,
+# branché autrement, passait le contrôle.
+for f in guillemets accolades chemin-complet; do
+    verifie "un hook muet branché par un autre chemin ($f) est signalé" \
+            1 "$(echo "$SORTIE_E" | grep -c "$f.sh (PostToolUse) : ses messages sortent avec le code 0")"
+done
+verifie "un script python sans en-tête, lancé par « python3 -I », est lu comme du python" \
+        1 "$(echo "$SORTIE_E" | grep -c 'sans-shebang.py (PostToolUse) : ses messages sortent avec le code 0')"
+# Bloquer dans un cas suffisait à rendre tout le hook « entendu » : c'est ainsi
+# que l'avertissement « fichier sensible » de pre-edit-guard est resté muet.
+verifie "un hook qui bloque ailleurs mais avertit en texte simple est signalé" \
+        1 "$(echo "$SORTIE_E" | grep -c 'avertit-et-refuse.sh (PostToolUse) : une partie de ses messages sort en texte simple')"
+verifie "un chemin complet vers un autre dossier : c'est ce fichier-là qui est lu" \
+        1 "$(echo "$SORTIE_E" | grep -c "$BAC/ailleurs/.claude/hooks/ailleurs.sh (PostToolUse) : ses messages sortent avec le code 0")"
+# Un JSON écrit quelque part rendait tout le fichier « entendu ».
+verifie "un hook qui rend du JSON dans un cas mais du texte simple dans l'autre est signalé" \
+        1 "$(echo "$SORTIE_E" | grep -c 'json-et-texte.sh (PostToolUse) : une partie de ses messages sort en texte simple')"
+verifie "un JSON rangé dans une variable puis écrit n'est pas du texte simple" \
+        0 "$(echo "$SORTIE_E" | grep -c 'json-en-variable.sh')"
+
+section "Hooks entendus — un réglage mal formé ne fait pas planter le contrôle"
+FORME="$BAC/forme"
+mkdir -p "$FORME/hooks"
+for reglage in '{"hooks":[1]}' '{"hooks":{"Stop":"abc"}}' '{"hooks":{"Stop":["x"]}}' \
+               '{"hooks":{"Stop":[{"hooks":["x",{"command":42}]}]}}' '[1]' \
+               '{"hooks":{"Stop":{"hooks":[]}}}'; do
+    printf '%s' "$reglage" > "$FORME/settings.json"
+    SORTIE_F=$(bash "$CONTROLE" "$FORME" 2>&1)
+    verifie "$reglage : signalé, sans trace Python" \
+            "1 0" "$(echo "$SORTIE_F" | grep -c "n'a pas la forme attendue") $(echo "$SORTIE_F" | grep -c 'Traceback')"
+done
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"http","url":"https://exemple.invalid"}]}]}}' > "$FORME/settings.json"
+verifie "un hook sans commande (http) n'est pas une forme inattendue" \
+        0 "$(bash "$CONTROLE" "$FORME" 2>&1 | grep -c "n'a pas la forme attendue")"
+printf '{' > "$FORME/settings.json"
+verifie "settings.json illisible : les hooks du plugin sont quand même contrôlés" \
+        1 "$(bash "$CONTROLE" "$FORME" 2>&1 | grep -c 'hooks du plugin : [0-9]* contrôlé(s)')"
+# La regex du chemin complet prenait 24 s sur 80 000 caractères ; la recopie
+# du préfixe à chaque occurrence, 12 s sur celle-ci. Il en faut moins d'une.
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"%s"}]}]}}' \
+    "$(python3 -I -c 'print("/" * 300000 + "a/.claude/hooks/" * 20000)')" > "$FORME/settings.json"
+verifie "une commande de 600 000 caractères est lue en moins de 5 s" \
+        0 "$(python3 -I -c '
+import subprocess, sys
+try:
+    subprocess.run(["bash", sys.argv[1], sys.argv[2]], stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL, timeout=5)
+    print(0)
+except subprocess.TimeoutExpired:
+    print(1)
+' "$CONTROLE" "$FORME")"
+
+section "Hooks du plugin — contrôlés eux aussi"
+# Ils sont branchés dans hooks.json, pas dans settings.json : le contrôle ne
+# les lisait jamais.
+verifie "les hooks du plugin sont contrôlés, et aucun ne parle dans le vide" \
+        1 "$(bash "$CONTROLE" "$VIERGE" 2>&1 | grep -c 'hooks du plugin : [0-9]* contrôlé(s), aucun ne parle dans le vide')"
+FAUX="$BAC/faux-plugin"
+mkdir -p "$FAUX/hooks"
+cp "$CONTROLE" "$FAUX/hooks/"
+cat > "$FAUX/hooks/hooks.json" <<'JSON'
+{"hooks":{"PostToolUse":[{"hooks":[{"type":"command","command":"bash \"${CLAUDE_PLUGIN_ROOT}/hooks/bavard.sh\""}]}]}}
+JSON
+printf 'echo "Personne ne lira ceci."\nexit 0\n' > "$FAUX/hooks/bavard.sh"
+verifie "un hook muet du plugin est signalé" \
+        1 "$(bash "$FAUX/hooks/verifier-setup.sh" "$VIERGE" 2>&1 | grep -c 'plugin:hooks/bavard.sh (PostToolUse) : ses messages sortent avec le code 0')"
+ln -s "$CONTROLE" "$BAC/lien-vers-le-controle.sh"
+verifie "lancé par un lien symbolique, il trouve quand même les hooks du plugin" \
+        1 "$(bash "$BAC/lien-vers-le-controle.sh" "$VIERGE" 2>&1 | grep -c 'hooks du plugin : [0-9]* contrôlé(s)')"
+# Lancé par « bash -s », $0 vaut « bash » : le hooks.json lu était celui du
+# dossier courant, et un nom d'événement piégé s'affichait tel quel.
+PIEGE_H="$BAC/depot-piege"
+mkdir -p "$PIEGE_H/hooks"
+python3 -I -c '
+import json, sys
+json.dump({"hooks": {"Post\033[31mX\nFAUX": [{"hooks": [{"type": "command",
+           "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/bavard.sh"}]}]}}, open(sys.argv[1], "w"))
+' "$PIEGE_H/hooks.json"
+printf 'echo "x"\n' > "$PIEGE_H/bavard.sh"
+touch "$PIEGE_H/bash"      # le nom que prend $0 : un fichier du dépôt peut le porter
+SORTIE_S=$(cd "$PIEGE_H" && bash -s -- "$VIERGE" < "$CONTROLE" 2>&1)
+verifie "lancé par « bash -s », il ne lit pas le hooks.json du dossier courant" \
+        0 "$(echo "$SORTIE_S" | grep -c 'plugin:')"
+cp "$PIEGE_H/hooks.json" "$FAUX/hooks/hooks.json"
+printf 'echo "x"\n' > "$FAUX/hooks/bavard.sh"
+verifie "un nom d'événement piégé ne pilote pas le terminal" \
+        "1 0" "$(bash "$FAUX/hooks/verifier-setup.sh" "$VIERGE" 2>&1 | grep -cF 'Post?[31mX?FAUX') $(bash "$FAUX/hooks/verifier-setup.sh" "$VIERGE" 2>&1 | grep -c "$(printf '\033')")"
 
 section "Faux positifs retirés"
 verifie "les skills synchronisés par Claude Code ne sont pas « jamais chargés »" \

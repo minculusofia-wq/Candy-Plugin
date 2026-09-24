@@ -2,3 +2,13 @@
 # contributeur peut en creer un en lancant pytest a la main.
 .pytest_cache/
 .DS_Store
+
+# Aucun secret n'a sa place dans ce dépôt public. Filet de sécurité si un
+# fichier de ce genre est posé par erreur dans la copie de travail.
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+keystore.json
+wallet.json

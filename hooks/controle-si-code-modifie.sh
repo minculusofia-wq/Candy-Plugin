@@ -22,7 +22,7 @@ if echo "$INPUT" | grep -q '"stop_hook_active"[[:space:]]*:[[:space:]]*true'; th
     exit 0
 fi
 
-# python3 et non jq : jq n'est pas installe par defaut sur macOS. Un hook qui
+# python3 et non jq : jq n'est pas garanti sur toutes les machines. Un hook qui
 # depend d'un binaire absent echoue en SILENCE — ici il aurait controle le mauvais
 # dossier, ou rien du tout, sans le moindre message. python3 est deja requis par
 # tous les autres hooks du paquet.

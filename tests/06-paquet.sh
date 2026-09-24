@@ -161,8 +161,11 @@ printf 'ligne\n%.0s' $(seq 201) > "$PIEGE/CLAUDE.md"
 # son Python et ce rejeu ne vérifie rien pour lui.
 git -C "$PIEGE" init -q && printf 'x = 1\n' > "$PIEGE/app.py" && git -C "$PIEGE" add app.py
 printf '%s | tâche piégée | - |\n' "$PIEGE" > "$PIEGE/.rappels.txt"
-ENTREE_PIEGE=$(python3 -c 'import json,sys; p=sys.argv[1]; print(json.dumps({"tool_input":{"command":"git push","file_path":p+"/a.txt","content":"x","new_string":"x"},"prompt":"bonjour","cwd":p,"last_assistant_message":"Voila.","session_id":"test","source":"startup"}))' "$PIEGE")
 FAUTIFS=""
+# Deux fichiers : a.txt passe par le chemin ordinaire, Dockerfile par la branche
+# « fichier sensible » de pre-edit-guard, qui a son propre appel à python3.
+for FICHIER in a.txt Dockerfile; do
+ENTREE_PIEGE=$(python3 -c 'import json,sys; p=sys.argv[1]; print(json.dumps({"tool_input":{"command":"git push","file_path":p+"/"+sys.argv[2],"content":"x","new_string":"x"},"prompt":"bonjour","cwd":p,"last_assistant_message":"Voila.","session_id":"test","source":"startup"}))' "$PIEGE" "$FICHIER")
 N=0
 while IFS= read -r CMD; do
     [ -n "$CMD" ] || continue
@@ -172,12 +175,13 @@ while IFS= read -r CMD; do
         | env CLAUDE_PLUGIN_ROOT="$RACINE" CLAUDE_PROJECT_DIR="$PIEGE" RAPPEL_MAISON="$PIEGE" \
               RAPPELS_PROJETS="$PIEGE/.rappels.txt" JEU_CACHE="$PIEGE/.cache-jeu" \
               bash -c "$CMD" >/dev/null 2>&1 )
-    [ -f "$PIEGE/.temoin" ] && FAUTIFS="$FAUTIFS hooks.json#$N($(printf '%s' "$CMD" | grep -oE 'hooks/[a-zA-Z0-9._-]+' | tail -1 | sed 's#hooks/##'))"
+    [ -f "$PIEGE/.temoin" ] && FAUTIFS="$FAUTIFS hooks.json#$N($(printf '%s' "$CMD" | grep -oE 'hooks/[a-zA-Z0-9._-]+' | tail -1 | sed 's#hooks/##'), $FICHIER)"
 done <<< "$(python3 -c 'import json
 for groupes in json.load(open("hooks/hooks.json"))["hooks"].values():
     for g in groupes:
         for h in g["hooks"]:
             print(h["command"])')"
+done
 # Le contrôle du setup n'est pas branché : /maintenance le lance depuis le
 # dossier où l'on se trouve.
 rm -f "$PIEGE/.temoin"

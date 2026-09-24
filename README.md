@@ -196,9 +196,10 @@ worth nothing. See [tests/README.md](tests/README.md).
 
 ## Requirements
 
-- `python3` (used by the hooks). **No `jq`** — it isn't installed by default
-  on macOS, and a hook that depends on a missing binary fails in silence: the
-  pre-push check simply never ran. That dependency was removed.
+- `python3` (used by the hooks). **No `jq`** — it isn't guaranteed to be on
+  every machine, and a hook that depends on a missing binary fails in silence:
+  on a machine without it, the pre-push check simply never ran. That dependency
+  was removed.
 - **Claude Code 2.1.196 or later** for the answer review: it reads the
   `last_assistant_message` field, which earlier versions don't always send.
   Below that version it catches about one slip in two.

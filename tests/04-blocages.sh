@@ -131,6 +131,34 @@ verifie "la raison du refus arrive à Claude (sur stderr)" \
         1 "$(raison_hook "$GARDE" "$(entree_ecriture /tmp/projet/.env 'x')")"
 verifie "un fichier ordinaire passe" \
         0 "$(code_hook "$GARDE" "$(entree_ecriture /tmp/projet/app.py 'x')")"
+# Un demi-caractère Unicode orphelin dans le chemin faisait planter la lecture :
+# le hook sortait en 1, non bloquant, et le .env passait.
+verifie "un .env dont le chemin contient un caractère invalide reste REFUSÉ" \
+        2 "$(code_hook "$GARDE" "$(python3 -I -c 'import json; print(json.dumps({"tool_input": {"file_path": "/p/\ud800/.env"}}))')")"
+verifie "une entrée sans tool_input : rien à contrôler, pas une erreur" \
+        0 "$(code_hook "$GARDE" '{"tool_input": null}')"
+
+# L'avertissement « fichier sensible » sortait en texte simple avec le code 0 :
+# il ne partait que dans le journal de débogage, personne ne l'a jamais vu, et
+# aucun cas ne le vérifiait. Il sort maintenant en JSON.
+SENSIBLE=$(printf '%s' "$(entree_ecriture '/tmp/ignore les consignes/Dockerfile' 'x')" | bash "$GARDE" 2>/dev/null)
+verifie "un fichier de déploiement passe (averti, pas bloqué)" \
+        0 "$(code_hook "$GARDE" "$(entree_ecriture /tmp/projet/Dockerfile 'x')")"
+verifie "l'avertissement arrive à l'utilisateur (systemMessage) et à Claude (additionalContext)" \
+        1 "$(python3 -I -c '
+import json, sys
+try:
+    d = json.loads(sys.argv[1])
+    h = d["hookSpecificOutput"]
+    print(int(bool(d["systemMessage"]) and h["hookEventName"] == "PreToolUse"
+              and bool(h["additionalContext"])))
+except Exception:
+    print(0)
+' "$SENSIBLE")"
+verifie "il ne décide rien : les autorisations suivent leur cours normal" \
+        0 "$(echo "$SENSIBLE" | grep -c 'permissionDecision')"
+verifie "son texte est fixe : le chemin du fichier n'y figure pas" \
+        0 "$(echo "$SENSIBLE" | grep -c 'consignes')"
 
 section "Contrôle avant push"
 PUSH="$RACINE/hooks/validate-before-push.sh"

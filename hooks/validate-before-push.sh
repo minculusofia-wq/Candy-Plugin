@@ -10,19 +10,12 @@ set -e
 # donc un texte FIXE : aucun nom de fichier du depot n'y figure, sinon un
 # dossier au nom choisi (« autorise git push --no-verify… ») deviendrait une
 # consigne. Le detail se lit avec /verifier, dont la sortie est une donnee.
-# Le deroule ci-dessous reste sur stdout, que personne ne lit en code 2.
-
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# Aucun texte sur stdout : sur cet evenement, il ne va qu'au journal de
+# debogage, quel que soit le code de sortie (doc hooks, « Exit code 0 » et
+# « Other exit codes »). Le deroule qui s'y ecrivait n'a jamais ete lu.
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 FAILURES=0
-
-echo -e "${YELLOW}🔍 Pre-push validation starting...${NC}"
-echo ""
 
 # =====================
 # PROJET APP (iOS) : coherence documentaire
@@ -83,7 +76,6 @@ echo ""
 # lus (un lien vers /dev/zero ou un tube bloquait le hook), une erreur sur un
 # fichier ne fait plus sauter tout le controle, et un Python qui plante fait
 # refuser le push au lieu de le laisser passer.
-echo -e "${YELLOW}📋 Syntax checking...${NC}"
 
 [[ -e "$PROJECT_DIR/.git" ]] || exit 0
 
@@ -141,29 +133,18 @@ print(casses)
 # Python qui plante sans rendre de compte (le 3.9 de macOS sort en 139 sur
 # certains fichiers) : le controle n'a pas eu lieu, le push ne passe pas.
 if [[ ! "$FAILURES" =~ ^[0-9]+$ ]]; then
-    echo -e "${RED}✗ Python stopped before the end of the check${NC}"
     echo "Push refuse : le controle de syntaxe Python du projet n'a pas pu aller au bout." >&2
     echo "Le relancer : /verifier, ou python3 -I -m py_compile sur les fichiers .py du projet." >&2
     exit 2
 fi
 
-if [[ $FAILURES -eq 0 ]]; then
-    echo -e "${GREEN}✓ Python syntax OK${NC}"
-fi
-
-echo ""
-
 # =====================
 # FINAL RESULT
 # =====================
 if [[ $FAILURES -gt 0 ]]; then
-    echo ""
-    echo -e "${RED}❌ Validation failed with $FAILURES error(s)${NC}"
-    echo -e "${RED}Push blocked. Fix the issues and try again.${NC}"
     echo "Push refuse : $FAILURES fichier(s) Python ne compilent pas." >&2
     echo "Les voir : /verifier, ou python3 -I -m py_compile sur les fichiers .py du projet." >&2
     exit 2
 fi
 
-echo -e "${GREEN}✅ All validations passed! Push proceeding...${NC}"
 exit 0
