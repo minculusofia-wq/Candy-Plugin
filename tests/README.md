@@ -4,7 +4,7 @@
 make test
 ```
 
-Neuf groupes, 160 cas. Chacun dit la même chose : *j'envoie ceci à ce hook,
+Neuf groupes, 181 cas. Chacun dit la même chose : *j'envoie ceci à ce hook,
 j'attends ce verdict*.
 
 | groupe | ce qu'il garde |
@@ -16,7 +16,7 @@ j'attends ce verdict*.
 | `05-audit-md.sh` | l'audit des `.md` compte juste et ignore ce qui est cité |
 | `06-paquet.sh` | le paquet reste installable et ne dépend que de `python3` |
 | `07-controle-du-setup.sh` | le contrôle du setup voit chaque panne visée — dont un hook branché que personne n'entend — et ne signale pas ce qui est légitime |
-| `08-ouverture-de-session.sh` | l'alerte CLAUDE.md trop long et le rappel de projet parlent au bon endroit, se taisent ailleurs, et rendent un JSON lisible |
+| `08-ouverture-de-session.sh` | l'alerte CLAUDE.md trop long, le rappel de projet et le rappel d'entretien parlent au bon endroit, se taisent ailleurs, rendent un JSON lisible — et une panne du rappel d'entretien s'affiche au lieu de se taire |
 | `09-jeu-de-documents.sh` | le jeu de documents : l'incident rejoué (bot à roadmap sans STRATEGY, JOURNAL, DEPLOY), chaque règle du tableau, le point rouge à la porte, et aucune panne qui passe pour un silence |
 
 ## Les cas sautés

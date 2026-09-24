@@ -4,7 +4,10 @@ description: Entretien du dossier ~/.claude — controle mecanique du setup, rel
 
 # Entretien du setup
 
-À lancer une fois par mois.
+Rien à retenir : le hook `rappel-entretien.sh` la propose de lui-même à
+l'ouverture d'une session dans `~` ou `~/.claude`, quand le dernier entretien a
+plus de 30 jours ou qu'un modèle Opus ou Fable n'a jamais servi à relire les
+consignes. Il suffit de répondre « go ».
 
 `~/.claude` est le seul « projet » que rien ne contrôle : `/verifier` y répond
 « AUCUN MOYEN DE VERIFICATION TROUVE », et c'est normal — ce dossier n'est le
@@ -13,8 +16,9 @@ rien ne le signale : un hook déclaré mais dont le script a disparu, un skill a
 mauvais format donc jamais chargé, une mémoire qui affirme une échéance dépassée
 depuis des semaines.
 
-Deux étapes. La première est mécanique et rapide. La seconde relit le passé et
-**propose** — elle ne corrige jamais seule.
+Trois étapes. La première est mécanique et rapide. La deuxième relit le passé et
+**propose** — elle ne corrige jamais seule. La troisième ne tourne que si le
+modèle de la session n'a jamais été audité.
 
 ---
 
@@ -24,8 +28,8 @@ Deux étapes. La première est mécanique et rapide. La seconde relit le passé 
 bash ${CLAUDE_PLUGIN_ROOT}/hooks/verifier-setup.sh
 ```
 
-Six points : hooks branchés ou appelés, skills chargeables, mémoires périmées,
-historique, duplication règle ↔ hook, poids du setup.
+Sept points : hooks branchés ou appelés, hooks entendus, skills chargeables,
+mémoires périmées, historique, duplication règle ↔ hook, poids du setup.
 
 ### Interpréter
 
@@ -112,10 +116,68 @@ relecture utile et une réécriture au hasard.
 
 ---
 
+## Étape 3 — Audit des consignes pour le modèle courant
+
+**Seulement si** le modèle de la session — Opus ou Fable — n'a pas encore sa
+ligne dans `~/.claude/.audit-consignes`. Son identifiant est celui que donne le
+rappel d'entretien ; lancée à la main, celui de la session sans le suffixe entre
+crochets (`claude-opus-5-5`, pas `claude-opus-5-5[1m]`). Sinon, le dire en une
+ligne et sauter l'étape.
+
+Des consignes écrites pour un modèle plus ancien peuvent gêner le suivant : un
+modèle récent les suit plus littéralement. La sous-commande `prompt-audit` de la
+skill `claude-api` les repère, et propose un diff qu'elle n'applique jamais
+sans l'accord de l'utilisateur.
+
+### Lancer
+
+Un sous-agent `general-purpose`, pour garder les fichiers lus hors de la
+conversation. Il charge la skill `claude-api` avec `prompt-audit`, **en nommant
+le modèle cible** — sans nom, l'audit le déduit lui-même du dossier — et rend le
+rapport et le diff proposé, sans rien appliquer.
+
+Périmètre : ce que l'utilisateur a écrit ou copié dans `~/.claude` —
+`CLAUDE.md`, `rules/`, `commands/`, `agents/`, le texte que ses `hooks/`
+injectent, et les skills de `skills/` qu'il a écrites lui-même. Hors périmètre :
+les skills téléchargées, les fichiers des plugins installés (une mise à jour
+écraserait la correction : la signaler à l'utilisateur, qui décide s'il
+prévient l'auteur — jamais d'issue ouverte à sa place), et les `CLAUDE.md` des
+projets, qui se traitent chacun dans leur propre session.
+
+### Trier, puis présenter
+
+- **Écarter d'office** toute proposition qui retire ou assouplit une règle
+  citant un incident, une date, ou une des quatre zones où l'utilisateur décide
+  (argent, irréversible, dépense, produit — voir `communication-style.md`), et
+  toute proposition qui touche aux paramètres de risque ou affaiblit un
+  garde-fou de sécurité (protection des secrets, contrôle avant push, garde
+  avant écriture). L'audit range les récits d'incident parmi le texte daté ;
+  ici, ils sont la raison de la règle. Un « Jamais » né d'un incident n'est pas
+  une formule vieillie.
+- **Présenter le reste** en une liste courte, une ligne par changement, en
+  langage simple, avec ce qui a été écarté et pourquoi. Tout changement dans
+  `hooks/`, ou sur une ligne qui dit « Jamais », « Ne jamais » ou « Toujours »,
+  se montre **en diff exact**, fichier et lignes, pas seulement en une ligne.
+  L'utilisateur valide la liste d'un « go », ou retire des lignes.
+- **Rien ne s'applique si `~/.claude` n'est pas un dépôt git** : aucune
+  modification ne serait annulable. Proposer le `git init` local de l'étape 1,
+  et s'arrêter là.
+- Appliquer ce qui est validé, un commit par changement. Dans `hooks/`, ne
+  changer que du texte, jamais la logique ; puis `bash -n` sur le hook et un
+  passage avec une entrée ordinaire, sortie montrée — une apostrophe ajoutée
+  dans un bloc `python3 -c '…'` casse le hook sans rien dire.
+
+### Clore
+
+Ajouter la ligne `AAAA-MM-JJ <modèle>` à `~/.claude/.audit-consignes`, même si
+aucun changement n'a été retenu : c'est ce qui fait taire le rappel.
+
+---
+
 ## Règles de la commande
 
 - **Ne rien corriger automatiquement.** L'utilisateur accepte ou refuse chaque
-  proposition, une par une.
+  proposition — une par une à l'étape 2, en une liste à l'étape 3.
 - **Un commit par acceptation**, avec un message qui dit ce qui change et
   pourquoi — si le setup est versionné, chaque acceptation redevient annulable.
 - Terminer en montrant la sortie de `verifier-setup.sh` après les corrections

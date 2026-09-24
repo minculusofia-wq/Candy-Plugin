@@ -52,7 +52,7 @@ Elles fonctionnent séparément — prenez-en une, pas les neuf.
 | **9 règles** | vérifier avant d'affirmer · honnêteté brutale · discipline de code · porte de phase · choix du modèle · réflexes de travail · style de communication · routage des commandes · une information, un seul fichier |
 | **6 commandes** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
 | **2 agents** | `relecteur-securite` · `relecteur-de-phase` (contexte neuf, ne consomment pas la conversation) |
-| **10 hooks + 6 scripts** | rappel d'ouverture de phase, rappel des tâches en attente sur un projet, contrôle du jeu de documents à chaque ouverture (fichiers manquants, hors du jeu, CLAUDE.md trop long), garde avant écriture, protection des secrets, contrôle avant push, relecture de la réponse en fin de tour, contrôle du setup lui-même |
+| **11 hooks + 6 scripts** | rappel d'ouverture de phase, rappel des tâches en attente sur un projet, rappel d'entretien du setup, contrôle du jeu de documents à chaque ouverture (fichiers manquants, hors du jeu, CLAUDE.md trop long), garde avant écriture, protection des secrets, contrôle avant push, relecture de la réponse en fin de tour, contrôle du setup lui-même |
 
 ### La pièce la plus utile : `hooks/verifier-projet.sh`
 
@@ -82,6 +82,22 @@ projet contient le motif — ici, pas avant que la phase 3 soit marquée 🟢.
 Claude la reçoit avec son détail. Il suffit de répondre « go ». Une fois la
 tâche faite, sa ligne se retire. Sans ce fichier, le hook ne dit rien.
 
+### Le rappel d'entretien
+
+`/maintenance` n'a pas à être retenue. À l'ouverture d'une session dans `~` ou
+`~/.claude` — jamais dans un projet, où il détournerait du travail —, le hook
+`rappel-entretien.sh` la propose dans deux cas :
+
+- le dernier entretien a plus de 30 jours, ou n'a jamais eu lieu ;
+- la session tourne sur un modèle Opus ou Fable qui n'a encore jamais servi à
+  relire les consignes. Des consignes écrites pour un modèle plus ancien peuvent
+  gêner le suivant, qui les suit plus littéralement : l'étape 3 de
+  `/maintenance` les fait auditer par la sous-commande `prompt-audit` de la
+  skill `claude-api`, écarte ce qui retirerait une règle née d'un incident, et
+  vous présente le reste en une seule liste à valider.
+
+Il suffit de répondre « go ». Le reste du temps, le hook ne dit rien.
+
 ## Pour quels projets ? Bots, apps, et tout le reste
 
 Ces règles sont nées sur deux terrains : des **bots de trading** qui tournent en
@@ -93,7 +109,7 @@ grande partie ne dépend ni de l'un ni de l'autre.
 | **Règles** : vérifier avant d'affirmer · honnêteté brutale · discipline de code · réflexes de travail · choix du modèle · routage des commandes · une information, un seul fichier | La section « stratégies de bots » de `brutal-honesty.md` | `porte-de-phase.md` |
 | **Commandes** : `/verifier` · `/maj-docs` · `/maintenance` | `/debug` (mode simulation, jamais sur le serveur) · `/fin-session` | `/fin-phase` |
 | **Agents** : `relecteur-securite` | Sa section « fonds et transactions » | `relecteur-de-phase` |
-| **Hooks** : contrôle du projet, contrôle du setup, protection des secrets, garde avant écriture, relecture de la réponse, audit des `.md`, contrôle du jeu de documents, rappel des tâches en attente | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
+| **Hooks** : contrôle du projet, contrôle du setup, protection des secrets, garde avant écriture, relecture de la réponse, audit des `.md`, contrôle du jeu de documents, rappel des tâches en attente, rappel d'entretien | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
 
 **En clair :** si vous ne faites ni bot ni app à phases, prenez la première
 colonne — c'est déjà l'essentiel. Rien n'oblige à tout installer : les règles se
@@ -174,7 +190,7 @@ s'ouvrir est un plan faux.
 make test
 ```
 
-Neuf groupes, 160 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Ceux
+Neuf groupes, 181 cas : *j'envoie ceci à ce hook, j'attends ce verdict*. Ceux
 des huit premiers groupes ont été vérifiés en remettant le défaut d'origine — un
 test qui passe toujours ne vaut rien. Le neuvième rejoue l'incident qui a fait
 naître le contrôle du jeu de documents, et les pannes qu'il doit signaler au lieu

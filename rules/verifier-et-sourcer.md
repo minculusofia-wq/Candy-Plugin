@@ -34,6 +34,14 @@ Ni valeur, ni seuil, ni nom de fichier, ni comportement d'API, ni « probablemen
 | Processus, ports, système | Bash (`lsof`, `ps`) |
 | API externe | appel réel |
 | Mémoires Claude | lire le fichier avant de citer |
+| **État d'un projet ou d'un chantier** (fait / reste à faire) | le dépôt lui-même (`git log`, fichiers, `python3 ${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh "$PWD"`) et `~/.claude/rappels-projets.txt` — **jamais une mémoire seule** |
+
+Une mémoire est une piste, pas une preuve : elle dit ce qui était vrai le jour
+où elle a été écrite, et le travail fait dans un autre projet ne la met pas à
+jour. Faute réelle : « le rangement des documents reste à faire sur quatre
+projets », affirmé d'après une mémoire vieille de deux jours alors que les
+quatre étaient faits — et la liste des rappels, relue la même heure, n'en
+annonçait plus qu'un.
 
 ## Dans un rapport ou une analyse
 

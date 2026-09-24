@@ -55,7 +55,7 @@ They work on their own. Take one, not all nine.
 | **9 rules** | verify before asserting · brutal honesty · code discipline · phase gate · model choice · working reflexes · communication style · command routing · one piece of information, one file |
 | **6 commands** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
 | **2 agents** | `relecteur-securite` · `relecteur-de-phase` — security and phase reviewers running in a fresh context, so they don't eat your conversation |
-| **10 hooks + 6 scripts** | phase-opening reminder, reminder of the task waiting on a project, document-set check at every session start (missing files, files outside the set, oversized CLAUDE.md), pre-write guard, secret protection, pre-push check, answer review at the end of each turn, a check on the setup itself |
+| **11 hooks + 6 scripts** | phase-opening reminder, reminder of the task waiting on a project, setup maintenance reminder, document-set check at every session start (missing files, files outside the set, oversized CLAUDE.md), pre-write guard, secret protection, pre-push check, answer review at the end of each turn, a check on the setup itself |
 
 ### The most useful piece: `hooks/verifier-projet.sh`
 
@@ -85,6 +85,22 @@ When you open the project, or one of its subfolders, the task shows up and
 Claude gets it along with its details. Just answer "go". Once the task is done,
 its line gets removed. Without that file, the hook stays silent.
 
+### The maintenance reminder
+
+You don't have to remember `/maintenance`. When a session opens in `~` or
+`~/.claude` — never in a project, where it would pull you away from the work —
+the `rappel-entretien.sh` hook offers it in two cases:
+
+- the last maintenance is more than 30 days old, or never happened;
+- the session runs on an Opus or Fable model that has never been used to
+  review the instructions. Instructions written for an older model can get in
+  the way of the next one, which follows them more literally: step 3 of
+  `/maintenance` has them audited by the `prompt-audit` subcommand of the
+  `claude-api` skill, drops anything that would remove a rule born from an
+  incident, and shows you the rest as a single list to approve.
+
+Just answer "go". The rest of the time, the hook stays silent.
+
 ## Which projects is this for? Bots, apps, and everything else
 
 These rules were forged on two fronts: **trading bots** running non-stop on a
@@ -95,7 +111,7 @@ server, and an **iOS app** built phase by phase. Most of it depends on neither.
 | **Rules**: verify before asserting · brutal honesty · code discipline · working reflexes · model choice · command routing · one piece of information, one file | The "bot strategies" section of `brutal-honesty.md` | `porte-de-phase.md` |
 | **Commands**: `/verifier` · `/maj-docs` · `/maintenance` | `/debug` (dry-run mode, never on the server) · `/fin-session` | `/fin-phase` |
 | **Agents**: `relecteur-securite` | Its "funds and transactions" section | `relecteur-de-phase` |
-| **Hooks**: project check, secret protection, pre-write guard, answer review, `.md` audit, document-set check, waiting-task reminder | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
+| **Hooks**: project check, secret protection, pre-write guard, answer review, `.md` audit, document-set check, waiting-task reminder, maintenance reminder | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |
 
 **In short:** if you build neither bots nor phased apps, take the first column —
 that's already the heart of it. Nothing forces you to install everything: rules
@@ -172,7 +188,7 @@ plan is written: a plan whose first phase cannot open is a wrong plan.
 make test
 ```
 
-Nine groups, 160 cases: *send this to that hook, expect that verdict*. Those in
+Nine groups, 181 cases: *send this to that hook, expect that verdict*. Those in
 the first eight groups were checked by putting the original defect back; the
 ninth replays the incident that gave birth to the document-set check, and the
 failures it must report instead of staying silent. A test that always passes is
