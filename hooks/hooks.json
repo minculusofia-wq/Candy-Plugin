@@ -44,7 +44,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'INPUT=$(cat); CMD=$(printf \"%s\" \"$INPUT\" | python3 -I -c \"import sys,json; sys.stdout.reconfigure(errors=\\\"replace\\\"); print(json.load(sys.stdin).get(\\\"tool_input\\\",{}).get(\\\"command\\\",\\\"\\\"))\" 2>/dev/null); if [[ \"$CMD\" == *\"git push\"* ]]; then bash \"${CLAUDE_PLUGIN_ROOT}/hooks/validate-before-push.sh\"; fi'"
+            "command": "bash -c 'INPUT=$(cat); CMD=$(printf \"%s\" \"$INPUT\" | python3 -I -c \"import sys,json; sys.stdout.reconfigure(errors=\\\"replace\\\"); d=json.loads(sys.stdin.buffer.read().decode(\\\"utf-8\\\",\\\"replace\\\")); t=d.get(\\\"tool_input\\\") if isinstance(d,dict) else None; print((t if isinstance(t,dict) else {}).get(\\\"command\\\") or \\\"\\\")\" 2>/dev/null); if [[ \"$CMD\" == *\"git push\"* ]]; then bash \"${CLAUDE_PLUGIN_ROOT}/hooks/validate-before-push.sh\"; fi'"
           },
           {
             "type": "command",

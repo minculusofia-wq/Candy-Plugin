@@ -13,7 +13,7 @@ INPUT=$(cat)
 # devient un « ? », et le nom du fichier reste reconnu.
 json_get() { python3 -I -c "
 import sys, json
-d = json.loads(sys.stdin.read())
+d = json.loads(sys.stdin.buffer.read().decode('utf-8', 'replace'))
 t = d.get('tool_input')
 v = (t if isinstance(t, dict) else {}).get('$1') or ''
 sys.stdout.buffer.write(str(v).encode('utf-8', 'replace') + b'\\n')
@@ -24,10 +24,18 @@ if [[ -z "$FILE_PATH" ]]; then
     exit 0
 fi
 
-# Nom du fichier par le shell lui-meme : basename et dirname de macOS echouent
-# au-dela d'environ 1 000 caracteres, et le hook sortait alors en 1, avant le
-# test des .env.
-BASENAME="${FILE_PATH##*/}"
+# Nom du fichier compare comme macOS (APFS) compare les noms : chemin
+# normalise (« /p/.env/ », « /p/.env/. »), forme Unicode NFKC et casse repliee
+# (« .ENV », « wallet.jſon » avec un s long, le signe Kelvin). Pas de
+# basename/dirname : ceux de macOS echouent au-dela d'environ 1 000 caracteres,
+# et le hook sortait alors en 1, avant le test des .env. Si Python echoue, le
+# repli sur le dernier morceau du chemin garde au moins les cas simples.
+BASENAME=$(printf '%s' "$FILE_PATH" | python3 -I -c "
+import os, sys, unicodedata
+v = sys.stdin.buffer.read().decode('utf-8', 'replace')
+nom = os.path.basename(os.path.normpath(v)) if v else ''
+sys.stdout.buffer.write(unicodedata.normalize('NFKC', nom).casefold().encode('utf-8', 'replace'))
+" 2>/dev/null) || BASENAME="${FILE_PATH##*/}"
 
 # Sans distinction de casse : sur macOS (APFS), ecrire .ENV ecrase .env, et
 # Wallet.json est wallet.json (seconde relecture de la 0.3.4).

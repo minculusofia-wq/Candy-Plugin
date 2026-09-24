@@ -36,7 +36,7 @@ import sys, json, re
 sys.stdout.reconfigure(errors="replace")
 
 try:
-    d = json.loads(sys.stdin.read())
+    d = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))
 except Exception:
     sys.exit(0)
 
@@ -132,7 +132,10 @@ if [[ -n "$TROUVE" ]]; then
 fi
 
 # --- Garde .env : refuser de suivre un .env qui n'est pas ignore ---
-COMMAND=$(printf '%s' "$INPUT" | python3 -I -c "import sys,json; print(json.loads(sys.stdin.read()).get('tool_input',{}).get('command',''))" 2>/dev/null)
+# Lecture robuste (relecture de securite de la 0.3.4) : un demi-caractere
+# Unicode orphelin faisait planter ce print, le hook sortait en 1 (non
+# bloquant) et le git add du .env passait.
+COMMAND=$(printf '%s' "$INPUT" | python3 -I -c "import sys,json; sys.stdout.reconfigure(errors='replace'); d=json.loads(sys.stdin.buffer.read().decode('utf-8', 'replace')); t=d.get('tool_input') if isinstance(d, dict) else None; print((t if isinstance(t, dict) else {}).get('command') or '')" 2>/dev/null)
 
 # Le point doit etre le chemin ENTIER. Sans l'ancre de fin, le motif attrapait
 # aussi « git add .claude-plugin/... » et bloquait une commande parfaitement normale

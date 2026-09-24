@@ -251,6 +251,81 @@ for f in guillemets-fermes.sh accolades-fermees.sh; do
             1 "$(echo "$SORTIE_FINS" | grep -c "$f (PostToolUse) : ses messages sortent avec le code 0")"
 done
 
+section "Hooks entendus — troisième relecture : oublis et fausses alertes"
+TROIS="$BAC/trois"
+mkdir -p "$TROIS/hooks"
+python3 -I - "$TROIS" <<'PY'
+import json, os, sys
+d = sys.argv[1]
+perdu = 'echo "Attention, texte perdu."'
+refus_py = 'if len(sys.argv) > 5:\n    print("Refus.", file=sys.stderr)\n    sys.exit(2)\n'
+triple = "'" * 3
+hooks = {
+    # doivent être signalés
+    "py-commentaire.py": 'import sys\nx = 1  # (voir la doc\nprint("Attention, texte perdu.")\n' + refus_py,
+    "py-triple-chaine.py": 'import sys\ns = "' + triple + '"\nprint("Attention, texte perdu.")\n' + refus_py,
+    "py-echappe.py": 'import sys\ns = "il a dit \\"(\\""\nprint("Attention, texte perdu.")\n' + refus_py,
+    "fonction-capturee-et-appelee.sh": 'msg() { ' + perdu + '; }\nX=$(msg)\nmsg\nexit 0\n',
+    "groupe-2-devnull.sh": '{\n  ' + perdu + '\n} 2>/dev/null\nexit 0\n',
+    "decalage.sh": 'N=$((1<<n))\n' + perdu + '\nexit 0\n',
+    "heredoc-en-chaine.sh": 'X="cat <<FIN"\n' + perdu + '\nexit 0\n',
+    "fonction-mixte.sh": 'log() {\n  echo "$1"\n}\nif [ -n "$X" ]; then log "Refus." >&2; exit 2; fi\nlog "Attention."\nexit 0\n',
+    "appel-dans-if.sh": 'verifie() { ' + perdu + '; }\nif verifie; then :; fi\nexit 0\n',
+    "echo-2-devnull.sh": perdu + ' 2>/dev/null\nexit 0\n',
+    # ne doivent pas l'être
+    "heredoc-vers-fichier.sh": 'cat <<EOF > "$F"\ntexte\nEOF\ncat <<EOF >> "$LOG"\ntexte\nEOF\nexit 0\n',
+    "printf-calcule.sh": 'if [ -n "$X" ]; then exit 2; fi\nprintf \'%s\\n\' "$(jq -nc --arg m x \'{systemMessage: $m}\')"\n',
+    "exec-stderr.sh": 'exec 1>&2\necho "Refus."\nexit 2\n',
+    "echo-capture.sh": 'INPUT=$(cat 2>/dev/null || echo \'{}\')\nexit 0\n',
+}
+for nom, texte in hooks.items():
+    open(os.path.join(d, "hooks", nom), "w").write(texte)
+cmd = lambda nom: ("python3 -I ~/.claude/hooks/" if nom.endswith(".py") else "bash ~/.claude/hooks/") + nom
+json.dump({"hooks": {"PostToolUse": [{"hooks": [{"type": "command", "command": cmd(n)} for n in hooks]}]}},
+          open(os.path.join(d, "settings.json"), "w"))
+PY
+SORTIE_T=$(bash "$CONTROLE" "$TROIS" 2>&1)
+for f in py-commentaire.py py-triple-chaine.py py-echappe.py fonction-capturee-et-appelee.sh \
+         groupe-2-devnull.sh decalage.sh heredoc-en-chaine.sh fonction-mixte.sh appel-dans-if.sh \
+         echo-2-devnull.sh; do
+    verifie "message perdu, signalé : $f" 1 "$(echo "$SORTIE_T" | grep -c "$f (PostToolUse)")"
+done
+for f in heredoc-vers-fichier.sh printf-calcule.sh exec-stderr.sh echo-capture.sh; do
+    verifie "hook légitime, pas signalé : $f" 0 "$(echo "$SORTIE_T" | grep -c "$f")"
+done
+
+# Des fichiers de hooks piégés pour être lents : 16 000 fonctions d'une ligne
+# prenaient 71 s. Le contrôle doit finir en moins de 5 s.
+LENT="$BAC/lent"
+mkdir -p "$LENT/hooks"
+python3 -I - "$LENT" <<'PY'
+import json, os, sys
+d = sys.argv[1]
+hooks = {
+    "fonctions.sh": "".join(f"f{i}() {{ :; }}\n" for i in range(16000)) + "f1;" * 5000 + "\n",
+    "parenthese.py": "x = (\n" + "1,\n" * 50000,
+    "triple.py": 'x = """\n' + "texte\n" * 50000,
+    "heredocs.sh": "".join(f"cat <<E{i}\nx\nE{i}\n" for i in range(10000)),
+    "options.sh": "echo " + "-echo " * 10000 + "\nprintf " + "-printf " * 10000 + "\n",
+    "espaces.sh": "f() { :; }" + " " * 20000 + "x\n",
+}
+for nom, texte in hooks.items():
+    open(os.path.join(d, "hooks", nom), "w").write(texte)
+cmd = lambda nom: ("python3 -I ~/.claude/hooks/" if nom.endswith(".py") else "bash ~/.claude/hooks/") + nom
+json.dump({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": cmd(n)} for n in hooks]}]}},
+          open(os.path.join(d, "settings.json"), "w"))
+PY
+verifie "des fichiers de hooks piégés pour être lents : contrôle fini en moins de 5 s" \
+        0 "$(python3 -I -c '
+import subprocess, sys
+try:
+    r = subprocess.run(["bash", sys.argv[1], sys.argv[2]], capture_output=True, timeout=5)
+    sortie = (r.stdout + r.stderr).decode("utf-8", "replace")
+    print(0 if "=== BILAN ===" in sortie and "Traceback" not in sortie else 1)
+except subprocess.TimeoutExpired:
+    print(1)
+' "$CONTROLE" "$LENT")"
+
 section "Hooks entendus — un réglage mal formé ne fait pas planter le contrôle"
 FORME="$BAC/forme"
 mkdir -p "$FORME/hooks"

@@ -46,7 +46,7 @@ INPUT=$(cat)
 CLOTURE=$(python3 -I -c '
 import json, re, sys
 try:
-    commande = json.loads(sys.stdin.read()).get("tool_input", {}).get("command", "") or ""
+    commande = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace")).get("tool_input", {}).get("command", "") or ""
 except Exception:
     sys.exit(0)
 # Tout est lineaire ou borne (relecture de securite de la 0.3.3) : une regex

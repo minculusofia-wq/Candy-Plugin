@@ -145,6 +145,17 @@ verifie "« Wallet.JSON » est REFUSÉ comme « wallet.json »" \
         2 "$(code_hook "$GARDE" "$(entree_ecriture /tmp/projet/Wallet.JSON 'x')")"
 verifie "un .env au bout d'un chemin de 1 500 caractères reste REFUSÉ" \
         2 "$(code_hook "$GARDE" "$(entree_ecriture "/tmp/$(printf 'a%.0s' $(seq 1500))/.env" 'x')")"
+# Troisième relecture : « /p/.env/ » rendait un nom vide, et macOS confond
+# aussi le s long (ſ) avec s, le signe Kelvin avec k. Un octet invalide brut
+# (pas un \u échappé) faisait planter la lecture sous une langue française.
+for chemin in /tmp/projet/.env/ /tmp/projet/.env/. "/tmp/projet/wallet.j$(printf '\305\277')on" \
+              "/tmp/projet/secret.$(printf '\342\204\252')ey"; do
+    verifie "« $chemin » est REFUSÉ" 2 "$(code_hook "$GARDE" "$(entree_ecriture "$chemin" 'x')")"
+done
+verifie "un octet invalide brut dans le chemin, en langue française : REFUSÉ" \
+        2 "$(printf '{"tool_input":{"file_path":"/p/\377/.env"}}' | LC_ALL=fr_FR.UTF-8 bash "$GARDE" >/dev/null 2>&1; echo $?)"
+verifie "« envoi.py » n'est pas pris pour un .env" \
+        0 "$(code_hook "$GARDE" "$(entree_ecriture /tmp/projet/envoi.py 'x')")"
 
 # L'avertissement « fichier sensible » sortait en texte simple avec le code 0 :
 # il ne partait que dans le journal de débogage, personne ne l'a jamais vu, et
@@ -180,6 +191,16 @@ printf 'def casse(:\n    return 1\n' > "$BAC/casse/casse.py"
 suivi "$BAC/casse"
 verifie "une erreur de syntaxe REFUSE le push" \
         2 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/casse")"
+# Le lanceur de hooks.json lit la commande avant d'appeler ce contrôle : s'il
+# plantait sur un caractère invalide, la commande était lue vide et le push
+# partait sans contrôle (seconde relecture de la 0.3.4).
+LANCEUR=$(python3 -I -c 'import json,sys; hs=json.load(open(sys.argv[1]))["hooks"]["PreToolUse"]
+print([h["command"] for g in hs for h in g["hooks"] if "validate-before-push" in h["command"]][0])' "$RACINE/hooks/hooks.json")
+for piege in "" " # \\ud800"; do
+    ENTREE_PUSH=$(python3 -I -c 'import json,sys; print(json.dumps({"tool_input":{"command":"git pu"+"sh"+json.loads("\""+sys.argv[1]+"\"")}}))' "$piege")
+    verifie "le lanceur de hooks.json refuse le push${piege:+ (caractère invalide dans la commande)}" \
+            2 "$(cd "$BAC/casse" && printf '%s' "$ENTREE_PUSH" | env CLAUDE_PLUGIN_ROOT="$RACINE" CLAUDE_PROJECT_DIR="$BAC/casse" bash -c "$LANCEUR" >/dev/null 2>&1; echo $?)"
+done
 verifie "la raison du refus arrive à Claude (sur stderr)" \
         1 "$(raison_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/casse")"
 

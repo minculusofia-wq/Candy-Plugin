@@ -11,7 +11,7 @@
 set -e
 
 INPUT=$(cat)
-PROMPT=$(python3 -I -c "import sys,json; sys.stdout.reconfigure(errors='replace'); d=json.loads(sys.stdin.read()); print(d.get('prompt') or '')" <<< "$INPUT" 2>/dev/null)
+PROMPT=$(python3 -I -c "import sys,json; sys.stdout.reconfigure(errors='replace'); d=json.loads(sys.stdin.buffer.read().decode('utf-8', 'replace')); print(d.get('prompt') or '')" <<< "$INPUT" 2>/dev/null)
 
 if [[ -z "$PROMPT" ]]; then
     exit 0

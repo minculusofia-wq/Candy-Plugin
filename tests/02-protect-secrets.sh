@@ -79,6 +79,12 @@ commande "l'ajout en masse est refusé"                2 "$GIT_AJOUT -A"
 commande "ajouter le .env lui-même est refusé"        2 "$GIT_AJOUT .env"
 verifie "la raison du refus arrive à Claude (sur stderr)" \
         1 "$(raison_hook "$HOOK" "$(entree_commande "$GIT_AJOUT .env")" CLAUDE_PROJECT_DIR="$BAC/env")"
+# Troisième relecture de la 0.3.4 : la seconde lecture de l'entrée (celle de la
+# commande) plantait sur un demi-caractère Unicode orphelin, le hook sortait en
+# 1 — non bloquant — et le .env partait dans git. Présent depuis la 0.3.3.
+ENTREE_ADD_PIEGE=$(python3 -I -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]+" . # \ud800"}}))' "$GIT_AJOUT")
+verifie "tout ajouter reste refusé avec un caractère invalide dans la commande" \
+        2 "$(code_hook "$HOOK" "$ENTREE_ADD_PIEGE" CLAUDE_PROJECT_DIR="$BAC/env")"
 
 echo ".env" > "$BAC/env/.gitignore"
 commande "une fois .env ignoré, tout redevient permis" 0 "$GIT_AJOUT ."

@@ -107,25 +107,41 @@ AFFICHE = re.compile(r"(^|;|&&|\|\||\{|\bthen|\bdo|\belse)\s*(echo|printf|cat)\b
 # Un texte écrit en toutes lettres sur stdout (echo "…", printf '%s' "…",
 # print("…"), cat <<EOF) est du texte simple, sauf s'il commence par une
 # accolade. Sans ce repérage, un JSON écrit n'importe où dans le fichier
-# rendait tout le hook « entendu ».
+# rendait tout le hook « entendu ». Toutes les analyses ci-dessous sont
+# linéaires : un fichier de hook piégé ne doit pas bloquer /maintenance.
 VARIABLE = re.compile(r"\$\{\w+\}|\$\w+|%[-\d.]*[sdif]|\\[ntre]|\\033\[[\d;]*m")
 LITTERAL_PY = re.compile(r"""(?:\bprint|sys\.stdout\.write)\(\s*[fFrRbB]{0,2}(\"\"\"|'''|"|')(.*?)\1""", re.S)
-CHAINES = re.compile(r"\"[^\"]*\"|'[^']*'")
-TRIPLES = re.compile(r"(?s)\"\"\".*?\"\"\"|'''.*?'''")
+CHAINES = re.compile(r"\"(?:[^\"\\]|\\.)*\"|'[^']*'")
 HEREDOC = re.compile(r"(?<!<)<<-?\s*(['\"]?)([A-Za-z_]\w*)\1")
 FONCTION = re.compile(r"^\s*(?:function\s+)?([\w-]+)\s*\(\)\s*\{")
+# Une sortie standard renvoyée ailleurs : > f, >> f, 1> f, &> f, >/dev/null.
+# Pas 2>/dev/null ni >&2, qui laissent stdout où elle est.
+VERS_FICHIER = re.compile(r"(?:^|[^\d&<>])>>?(?!&)|\b1>>?(?!&)|&>")
+# « if f », « while ! f » : les mots-clés sont sautés pour trouver le nom appelé.
+APPEL = re.compile(r"(\$\(|`|^|[;&|{(]|\bthen\b|\bdo\b|\belse\b)\s*(?:(?:if|elif|while|until|!)\s+){0,3}([\w-]+)")
 
 def texte_simple(litteral):
-    reste = VARIABLE.sub("", litteral or "").strip()
+    if not litteral or "$(" in litteral or "`" in litteral:
+        return False                                    # valeur calculée : peut être du JSON
+    reste = VARIABLE.sub("", litteral).strip()
     return bool(reste) and not reste.startswith("{") and bool(re.search(r"[^\W\d_]", reste))
 
 def litteral_sh(l):
-    for motif, groupe in ((r"""\bprintf\s+(?:-\w+\s+)*(["'])%s(?:\\n)?\1\s+(["'])(.*?)\2""", 3),
-                          (r"""\b(?:echo|printf)\s+(?:-\w+\s+)*(["'])(.*?)\1""", 2),
-                          (r"""\becho\s+(?:-\w+\s+)*([^\s"'$;|&>{(][^;|&>]*)""", 1)):
-        m = re.search(motif, l)
-        if m:
-            return m.group(groupe)
+    """Le texte écrit par le premier echo/printf de la ligne, ou None."""
+    m = re.search(r"\b(echo|printf)\b", l)
+    if not m:
+        return None
+    reste = l[m.end():m.end() + 4096]
+    reste = re.sub(r"^(?:\s+-[a-zA-Z]{1,3}){0,3}\s+", "", reste, count=1)
+    q = re.match(r"""(["'])(.*?)\1""", reste)
+    if q and m.group(1) == "printf" and re.fullmatch(r"%s(?:\\n)?", q.group(2)):
+        suite = re.match(r"""\s+(["'])(.*?)\1""", reste[q.end():])
+        return suite.group(2) if suite else None
+    if q:
+        return q.group(2)
+    if m.group(1) == "echo":
+        nu = re.match(r"""([^\s"'$;|&>{(][^;|&>]*)""", reste)
+        return nu.group(1) if nu else None
     return None
 
 def propre(t):
@@ -134,25 +150,55 @@ def propre(t):
 
 def lignes_py(code):
     """Lignes logiques : un print( sur plusieurs lignes, ou une chaîne entre
-    triples guillemets, forment une seule instruction."""
-    sortie, cur = [], ""
+    triples guillemets, forment une seule instruction. Lecture caractère par
+    caractère : commentaires, chaînes et guillemets échappés sont reconnus."""
+    sortie, cur, prof, etat = [], [], 0, None
     for l in code:
-        cur = cur + "\n" + l if cur else l
-        sans = CHAINES.sub('""', TRIPLES.sub('""', cur))
-        if cur.count('"""') % 2 or cur.count("'''") % 2:
-            continue                                    # triple guillemet encore ouvert
-        if sum(sans.count(c) for c in "([{") > sum(sans.count(c) for c in ")]}"):
-            continue                                    # parenthèse encore ouverte
-        sortie.append(cur)
-        cur = ""
+        cur.append(l)
+        i, n = 0, len(l)
+        while i < n:
+            c = l[i]
+            if etat is None:
+                if c == "#":
+                    break
+                if l.startswith('"""', i) or l.startswith("'''", i):
+                    etat = l[i:i + 3]
+                    i += 3
+                    continue
+                if c in "\"'":
+                    etat = c
+                elif c in "([{":
+                    prof += 1
+                elif c in ")]}":
+                    prof -= 1
+            elif c == "\\":
+                i += 2
+                continue
+            elif len(etat) == 1 and c == etat:
+                etat = None
+            elif len(etat) == 3 and l.startswith(etat, i):
+                etat = None
+                i += 3
+                continue
+            i += 1
+        if etat in ('"', "'"):
+            etat = None                                 # chaîne simple jamais fermée : on referme
+        if etat is None and prof <= 0:
+            sortie.append("\n".join(cur))
+            cur, prof = [], 0
     if cur:
-        sortie.append(cur)
+        sortie.append("\n".join(cur))
     return sortie
+
+def masque(l):
+    """La ligne, avec le contenu des chaînes remplacé par « _ » (même longueur)."""
+    return CHAINES.sub(lambda m: m.group(0)[0] + "_" * (len(m.group(0)) - 2) + m.group(0)[-1], l)
 
 def sorties_sh(code):
     """(stdout, stderr, texte simple) d'un script shell, en tenant compte des
-    lignes coupées par « \\ », des groupes { … } >&2, des fonctions dont la
-    sortie est capturée par $(…), et des documents <<EOF."""
+    lignes coupées par « \\ », des groupes { … } >&2, des fonctions (appelées,
+    capturées par $(…), ou renvoyées vers stderr), de exec 1>&2 et des
+    documents <<EOF."""
     lignes, cur = [], ""
     for l in code:                                      # recolle les « \ » de fin de ligne
         if l.rstrip().endswith("\\"):
@@ -162,64 +208,99 @@ def sorties_sh(code):
             cur = ""
     if cur:
         lignes.append(cur)
-    texte = "\n".join(lignes)
+    masques = [masque(l) for l in lignes]
 
-    # Premier passage : documents <<EOF, groupes et fonctions.
-    corps_heredoc, vers_stderr, vers_fichier, corps_fonction = set(), set(), set(), {}
-    heredocs, pile, fin_heredoc = {}, [], None
+    # Premier passage : documents <<EOF, groupes, fonctions.
+    corps_heredoc, premiere_ligne = set(), {}
+    vers_stderr, vers_fichier, corps_fonction, fonction_de = set(), set(), {}, {}
+    pile, fin_heredoc, attente = [], None, None
     for i, l in enumerate(lignes):
         if fin_heredoc is not None:
             corps_heredoc.add(i)
             if l.strip() == fin_heredoc:
                 fin_heredoc = None
+            elif attente is not None and l.strip():
+                premiere_ligne[attente] = l             # la première ligne non vide du corps
+                attente = None
             continue
-        m = HEREDOC.search(l)
-        if m:
-            heredocs[i] = i + 1
-            fin_heredoc = m.group(2)
-        nu = CHAINES.sub('""', l)
+        nu = masques[i]
+        for m in HEREDOC.finditer(nu):
+            avant = nu[:m.start()]
+            if avant.count("((") > avant.count("))"):
+                continue                                # $((1<<n)) : un décalage, pas un document
+            brut = HEREDOC.match(l, m.start())
+            fin_heredoc = brut.group(2) if brut else m.group(2)
+            attente = i
+            break
         f = FONCTION.match(nu)
         if f:
-            if re.search(r"\}\s*;?\s*$", nu[f.end():]):
+            if nu[f.end():].rstrip().rstrip(";").rstrip().endswith("}"):
                 corps_fonction.setdefault(f.group(1), set()).add(i)
+                fonction_de[i] = f.group(1)
             else:
                 pile.append(("f", f.group(1), i))
-        elif re.match(r"^\s*\{\s*$", nu):
+        elif nu.strip() == "{":
             pile.append(("g", None, i))
-        elif re.match(r"^\s*\}", nu) and pile:
+        elif nu.lstrip().startswith("}") and pile:
             genre, nom, debut = pile.pop()
             if genre == "f":
                 corps_fonction.setdefault(nom, set()).update(range(debut, i + 1))
+                for k in range(debut, i + 1):
+                    fonction_de.setdefault(k, nom)
             elif ">&2" in nu:
                 vers_stderr.update(range(debut, i + 1))
-            elif ">" in nu:
+            elif VERS_FICHIER.search(nu[nu.index("}") + 1:]):
                 vers_fichier.update(range(debut, i + 1))
-    capturees, vers_stderr_fn = set(), set()
+
+    # Appels des fonctions : chaque appel dit où va leur sortie. Le corps ne
+    # compte comme message que si au moins un appel l'envoie sur stdout.
+    appels = {nom: set() for nom in corps_fonction}
+    for i, nu in enumerate(masques):
+        if i in corps_heredoc or not appels:
+            continue
+        # Une seule lecture de la ligne pour sa redirection : relire la suite
+        # de la ligne à chaque appel coûtait un temps quadratique.
+        sortie = "stderr" if ">&2" in nu else ("fichier" if VERS_FICHIER.search(nu) else "stdout")
+        for m in APPEL.finditer(nu):
+            nom = m.group(2)
+            if nom not in appels or fonction_de.get(i) == nom:
+                continue
+            appels[nom].add("capture" if m.group(1) in ("$(", "`") else sortie)
+    ignorees, vers_stderr_fn = set(), set()
     for nom, rang in corps_fonction.items():
-        n = re.escape(nom)
-        if re.search(r"\$\(\s*" + n + r"\b|`\s*" + n + r"\b", texte):
-            capturees.update(rang)                      # valeur de retour, pas un message
-        elif re.search(r"(^|[;&|\s])" + n + r"\b[^\n]*>&2", texte):
+        if "stdout" in appels[nom]:
+            continue                                    # appelée au moins une fois vers stdout
+        if "stderr" in appels[nom]:
             vers_stderr_fn.update(rang)
+        else:
+            ignorees.update(rang)                       # capturée ou jamais appelée : pas un message
 
     stdout = stderr = simple = False
+    tout_vers_stderr = False
     for i, l in enumerate(lignes):
-        if i in corps_heredoc or i in capturees or i in vers_fichier:
+        if i in corps_heredoc or i in ignorees or i in vers_fichier:
             continue
-        nu = CHAINES.sub('""', l)
-        if not AFFICHE.search(nu):
+        nu = masques[i]
+        if re.match(r"^\s*exec\s+1?>&2\s*$", nu):
+            tout_vers_stderr = True                     # exec 1>&2 : la suite part sur stderr
+            continue
+        # Un echo placé dans $(…) ou entre accents graves est capturé : il
+        # n'écrit rien (« INPUT=$(cat || echo '{}') »).
+        libres = [m for m in AFFICHE.finditer(nu)
+                  if nu[:m.start()].count("$(") <= nu[:m.start()].count(")")
+                  and nu[:m.start()].count("`") % 2 == 0]
+        if not libres:
             continue
         if re.search(r"(?<!\|)\|(?!\|)", nu):           # echo ... | grep : un test, pas une sortie
             continue
-        if ">&2" in nu or i in vers_stderr or i in vers_stderr_fn:
+        if ">&2" in nu or i in vers_stderr or i in vers_stderr_fn or tout_vers_stderr:
             stderr = True
-        elif ">" in nu.split("<<")[0]:                  # vers un fichier ou /dev/null
+        elif VERS_FICHIER.search(HEREDOC.sub("", nu)):  # vers un fichier ou /dev/null
             continue
         else:
             stdout = True
-            if i in heredocs:                           # cat <<EOF : le texte est le corps
-                corps = [lignes[k] for k in sorted(corps_heredoc) if k > i and lignes[k].strip()][:1]
-                simple = simple or texte_simple(corps[0] if corps else "")
+            if i in premiere_ligne or (HEREDOC.search(nu) and i not in premiere_ligne):
+                simple = simple or texte_simple(premiere_ligne.get(i, ""))
             else:
                 simple = simple or texte_simple(litteral_sh(l))
     return stdout, stderr, simple
