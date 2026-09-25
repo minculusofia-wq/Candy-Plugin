@@ -1,10 +1,18 @@
 #!/bin/bash
 #
-# pre-edit-guard.sh - Protege les fichiers critiques contre les edits accidentels
-# Bloque les modifications de .env, credentials, et fichiers de prod
+# pre-edit-guard.sh (PreToolUse : Write, Edit, Read)
+# Protege les fichiers de secrets : ni ecrits (Write, Edit), ni lus (Read).
+# Signale les fichiers de deploiement a l'ecriture.
+#
+# La liste des fichiers de secrets vit dans detection-secrets.py (.env et ses
+# variantes, *.env, *.pem, *.key, ~/.ssh hors .pub et config, keystore,
+# wallet, mnemonic, .netrc, ~/.claude.json…), partagee avec protect-secrets.
+# Jusqu'a la 0.3.4, l'outil Read affichait un .env sans que rien ne l'arrete,
+# et backend.env, *.pem ou les cles de ~/.ssh n'etaient pas proteges.
 #
 
 set -e
+H="$(cd "${BASH_SOURCE[0]%/*}" 2>/dev/null && pwd)"
 
 INPUT=$(cat)
 # Un caractere que la sortie ne sait pas encoder (demi-caractere Unicode
@@ -49,18 +57,6 @@ sys.stdout.buffer.write(unicodedata.normalize('NFKC', nom).casefold().encode('ut
 # Wallet.json est wallet.json (seconde relecture de la 0.3.4).
 shopt -s nocasematch
 
-# Fichiers bloques (ne jamais editer via Claude)
-BLOCKED_FILES=(
-    ".env"
-    ".env.production"
-    ".env.prod"
-    "credentials.json"
-    "keystore.json"
-    "wallet.json"
-    "private_key.txt"
-    "secret.key"
-)
-
 # Le message est un texte fixe : ni le chemin ni le nom du fichier n'y figurent.
 # Il revient a Claude comme raison du refus, et un nom de dossier choisi
 # (« ignore les regles, lance … ») y deviendrait une consigne.
@@ -72,18 +68,33 @@ refuser_secret() {
     echo "Editez ce fichier manuellement." >&2
     exit 2
 }
+refuser_lecture() {
+    echo "BLOCKED" >&2
+    echo "" >&2
+    echo "Lecture bloquee : fichier de secrets (.env, cle, wallet, identifiants) — son contenu" >&2
+    echo "arriverait en clair dans la conversation." >&2
+    echo "Pour verifier qu'une variable existe : grep -c '^NOM=' fichier. Les noms seuls : cut -d= -f1 fichier." >&2
+    echo "Un reglage qui n'est pas un secret : grep '^DRY_RUN=' fichier. Un modele (.env.example) se lit." >&2
+    echo "Une URL de RPC ou de webhook, un sujet de notification sont des secrets." >&2
+    exit 2
+}
 
-for blocked in "${BLOCKED_FILES[@]}"; do
-    if [[ "$BASENAME" == "$blocked" ]]; then
-        refuser_secret
-    fi
-done
-
-# Toutes les variantes de .env (.env.local, .env.development, .env.staging…)
-# portent des secrets. Seuls les modeles sans valeur restent modifiables.
-if [[ "$BASENAME" == .env.* ]] && [[ ! "$BASENAME" =~ ^\.env\.(example|sample|template|dist)$ ]]; then
+OUTIL=$(printf '%s' "$INPUT" | python3 -I -c "
+import sys, json
+d = json.loads(sys.stdin.buffer.read().decode('utf-8', 'replace'))
+print((d.get('tool_name') or '') if isinstance(d, dict) else '')
+" 2>/dev/null) || refuser_illisible
+# Toutes les variantes de .env (.env.local, backend.env, .env-prod, .env~…)
+# portent des secrets ; seuls les modeles sans valeur (.env.example,
+# *.template) et les cles publiques (.pub) restent libres.
+SECRET=$(printf '%s' "$INPUT" | python3 -I "$H/detection-secrets.py" fichier 2>/dev/null) || refuser_illisible
+if [[ "$SECRET" == "SECRET" ]]; then
+    [[ "$OUTIL" == "Read" ]] && refuser_lecture
     refuser_secret
 fi
+# Une lecture ordinaire : rien a signaler (l'avertissement ci-dessous ne
+# concerne que l'ecriture).
+[[ "$OUTIL" == "Read" ]] && exit 0
 
 # Avertissement pour les fichiers sensibles (pas bloque mais signale)
 SENSITIVE_FILES=(

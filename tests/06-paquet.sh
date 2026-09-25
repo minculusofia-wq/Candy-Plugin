@@ -52,6 +52,28 @@ PY
 )
 verifie "chaque hook branché est présent sur le disque" 0 "$MANQUANTS"
 
+# L'outil Monitor lance une commande shell comme Bash, et Read affiche un
+# fichier : un matcher « Bash » ou « Write|Edit » est un nom exact (doc hooks,
+# « Matcher »). Jusqu'à la 0.3.4, aucun garde-fou des commandes ne voyait
+# Monitor, et rien ne regardait Read.
+BRANCHEMENTS=$(python3 -I - <<'PY'
+import json, re
+d = json.load(open("hooks/hooks.json"))["hooks"].get("PreToolUse", [])
+def outils(hook):
+    return {o for g in d for h in g["hooks"] if hook in h["command"] for o in re.split(r"[|,]", g.get("matcher", ""))}
+manque = []
+for hook in ("protect-secrets.sh", "rule12-phase-debug-required.sh", "validate-before-push.sh"):
+    for o in ("Bash", "Monitor"):
+        if o not in outils(hook):
+            manque.append(f"{hook}:{o}")
+for o in ("Write", "Edit", "Read"):
+    if o not in outils("pre-edit-guard.sh"):
+        manque.append(f"pre-edit-guard.sh:{o}")
+print(" ".join(manque))
+PY
+)
+verifie "les garde-fous voient Bash et Monitor, et la lecture d'un fichier :${BRANCHEMENTS:+ }$BRANCHEMENTS" "" "$BRANCHEMENTS"
+
 verifie "les hooks retirés du paquet public ne sont pas revenus" \
         0 "$(ls hooks/rule5-debug-local-only.sh hooks/rule6-session-end.sh hooks/rule7-readme-before-push.sh \
                 hooks/rule9-code-discipline.sh hooks/skills-reminder.sh 2>/dev/null | grep -c .)"

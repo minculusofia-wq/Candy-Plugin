@@ -40,7 +40,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|Monitor",
         "hooks": [
           {
             "type": "command",
@@ -57,12 +57,17 @@
         ]
       },
       {
-        "matcher": "Write|Edit",
+        "matcher": "Write|Edit|Read",
         "hooks": [
           {
             "type": "command",
             "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-edit-guard.sh\"'"
-          },
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
           {
             "type": "command",
             "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/protect-secrets.sh\"'"

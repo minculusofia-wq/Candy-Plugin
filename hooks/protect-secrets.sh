@@ -24,6 +24,7 @@
 #
 
 set -e
+H="$(cd "${BASH_SOURCE[0]%/*}" 2>/dev/null && pwd)"
 
 INPUT=$(cat)
 
@@ -36,107 +37,25 @@ refuser_illisible() {
     exit 2
 }
 
-# --- Detection : une valeur qui ressemble a un secret ---
-TROUVE=$(printf '%s' "$INPUT" | python3 -I -c '
-import sys, json, re
-
-# Un caractere invalide (moitie de paire UTF-16 venue du JSON) faisait planter
-# le print : code 1, et le secret passait (relecture de securite).
-sys.stdout.reconfigure(errors="replace")
-
-try:
-    d = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))
-except Exception:
-    sys.exit(3)                      # illisible : le hook refuse
-
-ti = d.get("tool_input", {}) or {}
-morceaux = [
-    ("commande bash", ti.get("command", "")),
-    ("contenu du fichier (%s)" % ti.get("file_path", ""), ti.get("content", "")),
-    ("edition du fichier (%s)" % ti.get("file_path", ""), ti.get("new_string", "")),
-]
-
-NOM = (r"(?:private[_-]?key|secret[_-]?key|api[_-]?key|api[_-]?secret|"
-       r"client[_-]?secret|access[_-]?token|auth[_-]?token|mnemonic|"
-       r"passphrase|password|passwd)")
-
-CITE = re.compile(NOM + r"\s*[:=]\s*([\"\x27])(?P<v>(?:(?!\1).)*)\1", re.I)
-NUE  = re.compile(NOM + r"\s*=\s*(?P<v>[^\s\"\x27#;]+)\s*$", re.I | re.M)
-
-# Un gabarit, c est un TROU a remplir, pas un caractere isole. La version
-# precedente exemptait toute valeur contenant une accolade, une parenthese ou
-# un chevron, ou qu il soit : une vraie cle contenant une accolade passait.
-GABARIT = re.compile(r"""
-      \$\{[^}]*\}                  # ${VARIABLE}
-    | \$\([^)]*\)                  # $(commande)
-    | \{\{[^}]*\}\}                 # {{ modele }}
-    | \$[A-Za-z_]\w*               # $VARIABLE
-    | <[^>]+>                     # <a_remplacer>
-    | %\([^)]*\)s                  # %(nom)s
-    | \{[A-Za-z_]\w*\}              # {nom}
-    | [()]                        # une parenthese : du code, pas une valeur
-    | ^(?:os\.|process\.|env\.|import\b)
-""", re.I | re.X)
-
-# Un nom en majuscules avec des tirets bas et sans aucun chiffre est un
-# emplacement a remplir (REMPLACER_PAR_VOTRE_CLE), pas une cle : une vraie cle
-# en majuscules porte des chiffres et pas de tiret bas.
-A_REMPLIR = re.compile(r"^[A-Z][A-Z_]*_[A-Z_]+$")
-
-# « secret » a ete retire de cette liste : une valeur commencant par ce mot
-# n a rien d un exemple, et la vraie cle « secretvalue9Xk2... » passait.
-FACTICE = re.compile(r"^(?:x{3,}|\.{3,}|\*{3,}|-{3,}|none|null|nil|true|false|"
-                     r"your[_-]|my[_-]|the[_-]|test|dummy|fake|sample|example|"
-                     r"placeholder|changeme|change[_-]me|todo|fixme|"
-                     r"remplacer|remplir|votre[_-]|vos[_-]|a[_-]definir|"
-                     r"redacted|hidden|masked)", re.I)
-
-def ressemble_a_un_secret(v):
-    v = v.strip()
-    if len(v) < 16:
-        return False
-    if GABARIT.search(v):
-        return False
-    if FACTICE.match(v):
-        return False
-    if A_REMPLIR.match(v):
-        return False
-    mots = v.split()
-    if len(mots) >= 8:
-        return all(m.isalpha() for m in mots)
-    if len(mots) > 1:
-        return False
-    # Un seul bloc de seize caracteres ou plus, sans espace : ce n est pas une
-    # phrase, c est une valeur. Exiger en plus un chiffre laissait passer une
-    # cle de vingt lettres — verifie.
-    return any(c.isalpha() for c in v)
-
-for source, texte in morceaux:
-    if not texte:
-        continue
-    for motif in (CITE, NUE):
-        for m in motif.finditer(texte):
-            if ressemble_a_un_secret(m.group("v")):
-                # La raison du blocage arrive a Claude et s affiche : on y
-                # garde le nom et le debut de la valeur, jamais la valeur.
-                v = m.group("v")
-                extrait = m.group(0).strip().replace(v, v[:4] + "...(masque)")
-                if len(extrait) > 60:
-                    extrait = extrait[:57] + "..."
-                print("%s\t%s" % (source, extrait))
-                sys.exit(0)
-' 2>/dev/null) || refuser_illisible
-
-if [[ -n "$TROUVE" ]]; then
-    SOURCE="${TROUVE%%$'\t'*}"
-    EXTRAIT="${TROUVE#*$'\t'}"
+# --- 1. Une valeur secrete ecrite ou tapee ---
+# La detection vit dans detection-secrets.py, partagee avec pre-edit-guard et
+# analyse-commande. Jusqu'a la 0.3.4, elle ne connaissait ni « secret » ni
+# « token » seuls, ni la forme YAML, ni une cle PEM, ni from_key("0x…").
+# Le message est un texte fixe : ni chemin, ni nom, ni debut de valeur. La
+# raison d'un refus arrive a Claude, et un nom de dossier choisi y deviendrait
+# une consigne.
+VALEUR=$(printf '%s' "$INPUT" | python3 -I "$H/detection-secrets.py" valeur 2>/dev/null) || refuser_illisible
+if [[ -n "$VALEUR" ]]; then
+    case "${VALEUR%%$'\t'*}" in
+        commande) OU="la commande" ;;
+        fichier) OU="le contenu du fichier ecrit" ;;
+        *) OU="l'edition" ;;
+    esac
     echo "BLOCKED" >&2
     echo "" >&2
-    echo "Valeur qui ressemble a un secret dans $SOURCE" >&2
-    echo "  $EXTRAIT" >&2
-    echo "" >&2
-    echo "Ne jamais ecrire un secret en clair dans le depot." >&2
-    echo "Le lire depuis une variable d'environnement (.env non suivi par git)." >&2
+    echo "Valeur qui ressemble a un secret dans $OU (nom sensible avec une valeur, cle 0x + 64 hexa, ou cle PEM)." >&2
+    echo "Ne jamais ecrire un secret en clair : le lire depuis une variable d'environnement (.env non suivi par git)." >&2
+    echo "Si c'est un hash (transaction, identifiant), le nommer comme tel : tx_hash, condition_id." >&2
     exit 2
 fi
 
