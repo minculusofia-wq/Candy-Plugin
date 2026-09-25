@@ -196,7 +196,11 @@ worth nothing. See [tests/README.md](tests/README.md).
 
 ## Requirements
 
-- `python3` (used by the hooks). **No `jq`** — it isn't guaranteed to be on
+- `python3` (used by the hooks). **Required**: without it, the guards refuse
+  instead of letting things through — Claude can no longer run a command or write
+  a file until `python3` is fixed, and the refusal message says so. A blind guard
+  that lets everything through is worse than one that blocks. **No `jq`** — it
+  isn't guaranteed to be on
   every machine, and a hook that depends on a missing binary fails in silence:
   on a machine without it, the pre-push check simply never ran. That dependency
   was removed.

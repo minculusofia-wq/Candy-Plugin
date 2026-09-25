@@ -198,7 +198,11 @@ de se taire. Voir [tests/README.md](tests/README.md).
 
 ## Prérequis
 
-- `python3` (utilisé par les hooks). **Pas de `jq`** — il n'est pas garanti
+- `python3` (utilisé par les hooks). **Indispensable** : sans lui, les garde-fous
+  refusent au lieu de laisser passer — Claude ne peut plus lancer de commande ni
+  écrire de fichier tant que `python3` n'est pas réparé, et le message de refus le
+  dit. Un garde-fou aveugle qui laisse tout passer est pire qu'un garde-fou qui
+  bloque. **Pas de `jq`** — il n'est pas garanti
   sur toutes les machines, et un hook qui dépend d'un binaire absent échoue en
   silence : sur une machine qui ne l'avait pas, le contrôle avant push ne se
   déclenchait tout simplement jamais. Cette dépendance a été supprimée.
