@@ -171,7 +171,7 @@ if git -C "$PROJECT_DIR" rev-parse --git-dir > /dev/null 2>&1; then
             # Journaux, decisions et analyses racontent le passe : y nommer un
             # fichier supprime est normal (« MEMORY.md supprime » dans un JOURNAL
             # sortait en rouge).
-            # Noms separes par des octets nuls : xargs coupait « bot meteo/A.md »
+            # Noms separes par des octets nuls : xargs coupait « mon projet/A.md »
             # en deux chemins inexistants, et s'arretait sur une apostrophe.
             HITS=$(printf '%s\n' "$MD_FILES" | tr '\n' '\0' | xargs -0 grep -lF -- "$deleted" 2>/dev/null | \
                 grep -viE "CHANGELOG|archives|JOURNAL|DECISIONS|/analyses/" || true)

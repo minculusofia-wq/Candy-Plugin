@@ -112,13 +112,13 @@ verifie "%20, <…>, 'titre', (titre), ?x=1, ~/, absolu, vscode: : aucun signal�
 verifie "  le vrai lien cassé l'est toujours" 1 "$(echo "$LIENS" | grep -c 'Liens casses          : 1')"
 
 section "Audit des .md — un nom avec espace, apostrophe ou accent"
-mkdir -p "$BAC/noms/docs" "$BAC/noms/bot meteo" "$BAC/noms/notes d'équipe"
+mkdir -p "$BAC/noms/docs" "$BAC/noms/mon projet" "$BAC/noms/notes d'équipe"
 (
   cd "$BAC/noms"
   git init -q && git config user.email t@t.t && git config user.name t
   echo x > "docs/l'ancien guide.md"; echo x > "docs/stratégie.md"; echo x > docs/parti.md
   printf '# Suivi\nVoir docs/l'"'"'ancien guide.md et docs/stratégie.md\n' > SUIVI.md
-  printf '# Notes\nVoir docs/parti.md\n' > "bot meteo/NOTES.md"
+  printf '# Notes\nVoir docs/parti.md\n' > "mon projet/NOTES.md"
   printf '# Equipe\nVoir docs/parti.md\n' > "notes d'équipe/A.md"
   git add -A && git commit -qm depart
   git rm -q "docs/l'ancien guide.md" "docs/stratégie.md" docs/parti.md && git commit -qm suppression
@@ -129,7 +129,7 @@ verifie "fichier supprimé au nom avec apostrophe : sa mention est vue" \
 verifie "fichier supprimé au nom accentué : sa mention est vue" \
         1 "$(echo "$NOMS" | grep -c "mention de 'docs/stratégie.md'")"
 verifie "mention dans un dossier au nom avec espace : vue" \
-        1 "$(echo "$NOMS" | grep -c "bot meteo/NOTES.md:2 → mention de 'docs/parti.md'")"
+        1 "$(echo "$NOMS" | grep -c "mon projet/NOTES.md:2 → mention de 'docs/parti.md'")"
 verifie "mention dans un dossier au nom avec apostrophe : vue" \
         1 "$(echo "$NOMS" | grep -c "notes d'équipe/A.md:2 → mention de 'docs/parti.md'")"
 
