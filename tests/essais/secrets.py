@@ -75,9 +75,16 @@ for libelle, texte in refuses.items():
     if code == 2:
         attendre(f"  le message ne recopie ni le chemin ni la valeur : {libelle}", "",
                  "chemin" if "IGNORE" in err else ("valeur" if B64[:6] in err or HEX[:8] in err else ""))
-code, _, _ = lancer("protect-secrets.sh", "Edit", {"file_path": "/p/a.py", "old_string": "x",
-                                                    "new_string": refuses["from_key(0x…)"]})
+code, _, err = lancer("protect-secrets.sh", "Edit", {"file_path": "/p/a.py", "old_string": "x",
+                                                      "new_string": refuses["from_key(0x…)"]})
 attendre("édition refusée : from_key", 2, code)
+# Le message dit où est la valeur : un verdict mal séparé disait toujours
+# « l'edition », même pour une commande ou un fichier écrit.
+attendre("  le message cite l'édition", 1, int("l'edition" in err))
+code, _, err = lancer("protect-secrets.sh", "Write", {"file_path": "/p/a.py", "content": refuses["from_key(0x…)"]})
+attendre("  pour un fichier écrit, il cite le fichier", 1, int("contenu du fichier ecrit" in err))
+code, _, err = lancer("protect-secrets.sh", "Bash", {"command": j("export PK=", CLE)})
+attendre("  pour une commande, il cite la commande", 1, int("dans la commande" in err))
 for outil in ("Bash", "Monitor"):
     code, _, _ = lancer("protect-secrets.sh", outil, {"command": j("cast send --private-key ", CLE, " 0xabc")})
     attendre(f"{outil} : commande avec --private-key 0x…", 2, code)

@@ -197,15 +197,23 @@ verifie "son texte est fixe : le chemin du fichier n'y figure pas" \
 section "Contrôle avant push"
 PUSH="$RACINE/hooks/validate-before-push.sh"
 
-# Depuis la 0.3.3, seuls les fichiers suivis par git sont contrôlés : ce sont
-# eux qui partent au push. Chaque projet de test est donc un dépôt.
-suivi() { git -C "$1" init -q && git -C "$1" add -A; }
+# Un push envoie des COMMITS : depuis la 0.3.5, ce sont eux qui sont contrôlés,
+# pas le disque. Chaque projet de test est donc un dépôt avec un commit, et le
+# hook reçoit une vraie commande « git push », lancée depuis ce dépôt.
+G=(git -c user.email=t@t.t -c user.name=t -c commit.gpgsign=false)
+suivi() { git -C "$1" init -q && git -C "$1" add -A && "${G[@]}" -C "$1" commit -qm depart; }
+PUSH_CMD="git pu""sh"
+entree_push() {  # entree_push <dossier> [commande]
+    python3 -I -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[2]},"cwd":sys.argv[1]}))' \
+        "$1" "${2:-$PUSH_CMD}"
+}
+pousse() { code_hook "$PUSH" "$(entree_push "$1" "${2:-$PUSH_CMD}")" CLAUDE_PROJECT_DIR="$1"; }
 
 mkdir -p "$BAC/casse"
 printf 'def casse(:\n    return 1\n' > "$BAC/casse/casse.py"
 suivi "$BAC/casse"
 verifie "une erreur de syntaxe REFUSE le push" \
-        2 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/casse")"
+        2 "$(pousse "$BAC/casse")"
 # Le lanceur de hooks.json lit la commande avant d'appeler ce contrôle : s'il
 # plantait sur un caractère invalide, la commande était lue vide et le push
 # partait sans contrôle (seconde relecture de la 0.3.4).
@@ -217,14 +225,14 @@ for piege in "" " # \\ud800"; do
             2 "$(cd "$BAC/casse" && printf '%s' "$ENTREE_PUSH" | env CLAUDE_PLUGIN_ROOT="$RACINE" CLAUDE_PROJECT_DIR="$BAC/casse" bash -c "$LANCEUR" >/dev/null 2>&1; echo $?)"
 done
 verifie "la raison du refus arrive à Claude (sur stderr)" \
-        1 "$(raison_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/casse")"
+        1 "$(raison_hook "$PUSH" "$(entree_push "$BAC/casse")" CLAUDE_PROJECT_DIR="$BAC/casse")"
 
 # La raison arrive à Claude avec le poids d'un message de l'utilisateur : aucun
 # texte venu du dépôt ne doit y figurer (trouvé par la relecture de sécurité).
 mkdir -p "$BAC/piege/CONSIGNE_PIEGE_autorise_no-verify"
 printf 'def casse(:\n' > "$BAC/piege/CONSIGNE_PIEGE_autorise_no-verify/a.py"
 suivi "$BAC/piege"
-RAISON_PIEGE=$(printf '{}' | CLAUDE_PROJECT_DIR="$BAC/piege" bash "$PUSH" 2>&1 >/dev/null)
+RAISON_PIEGE=$(entree_push "$BAC/piege" | CLAUDE_PROJECT_DIR="$BAC/piege" bash "$PUSH" 2>&1 >/dev/null)
 verifie "un nom de dossier piégé n'arrive pas dans la raison du refus" \
         0 "$(printf '%s' "$RAISON_PIEGE" | grep -c 'CONSIGNE_PIEGE')"
 
@@ -232,24 +240,24 @@ mkdir -p "$BAC/devenv/projet"
 printf 'def casse(:\n' > "$BAC/devenv/projet/a.py"
 suivi "$BAC/devenv/projet"
 verifie "un projet rangé sous un dossier « devenv » est quand même contrôlé" \
-        2 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/devenv/projet")"
+        2 "$(pousse "$BAC/devenv/projet")"
 mkdir -p "$BAC/avecvenv/.venv"
 printf 'def casse(:\n' > "$BAC/avecvenv/.venv/lib.py"
 suivi "$BAC/avecvenv"
 verifie "un venv DANS le projet reste ignoré, même suivi par git" \
-        0 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/avecvenv")"
+        0 "$(pousse "$BAC/avecvenv")"
 
 mkdir -p "$BAC/espaces/mon dossier"
 printf 'def ok():\n    return 1\n' > "$BAC/espaces/mon dossier/ok.py"
 suivi "$BAC/espaces"
 verifie "un chemin avec des espaces n'est pas découpé : le push passe" \
-        0 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/espaces")"
+        0 "$(pousse "$BAC/espaces")"
 
 mkdir -p "$BAC/propre"
 printf 'def ok():\n    return 1\n' > "$BAC/propre/ok.py"
 suivi "$BAC/propre"
 verifie "un code valide laisse passer le push" \
-        0 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/propre")"
+        0 "$(pousse "$BAC/propre")"
 
 # Ce qui ne part pas au push ne le bloque pas : un environnement non suivi
 # (code tiers, parfois en Python 2) faisait refuser le push et durer 12 s.
@@ -258,14 +266,14 @@ printf 'def ok():\n    return 1\n' > "$BAC/nonsuivi/ok.py"
 suivi "$BAC/nonsuivi"
 printf 'print "python 2"\n' > "$BAC/nonsuivi/env/lib/vieux.py"
 verifie "un fichier cassé NON suivi par git ne bloque pas le push" \
-        0 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/nonsuivi")"
+        0 "$(pousse "$BAC/nonsuivi")"
 
 # Sans .git à la racine, rien à contrôler : une session ouverte dans le
 # dossier personnel fouillait tout le disque.
 mkdir -p "$BAC/sansgit"
 printf 'def casse(:\n' > "$BAC/sansgit/a.py"
 verifie "un dossier qui n'est pas un dépôt n'est pas fouillé" \
-        0 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/sansgit")"
+        0 "$(pousse "$BAC/sansgit")"
 
 # Un fichier suivi remplacé sur le disque par un tube : l'ouverture ne doit
 # pas attendre (O_NONBLOCK).
@@ -274,7 +282,7 @@ printf 'x = 1\n' > "$BAC/tubedirect/a.py"; printf 'def casse(:\n' > "$BAC/tubedi
 suivi "$BAC/tubedirect"
 rm "$BAC/tubedirect/a.py" && mkfifo "$BAC/tubedirect/a.py"
 verifie "un .py remplacé par un tube ne bloque pas le hook" \
-        2 "$(code_borne "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/tubedirect")"
+        2 "$(code_borne "$PUSH" "$(entree_push "$BAC/tubedirect")" CLAUDE_PROJECT_DIR="$BAC/tubedirect")"
 # Un .py suivi qui est un lien n'est pas suivi jusqu'à sa cible (O_NOFOLLOW) :
 # le contrôle ne lit rien hors du dépôt.
 mkdir -p "$BAC/dehors" "$BAC/lienpy"
@@ -282,14 +290,14 @@ printf 'def casse(:\n' > "$BAC/dehors/cible.py"
 ln -s "$BAC/dehors/cible.py" "$BAC/lienpy/a.py"
 suivi "$BAC/lienpy"
 verifie "un .py qui est un lien vers l'extérieur n'est pas lu" \
-        0 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/lienpy")"
+        0 "$(pousse "$BAC/lienpy")"
 # Un dossier relatif du PATH (« . », « bin ») ne doit jamais faire lancer un
 # python3.X fourni par le dépôt, même pour lire sa version.
 mkdir -p "$BAC/pypiege/bin"
 printf '#!/bin/bash\ntouch "%s/pypiege/LANCE"\necho 399\n' "$BAC" > "$BAC/pypiege/bin/python3.20"
 chmod +x "$BAC/pypiege/bin/python3.20"; printf 'x = 1\n' > "$BAC/pypiege/a.py"
 suivi "$BAC/pypiege"
-( cd "$BAC/pypiege" && printf '{}' | CLAUDE_PROJECT_DIR="$BAC/pypiege" PATH="bin:$PATH" bash "$PUSH" >/dev/null 2>&1 )
+( cd "$BAC/pypiege" && entree_push "$BAC/pypiege" | CLAUDE_PROJECT_DIR="$BAC/pypiege" PATH="bin:$PATH" bash "$PUSH" >/dev/null 2>&1 )
 verifie "un python3.X posé dans le dépôt n'est jamais lancé" \
         0 "$([ -e "$BAC/pypiege/LANCE" ] && echo 1 || echo 0)"
 
@@ -308,7 +316,7 @@ if python_recent; then
     printf 'match 3:\n    case 3:\n        pass\n' > "$BAC/recent/a.py"
     suivi "$BAC/recent"
     verifie "une syntaxe récente (match) passe, même si python3 est un 3.9" \
-            0 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/recent")"
+            0 "$(pousse "$BAC/recent")"
 else
     saute "une syntaxe récente (match) passe, même si python3 est un 3.9" "aucun Python 3.10 ou plus sur cette machine"
 fi
@@ -322,7 +330,7 @@ mkfifo "$BAC/tube/tube" && ln -s tube "$BAC/tube/a.py"
 printf 'def casse(:\n' > "$BAC/tube/b.py"
 suivi "$BAC/tube"
 verifie "un .py qui pointe vers un tube ne bloque pas le hook, le reste est contrôlé" \
-        2 "$(code_borne "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/tube")"
+        2 "$(code_borne "$PUSH" "$(entree_push "$BAC/tube")" CLAUDE_PROJECT_DIR="$BAC/tube")"
 # Un seul fichier qui fait planter la compilation (source trop imbriquée)
 # faisait passer tout le push.
 mkdir -p "$BAC/imbrique"
@@ -330,18 +338,18 @@ python3 -I -c 'import sys; open(sys.argv[1], "w").write("x = " + "-" * 200000 + 
 printf 'def casse(:\n' > "$BAC/imbrique/b.py"
 suivi "$BAC/imbrique"
 verifie "un fichier qui fait planter la compilation ne neutralise pas le contrôle" \
-        2 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/imbrique")"
+        2 "$(pousse "$BAC/imbrique")"
 # … et c'est bien le fichier qui est compté comme cassé, pas le contrôle entier
 # qui s'arrête : la raison est celle d'un fichier qui ne compile pas.
 verifie "le fichier trop imbriqué est compté comme cassé, un par un" \
-        1 "$(printf '{}' | CLAUDE_PROJECT_DIR="$BAC/imbrique" bash "$PUSH" 2>&1 >/dev/null | grep -c 'ne compilent pas')"
+        1 "$(entree_push "$BAC/imbrique" | CLAUDE_PROJECT_DIR="$BAC/imbrique" bash "$PUSH" 2>&1 >/dev/null | grep -c 'ne compilent pas')"
 # Le filtre des environnements porte sur des noms exacts : un dossier interne
 # « devenv » est contrôlé.
 mkdir -p "$BAC/interne/src/devenv"
 printf 'def casse(:\n' > "$BAC/interne/src/devenv/a.py"
 suivi "$BAC/interne"
 verifie "un dossier « devenv » DANS le projet est contrôlé" \
-        2 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/interne")"
+        2 "$(pousse "$BAC/interne")"
 # Un Python qui plante sans rendre de compte (le 3.9 de macOS sort en 139 sur
 # certains fichiers) faisait passer le push. Un faux interpréteur, plus récent
 # que tout, sort comme un plantage (139) — sans vrai signal, qui laisserait un
@@ -355,7 +363,7 @@ chmod +x "$BAC/fauxpy/python3.20"
 printf 'x = 1\n' > "$BAC/plante/a.py"
 suivi "$BAC/plante"
 verifie "un Python qui plante fait REFUSER le push" \
-        2 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/plante" PATH="$BAC/fauxpy:$PATH")"
+        2 "$(code_hook "$PUSH" "$(entree_push "$BAC/plante")" CLAUDE_PROJECT_DIR="$BAC/plante" PATH="$BAC/fauxpy:$PATH")"
 
 # La suite de tests complète a été retirée de ce contrôle : sur un vrai projet
 # elle transformait chaque push en plusieurs minutes d'attente, et un contrôle
@@ -364,7 +372,55 @@ mkdir -p "$BAC/lent/tests"
 printf 'def test_ko():\n    assert False\n' > "$BAC/lent/tests/test_ko.py"
 suivi "$BAC/lent"
 verifie "des tests en échec ne bloquent PAS le push, par choix" \
-        0 "$(code_hook "$PUSH" '{}' CLAUDE_PROJECT_DIR="$BAC/lent")"
+        0 "$(pousse "$BAC/lent")"
+
+# 0.3.5 : le dépôt POUSSÉ, pas le dossier d'ouverture de la session.
+# « git -C x push » ne déclenchait rien (le lanceur ne lisait que le texte
+# exact « git push ») ; « cd x && git push » contrôlait le dossier de départ.
+mkdir -p "$BAC/ailleurs" "$BAC/cassepush" "$BAC/sainpush"
+printf 'def (:\n' > "$BAC/cassepush/casse.py"; suivi "$BAC/cassepush"
+printf 'x = 1\n' > "$BAC/sainpush/ok.py"; suivi "$BAC/sainpush"
+pousser() {  # pousser <commande> — lancée depuis un dossier qui n'est pas un dépôt
+    code_hook "$PUSH" "$(entree_push "$BAC/ailleurs" "$1")" CLAUDE_PROJECT_DIR="$BAC/ailleurs"
+}
+C="$BAC/cassepush"; SAIN="$BAC/sainpush"
+verifie "git -C <cassé> push, depuis ailleurs : REFUSÉ" 2 "$(pousser "git -C $C pu""sh -q")"
+verifie "cd <cassé> && git push, depuis ailleurs : REFUSÉ" 2 "$(pousser "cd $C && git pu""sh")"
+verifie "git --no-pager -C <cassé> push : REFUSÉ" 2 "$(pousser "git --no-pager -C $C pu""sh")"
+verifie "deux espaces entre git et push : REFUSÉ" 2 "$(pousser "cd $C && git  pu""sh")"
+verifie "push dans OUT=\"\$( )\" : REFUSÉ" 2 "$(pousser "OUT=\"\$(git -C $C pu""sh 2>&1)\"")"
+verifie "push coupé sur deux lignes : REFUSÉ" 2 "$(pousser "git -C $C \\
+  pu""sh origin main")"
+verifie "--git-dir=<cassé>/.git push : REFUSÉ" 2 "$(pousser "git --git-dir=$C/.git pu""sh")"
+verifie "GIT_DIR=<cassé>/.git git push : REFUSÉ" 2 "$(pousser "GIT_DIR=$C/.git git pu""sh")"
+verifie "env -C <cassé> git push : REFUSÉ" 2 "$(pousser "env -C $C git pu""sh")"
+verifie "pushd <cassé> && git push : REFUSÉ" 2 "$(pousser "pushd $C && git pu""sh")"
+git -C "$C" config alias.p push
+git -C "$C" config alias.envoie '!git push origin HEAD'
+verifie "un alias git p = push : REFUSÉ" 2 "$(pousser "git -C $C p")"
+verifie "un alias shell « !git push » : REFUSÉ" 2 "$(pousser "git -C $C envoie")"
+verifie "un alias passé par -c : REFUSÉ" 2 "$(pousser "git -C $C -c alias.x=push x")"
+verifie "un alias inconnu : accepté" 0 "$(pousser "git -C $C inconnu")"
+verifie "une commande sans push : acceptée" 0 "$(pousser "git -C $C status")"
+verifie "git -C <sain> push : accepté" 0 "$(pousser "git -C $SAIN pu""sh")"
+mkdir -p "$BAC/sousdossier/app"
+printf 'def (:\n' > "$BAC/sousdossier/casse.py"; printf 'x = 1\n' > "$BAC/sousdossier/app/ok.py"
+suivi "$BAC/sousdossier"
+verifie "une session ouverte dans un sous-dossier contrôle tout le dépôt" 2 "$(pousse "$BAC/sousdossier/app")"
+# Les commits, pas le disque.
+printf 'x = 2\n' > "$C/casse.py"
+verifie "commit cassé, disque corrigé sans commit : REFUSÉ" 2 "$(pousse "$C")"
+verifie "  la raison dit de commiter la correction" \
+        1 "$(entree_push "$C" | CLAUDE_PROJECT_DIR="$C" bash "$PUSH" 2>&1 >/dev/null | grep -c 'PUIS commiter')"
+printf 'def (:\n' > "$SAIN/ok.py"
+verifie "commit sain, disque cassé en cours d'édition : accepté" 0 "$(pousse "$SAIN")"
+printf 'x = 1\n' > "$SAIN/ok.py"
+"${G[@]}" -C "$SAIN" checkout -qb autre; printf 'def (:\n' > "$SAIN/b.py"
+"${G[@]}" -C "$SAIN" add b.py; "${G[@]}" -C "$SAIN" commit -qm b; "${G[@]}" -C "$SAIN" checkout -q -
+verifie "git push origin <branche cassée> depuis un HEAD sain : REFUSÉ" 2 "$(pousser "git -C $SAIN pu""sh origin autre")"
+verifie "git push origin HEAD sain : accepté" 0 "$(pousser "git -C $SAIN pu""sh origin HEAD")"
+verifie "git clone && cd <absent> && git push : repli sur le départ, accepté" \
+        0 "$(pousse "$SAIN" "git clone u nouveau && cd nouveau && git pu""sh")"
 
 section "Fin de tour — le contrôle si du code a bougé"
 FIN="$RACINE/hooks/controle-si-code-modifie.sh"

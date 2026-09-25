@@ -1,10 +1,26 @@
 #!/bin/bash
 #
-# validate-before-push.sh - Validates project before git push
-# Triggered by git pre-push hook
+# validate-before-push.sh (PreToolUse : Bash, Monitor)
 #
-
-set -e
+# Refuse un push qui emporterait un fichier Python qui ne compile pas. Rien de
+# plus.
+#
+# Le depot controle est celui qui est POUSSE : analyse-commande.py (mode
+# « pousses ») trouve chaque « git … push » de la commande et son dossier —
+# git -C x, --work-tree, --git-dir, GIT_DIR=, env -C, cd x && git push, pushd,
+# un alias (git p). Jusqu'a la 0.3.4, le lanceur de hooks.json ne reagissait
+# qu'au texte exact « git push », et ce hook controlait le dossier d'ouverture
+# de la session : « git -C autre-depot push » n'etait pas controle,
+# « cd x && git push » controlait le mauvais dossier, et une session ouverte
+# dans un sous-dossier du depot ne controlait rien.
+#
+# Ce qui part au push, ce sont les COMMITS, pas le disque : jusqu'a la 0.3.4,
+# on compilait les fichiers du disque — un commit casse passait des que le
+# disque etait corrige, et un fichier en cours d'edition faisait refuser des
+# commits sains. Les .py sont lus tels qu'ils sont dans chaque reference poussee
+# (HEAD par defaut, la branche nommee sinon), par « git cat-file », en memoire :
+# aucun filtre du depot n'est applique, rien du depot n'est execute.
+#
 # Quand ce hook refuse (code 2), Claude Code transmet a Claude la raison lue
 # sur stderr, avec le poids d'un message de l'utilisateur. Cette raison est
 # donc un texte FIXE : aucun nom de fichier du depot n'y figure, sinon un
@@ -12,86 +28,65 @@ set -e
 # consigne. Le detail se lit avec /verifier, dont la sortie est une donnee.
 # Aucun texte sur stdout : sur cet evenement, il ne va qu'au journal de
 # debogage, quel que soit le code de sortie (doc hooks, « Exit code 0 » et
-# « Other exit codes »). Le deroule qui s'y ecrivait n'a jamais ete lu.
-
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-FAILURES=0
-
-# =====================
-# PROJET APP (iOS) : coherence documentaire
-# =====================
+# « Other exit codes »).
 #
-# Retire le 2026-08-08 : une premiere etape appelait `update-claude-md.sh`, un
-# script ABSENT de la machine. Elle affichait « skipping » a chaque push depuis
-# toujours. Une etape morte dans un controle rend le controle moins credible que
-# pas de controle du tout.
+# PAS DE SUITE DE TESTS ICI. Une version plus ancienne lancait pytest ET
+# npm test a chaque push : un push devenait plusieurs minutes d'attente — et un
+# controle qu'on attend finit contourne par --no-verify. Le controle complet a
+# deja sa place, deux fois : /verifier a la demande, et la porte de sortie de
+# phase tenue par /fin-phase. Ici on garde ce qui coute moins d'une seconde et
+# attrape ce qu'un push ne devrait jamais emporter : une erreur de syntaxe.
 #
-# Remplacee par ce qui manquait vraiment : ce script ne contenait AUCUNE
-# verification Swift ni Xcode, donc sur une app iOS il pouvait rendre un vert
-# complet sur une app qui ne compile pas. Le controle complet de l'app dure ~10
-# minutes — trop long pour un push. Le controle de coherence, lui, dure moins
-# d'une seconde et refuse un depot incoherent : c'est la bonne maille ici.
-# Le controle complet reste la porte de sortie de phase, tenue par /fin-phase.
+# Retire dans la 0.3.1 : sur un projet contenant un *.xcodeproj, une etape
+# lancait scripts/verifier_coherence.py — du code du projet, execute AVANT que
+# l'utilisateur ait accepte la commande (trouve par la relecture de securite).
 
-# Retire dans la 0.3.1 : sur un projet contenant un *.xcodeproj, cette etape
-# lancait scripts/verifier_coherence.py — du code du projet, execute par un hook
-# PreToolUse, donc AVANT que l'utilisateur ait accepte ou refuse la commande, et
-# sur toute commande qui contenait « git push » (un simple grep suffisait). Un
-# depot piege n'avait qu'a fournir un dossier x.xcodeproj/ vide et ce script
-# (trouve par la relecture de securite). Ce controle ne servait qu'a l'app de
-# l'auteur : le controle complet de l'app reste la porte de sortie de phase,
-# tenue par /fin-phase, lancee par l'utilisateur.
+set -u
+H="$(cd "${BASH_SOURCE[0]%/*}" 2>/dev/null && pwd)"
+INPUT=$(cat)
 
-# =====================
-# PAS DE SUITE DE TESTS ICI
-# =====================
-#
-# Cette etape lancait pytest ET npm test sur tout le projet, a chaque push.
-# Sur un projet reel, un push devenait plusieurs minutes d'attente — et un
-# controle qu'on attend finit contourne par --no-verify.
-#
-# Le controle complet a deja sa place, deux fois : /verifier a la demande, et
-# la porte de sortie de phase tenue par /fin-phase. Ici on garde ce qui coute
-# moins d'une seconde et attrape ce qu'un push ne devrait jamais emporter :
-# une erreur de syntaxe.
+# Filtre rapide : sans « push » ni « git », rien a controler (ce hook tourne
+# sur chaque commande). « git » aussi : un alias (git p) peut pousser.
+[[ "$INPUT" == *push* || "$INPUT" == *git* ]] || exit 0
 
-# =====================
-# SYNTAX CHECK
-# =====================
-#
-# Revu dans la 0.3.3, trois pieges :
-#   - le python3 par defaut de macOS est un 3.9 : il refuse un `match` ou une
-#     f-string 3.12 parfaitement valides. On prend le Python 3 le plus recent
-#     du PATH ;
-#   - le controle fouillait tout le dossier, environnements non suivis compris :
-#     sur un dossier reel, 9 180 fichiers de code tiers et 12 secondes. Seuls
-#     les fichiers suivis par git partent au push : ce sont eux qu'on controle ;
-#   - une session ouverte dans le dossier personnel fouillait tout le disque.
-#     Sans .git a la racine du projet, il n'y a rien a controler.
-# Un environnement suivi par erreur reste ignore, reconnu par le DEBUT du nom
-# d'un dossier (venv, .venv-3.12…) : un « devenv » reste controle.
-# core.fsmonitor coupe : git ne lance aucune commande configuree dans le depot.
-# Compilation en memoire, dans un seul processus : aucun .pyc ecrit.
-# Relecture de securite : seuls les fichiers ordinaires de moins de 2 Mo sont
-# lus (un lien vers /dev/zero ou un tube bloquait le hook), une erreur sur un
-# fichier ne fait plus sauter tout le controle, et un Python qui plante fait
-# refuser le push au lieu de le laisser passer.
+# Si la commande ne peut pas etre lue (Python absent ou en panne), le push est
+# REFUSE : un garde-fou qui ne voit rien ne laisse rien passer.
+DOSSIERS=$(printf '%s' "$INPUT" | python3 -I "$H/analyse-commande.py" pousses 2>/dev/null) || {
+    echo "Push refuse : le controle avant push n'a pas pu lire la commande (Python introuvable ou en panne)." >&2
+    exit 2
+}
+# Une ligne par push : « dossier<tab>references poussees » (HEAD par defaut).
+# Chaque dossier est ramene a la racine de son depot : une session ouverte dans
+# un sous-dossier controle le depot entier.
+RACINES=""
+POUSSES=""
+while IFS=$'\t' read -r D REFS; do
+    [[ -n "$D" ]] || continue
+    R=$(git -C "$D" -c core.fsmonitor=false rev-parse --show-toplevel 2>/dev/null) || continue
+    RACINES+="$R"$'\n'
+    POUSSES+="$R"$'\t'"${REFS:-HEAD}"$'\n'
+done <<< "$DOSSIERS"
+[[ -n "$RACINES" ]] || exit 0
 
-[[ -e "$PROJECT_DIR/.git" ]] || exit 0
-
-PY=""
-BEST=0
+# Le Python 3 le plus recent du PATH : le python3 par defaut de macOS est un
+# 3.9, qui refuse un `match` ou une f-string 3.12 parfaitement valides.
 # Les noms sont assembles (python3, python3.9…) : ce ne sont pas des appels, et
 # le controle statique de tests/06 exige -I sur tout appel ecrit en toutes
 # lettres. Les deux appels ci-dessous, eux, portent -I.
+PY=""
+BEST=0
 CANDIDATS=$(for n in 3 3.{9..20}; do type -a -p "python$n"; done 2>/dev/null | awk '!vu[$0]++')
 while IFS= read -r cand; do
     [[ -n "$cand" ]] || continue
-    # Chemins absolus seulement, et hors du projet : un dossier relatif du PATH
-    # (« . », « bin ») ferait lancer un python3.X fourni par le depot ouvert,
+    # Chemins absolus seulement, et hors des depots pousses : un dossier relatif
+    # du PATH (« . », « bin ») ferait lancer un python3.X fourni par le depot,
     # avant l'accord de l'utilisateur (relecture de securite de la 0.3.3).
     [[ "$cand" == /* ]] || continue
-    case "$cand" in "$PROJECT_DIR"/*) continue ;; esac
+    DANS_UN_DEPOT=0
+    while IFS= read -r R; do
+        [[ -n "$R" ]] && case "$cand" in "$R"/*) DANS_UN_DEPOT=1 ;; esac
+    done <<< "$RACINES"
+    [[ "$DANS_UN_DEPOT" = 0 ]] || continue
     v=$("$cand" -I -c 'import sys; print(sys.version_info[0] * 100 + sys.version_info[1])' 2>/dev/null) || continue
     [[ "$v" =~ ^[0-9]+$ ]] || continue
     if (( v > BEST )); then BEST=$v; PY=$cand; fi
@@ -99,52 +94,84 @@ done <<< "$CANDIDATS"
 
 [[ -n "$PY" ]] || exit 0
 
-cd "$PROJECT_DIR"
-FAILURES=$(git -c core.fsmonitor=false ls-files -z -- '*.py' 2>/dev/null | "$PY" -I -c '
-import os, stat, sys
-IGNORES = {b"virtualenv", b".virtualenv", b"site-packages", b"__pycache__",
-           b"node_modules"}
+# Un environnement suivi par erreur reste ignore, reconnu par le DEBUT du nom
+# d'un dossier (venv, .venv-3.12…) : un « devenv » reste controle. Blobs
+# ordinaires seulement (ni lien 120000 ni sous-module 160000), de moins de 2 Mo.
+# core.fsmonitor coupe et variables GIT_* retirees : git ne lance aucune
+# commande configuree dans le depot. Un Python qui plante fait refuser le push
+# au lieu de le laisser passer.
+controler() {  # controler <racine du depot> <references> : 0 si tout compile, sinon refuse (exit 2)
+ERREURS=$("$PY" -I -c '
+import os, subprocess, sys
+racine, refs = sys.argv[1], sys.argv[2].split()
+IGNORES = {b"virtualenv", b".virtualenv", b"site-packages", b"__pycache__", b"node_modules"}
 def ignore(nom):
     return nom in IGNORES or nom.startswith((b"venv", b".venv"))
-casses = 0
-for chemin in sys.stdin.buffer.read().split(b"\0"):
-    if not chemin or any(ignore(x) for x in chemin.split(b"/")[:-1]):
-        continue
-    # O_NOFOLLOW + O_NONBLOCK puis fstat sur le fichier OUVERT : ni lien, ni
-    # tube, ni fichier remplace entre la verification et la lecture.
-    try:
-        fd = os.open(chemin, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-    except OSError:
-        continue
-    with os.fdopen(fd, "rb") as f:
-        infos = os.fstat(f.fileno())
-        if not stat.S_ISREG(infos.st_mode) or infos.st_size > 2_000_000:
+env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+g = ["git", "-c", "core.fsmonitor=false", "-C", racine]
+def git(*args, entree=None):
+    return subprocess.run(g + list(args), input=entree, capture_output=True, env=env, timeout=60)
+if refs == ["--all"]:
+    refs = git("for-each-ref", "--format=%(refname)", "refs/heads").stdout.decode().split() or ["HEAD"]
+casses, vus = 0, set()
+for ref in refs:
+    r = git("rev-parse", "--verify", "--quiet", ref + "^{commit}")
+    if r.returncode != 0:
+        continue                                    # reference inconnue ici (push distant:branche)
+    arbre = git("ls-tree", "-r", "-z", r.stdout.decode().strip()).stdout
+    objets = []
+    for entree in arbre.split(b"\0"):
+        if b"\t" not in entree:
             continue
-        source = f.read(2_000_001)
-    try:
-        compile(source, chemin.decode("utf-8", "replace"), "exec", dont_inherit=True)
-    except (SyntaxError, ValueError, RecursionError, MemoryError):
-        casses += 1
-    except Exception:
-        pass
+        meta, chemin = entree.split(b"\t", 1)
+        mode, genre, sha = meta.split(b" ")
+        if genre != b"blob" or mode not in (b"100644", b"100755") or not chemin.endswith(b".py"):
+            continue
+        if any(ignore(x) for x in chemin.split(b"/")[:-1]) or sha in vus:
+            continue
+        vus.add(sha)
+        objets.append((sha, chemin))
+    if not objets:
+        continue
+    donnees = git("cat-file", "--batch", entree=b"".join(s + b"\n" for s, _ in objets)).stdout
+    pos = 0
+    for sha, chemin in objets:
+        fin = donnees.index(b"\n", pos)
+        entete = donnees[pos:fin].split(b" ")
+        if len(entete) < 3:
+            pos = fin + 1                           # objet absent
+            continue
+        taille = int(entete[2])
+        contenu = donnees[fin + 1:fin + 1 + taille]
+        pos = fin + 1 + taille + 1
+        if taille > 2_000_000:
+            continue
+        try:
+            compile(contenu, chemin.decode("utf-8", "replace"), "exec", dont_inherit=True)
+        except (SyntaxError, ValueError, RecursionError, MemoryError):
+            casses += 1
+        except Exception:
+            pass
 print(casses)
-' 2>/dev/null) || FAILURES=""
+' "$1" "$2" 2>/dev/null) || ERREURS=""
 
 # Python qui plante sans rendre de compte (le 3.9 de macOS sort en 139 sur
 # certains fichiers) : le controle n'a pas eu lieu, le push ne passe pas.
-if [[ ! "$FAILURES" =~ ^[0-9]+$ ]]; then
+if [[ ! "$ERREURS" =~ ^[0-9]+$ ]]; then
     echo "Push refuse : le controle de syntaxe Python du projet n'a pas pu aller au bout." >&2
     echo "Le relancer : /verifier, ou python3 -I -m py_compile sur les fichiers .py du projet." >&2
     exit 2
 fi
 
-# =====================
-# FINAL RESULT
-# =====================
-if [[ $FAILURES -gt 0 ]]; then
-    echo "Push refuse : $FAILURES fichier(s) Python ne compilent pas." >&2
+if (( ERREURS > 0 )); then
+    echo "Push refuse : $ERREURS fichier(s) Python des commits pousses ne compilent pas." >&2
+    echo "Corriger, PUIS commiter la correction, puis pousser : le push envoie les commits, pas le disque." >&2
     echo "Les voir : /verifier, ou python3 -I -m py_compile sur les fichiers .py du projet." >&2
     exit 2
 fi
+}
 
+while IFS=$'\t' read -r R REFS; do
+    [[ -n "$R" ]] && controler "$R" "$REFS"
+done <<< "$POUSSES"
 exit 0

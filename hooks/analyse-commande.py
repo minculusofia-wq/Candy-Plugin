@@ -1377,7 +1377,7 @@ def protection(t, texte, depart):
     for ou, cle in (("commande", "command"), ("fichier", "content"), ("edition", "new_string")):
         v = t.get(cle)
         if isinstance(v, str) and detection.valeur_secrete(v):
-            return f"VALEUR\\t{ou}"
+            return f"VALEUR\t{ou}"
     if not texte:
         return "OK"
     try:
@@ -1410,7 +1410,7 @@ def main():
             # Illisible : si la ligne parle de push, on contrôle le départ.
             pousses = [(depart, ["HEAD"])] if re.search(r"\bpush\b", texte) else []
         for dossier, refs in dict.fromkeys((d, " ".join(r)) for d, r in pousses):
-            print(f"{dossier}\\t{refs}")
+            print(f"{dossier}\t{refs}")
     elif mode == "cloture":
         texte = texte[:40000]
         try:
@@ -1418,7 +1418,7 @@ def main():
         except ValueError:
             # Illisible : on lit le texte entier, prudemment.
             dossier = depart if re.search(r"\bcommit\b", texte) and porte_cloture_quelque_part(texte) else None
-        print(f"OUI\\t{dossier}" if dossier else "NON")
+        print(f"OUI\t{dossier}" if dossier else "NON")
     else:
         raise SystemExit(3)
 

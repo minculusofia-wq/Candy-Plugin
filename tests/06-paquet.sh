@@ -200,9 +200,10 @@ raise ImportError("module piégé")
 EOF
 done
 printf 'ligne\n%.0s' $(seq 201) > "$PIEGE/CLAUDE.md"
-# Un dépôt avec un .py suivi : sans lui, le contrôle avant push s'arrête avant
-# son Python et ce rejeu ne vérifie rien pour lui.
-git -C "$PIEGE" init -q && printf 'x = 1\n' > "$PIEGE/app.py" && git -C "$PIEGE" add app.py
+# Un dépôt avec un .py commité : sans lui, le contrôle avant push s'arrête
+# avant son Python (il lit les commits) et ce rejeu ne vérifie rien pour lui.
+git -C "$PIEGE" init -q && printf 'x = 1\n' > "$PIEGE/app.py" && git -C "$PIEGE" add app.py \
+    && git -C "$PIEGE" -c user.email=t@t.t -c user.name=t -c commit.gpgsign=false commit -qm piege
 printf '%s | tâche piégée | - |\n' "$PIEGE" > "$PIEGE/.rappels.txt"
 FAUTIFS=""
 # Deux fichiers : a.txt passe par le chemin ordinaire, Dockerfile par la branche
