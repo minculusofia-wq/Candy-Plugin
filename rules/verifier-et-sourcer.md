@@ -34,7 +34,7 @@ Ni valeur, ni seuil, ni nom de fichier, ni comportement d'API, ni « probablemen
 | Processus, ports, système | Bash (`lsof`, `ps`) |
 | API externe | appel réel |
 | Mémoires Claude | lire le fichier avant de citer |
-| **État d'un projet ou d'un chantier** (fait / reste à faire) | le dépôt lui-même (`git log`, fichiers, `python3 ${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh "$PWD"`) et `~/.claude/rappels-projets.txt` — **jamais une mémoire seule** |
+| **État d'un projet ou d'un chantier** (fait / reste à faire) | le dépôt lui-même (`git log`, fichiers, le contrôle du jeu de documents de `/verifier`) et `~/.claude/rappels-projets.txt` — **jamais une mémoire seule** |
 
 Une mémoire est une piste, pas une preuve : elle dit ce qui était vrai le jour
 où elle a été écrite, et le travail fait dans un autre projet ne la met pas à

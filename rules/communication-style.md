@@ -46,7 +46,7 @@ décision que Claude est mieux placé pour prendre.
 configuration, formulation d'une règle ou d'un document, tests, commit — et le
 **rangement des fichiers** : ranger, déplacer, fusionner ou retirer un fichier,
 y compris un fichier créé par l'utilisateur. Retirer se fait de façon réversible
-(corbeille ou archive, jamais une suppression définitive). Il choisit la
+(corbeille ou archive, jamais une suppression définitive). Claude choisit la
 meilleure option après y avoir réfléchi, l'exécute, puis le dit en une ligne :
 « J'ai choisi X parce que Y. » Tout est sous git, donc réversible.
 

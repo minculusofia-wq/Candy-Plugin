@@ -42,7 +42,8 @@ backticks terminé par `/`.
   pour les guides ciblés.
 - `analyses/` devient obligatoire dès qu'une analyse existe dans le projet.
 
-Le contrôle : `python3 ${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh "$PWD"` — 🔴 un fichier obligatoire manque ou un lien est cassé,
+Le contrôle : celui du jeu de documents, lancé à chaque ouverture de session et
+par `/verifier` — 🔴 un fichier obligatoire manque ou un lien est cassé,
 🟡 un fichier est hors du jeu (`MEMORY.md`, skill projet qui redit le contexte
 du projet, `.md` inconnu à la racine).
 

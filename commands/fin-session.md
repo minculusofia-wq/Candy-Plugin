@@ -11,8 +11,12 @@ Décider sans poser la question — les tests sont une décision technique (voir
 `rules/communication-style.md`, « Qui décide quoi ») — et l'annoncer en une
 ligne : debug complet si du code a été modifié pendant la session, rien sinon.
 
-- **Code modifié** → appliquer la procédure de `/debug`, version **complète**, sans en
-  sauter une étape (y compris la séquence de fin : tuer les processus locaux).
+- **Code modifié** → appliquer la procédure de `/debug` jusqu'aux tests verts et à
+  la séquence de fin (tuer les processus locaux) — **sans ses étapes de commit, de
+  push et de question de déploiement** : cette commande fait un commit unique à la
+  fin (étape 2) et demande avant de pousser ; un déploiement se décide à part,
+  avec l'utilisateur. Appliquer `/debug` en entier faisait commiter et pousser
+  deux fois.
 
   ⚠️ La procédure de débogage n'est écrite **qu'à un seul endroit** : `/debug`.
   Elle a existé en trois exemplaires jusqu'au 2026-08-08 — ici, dans `/debug`, et
@@ -23,16 +27,17 @@ ligne : debug complet si du code a été modifié pendant la session, rien sinon
 
 - **Rien de modifié** → passer directement à l'étape 1
 
-> **Cette commande est celle des bots.** Une app dont le travail est découpé en
-> phases se clôt avec `/fin-phase`, qui relit la porte de sortie de la phase et
-> refuse de la déclarer terminée sans vérification sur l'appareil réel.
+> **Cette commande est celle des projets sans phases**, bots compris. Un projet
+> découpé en phases — une app, ou un bot dont la `ROADMAP.md` a des
+> `### Phase N` — se clôt avec `/fin-phase`, qui relit la porte de sortie de la
+> phase et refuse de la déclarer terminée sans vérification.
 
 ## 0.5 Audit automatique des .md (OBLIGATOIRE)
 
 Avant toute mise à jour manuelle, lancer le script d'audit qui scanne tous les .md du projet et détecte les obsolescences :
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-md-audit.sh "$CLAUDE_PROJECT_DIR"
+bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-md-audit.sh "$(git -C "${CLAUDE_PROJECT_DIR}" rev-parse --show-toplevel 2>/dev/null || pwd)"
 ```
 
 Le script vérifie 4 choses :
@@ -64,7 +69,8 @@ tourne :
 Un fichier ne se modifie que si la session a rendu son contenu faux ou
 incomplet.
 
-**Le jeu de documents** : lancer `python3 ${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh "$PWD"` et reporter sa sortie au résumé.
+**Le jeu de documents** : lancer `python3 -I ${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh "$(git -C "${CLAUDE_PROJECT_DIR}" rev-parse --show-toplevel 2>/dev/null || pwd)"`
+et reporter sa sortie au résumé.
 
 **Projet existant qui s'écarte du jeu** (`MEMORY.md`, skill projet, stratégie
 dans le README… — une variante de nom comme `strategy-spec.md` n'est pas un

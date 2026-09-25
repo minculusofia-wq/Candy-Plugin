@@ -7,12 +7,12 @@ lancer la commande.
 | Ce que l'utilisateur écrit | Lancer |
 |---|---|
 | « debug », « debug rapide », « debug <nom du bot> » | `/debug` |
-| « fin de session » — **projets bots** | `/fin-session` |
-| « fin de phase », « phase X terminée » — **projets apps** | `/fin-phase` |
+| « fin de session » — **projets sans phases**, bots compris | `/fin-session` |
+| « fin de phase », « phase X terminée » — **projets découpés en phases** (apps, et bots dont la `ROADMAP.md` a des `### Phase N`) | `/fin-phase` |
 | « mets à jour la doc », « maj des md », ou avant un `git push` qui impacte la doc | `/maj-docs` |
 
-Deux commandes de clôture : `/fin-session` pour les bots, `/fin-phase` pour les
-apps découpées en phases.
+Deux commandes de clôture : `/fin-phase` dès que le projet est découpé en
+phases (bot compris), `/fin-session` sinon.
 
 ## Règle absolue
 
@@ -20,4 +20,5 @@ Ne PAS demander « quel type de debug ? » ni « tu veux que je lance la command
 Le déclencheur suffit — lancer directement.
 
 Ces commandes contiennent des étapes obligatoires (ordre des tests, un fix à la
-fois, marker de phase, commit + push automatiques). Les suivre intégralement.
+fois, marqueur de phase, commit — et push tel que chaque commande le prévoit :
+`/fin-session` et `/maj-docs` le demandent). Les suivre intégralement.

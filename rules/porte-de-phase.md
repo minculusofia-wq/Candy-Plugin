@@ -13,14 +13,14 @@ une session qui démarre dessus repart sur une base fausse sans que personne le 
 ## À vérifier, dans cet ordre
 
 1. **Le contrôle du projet est vert** — lancé maintenant, sortie montrée. Pas
-   « était vert tout à l'heure ». S'il n'existe aucun moyen de vérification, le
-   dire et proposer d'en mettre un avant d'aller plus loin.
+   « était vert tout à l'heure ». S'il n'existe aucun moyen de vérification, en
+   mettre un en place avant d'aller plus loin, et l'annoncer.
 2. **Le dépôt est propre** — rien de non commité.
 3. **Le dépôt est poussé** — aucun commit en avance sur le distant. Le contrôle
    avant commit ne peut pas le voir : c'est à la charge de Claude.
 4. **Le jeu de documents est complet, et ils disent tous la même chose.**
-   - La partie mécanique : `python3 ${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh "$PWD"`, sortie montrée. Un 🔴 est un point rouge de
-     la porte.
+   - La partie mécanique : le contrôle du jeu de documents de `/verifier`, sortie
+     montrée. Un 🔴 est un point rouge de la porte.
    - La partie qu'aucun script ne voit : relire les documents d'état entre eux et
      contre le code — la phase close est marquée close partout, aucun document
      n'annonce un état de contrôle périmé, aucun skill ou fichier chargé

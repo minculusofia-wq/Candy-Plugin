@@ -33,8 +33,8 @@ modèle, au prix d'une relecture sans cache de toute la conversation.
 |---|---|
 | Question factuelle, lecture d'un fichier | `low` |
 | Explication, rapport, analyse, recherche | `medium` |
-| Code ordinaire, tests, refactor simple | `high` |
-| Sécurité, crypto, risque, argent réel, architecture, construire une phase | `xhigh` |
+| Code ordinaire, tests, refactor simple, une phase d'écrans sans zone sensible | `high` |
+| Sécurité, crypto, risque, argent réel, architecture, une phase qui touche une zone sensible | `xhigh` |
 | Un problème **dur**, pas un travail **long** — voir ci-dessous | `max` |
 | Phase **sensible ET large** : chiffrement, micro, position, alerte réelle | **ultracode** |
 
@@ -108,8 +108,12 @@ exacte, sa cible et la raison en une ligne — jamais `max` par réflexe :
 étant commité, une relecture sans cible ne relit que ce qui ne l'est pas.
 `/code-review max` sur tout un diff peut buter sur la limite d'usage du compte
 avant la fin ; une relecture ciblée qui va au bout vaut mieux. `/code-review
-ultra` existe aussi, en nombre d'usages limité par compte — le garder pour ce qui
-le mérite.
+ultra` tourne dans le cloud : trois passages gratuits par compte Pro ou Max, une
+seule fois, puis payés en crédits (doc ultrareview, « Pricing and free runs ») —
+le garder pour ce qui le mérite.
+
+C'est une dépense de l'utilisateur : Claude la propose et ne la lance pas, même
+si Claude Code le lui permet (le verrou est décrit dans `/fin-phase`, étape 3).
 
 En complément, sans facturation à part et sans coût de contexte — ils consomment
 tout de même le quota, sur le modèle de la session : les subagents

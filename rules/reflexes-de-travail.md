@@ -1,18 +1,15 @@
 # Réflexes de travail
 
-Quatre réflexes qui s'appliquent à tous les projets, anciens et nouveaux.
+Cinq réflexes qui s'appliquent à tous les projets, anciens et nouveaux.
 
 ## 1. Ne jamais dire « c'est fait » sans preuve
 
-Avant d'annoncer qu'un travail est terminé, lancer le contrôle du projet :
-
-```bash
-bash ${CLAUDE_PLUGIN_ROOT}/hooks/verifier-projet.sh "$PWD"
-```
+Avant d'annoncer qu'un travail est terminé, lancer le contrôle du projet : la
+commande `/verifier` du plugin, qui le lance sur la racine du dépôt.
 
 Montrer le résultat. Pas « les tests passent » — la sortie réelle.
 
-Si le script répond qu'aucun moyen de vérification n'existe dans ce projet, le dire à l'utilisateur et proposer d'en mettre un en place avant d'aller plus loin. Un projet sans contrôle oblige l'utilisateur à vérifier lui-même chaque modification.
+Si le contrôle répond qu'aucun moyen de vérification n'existe dans ce projet, en mettre un en place avant d'aller plus loin (une cible `test` dans un Makefile suffit : le contrôle la reconnaît) et l'annoncer en une ligne. Un projet sans contrôle oblige l'utilisateur à vérifier lui-même chaque modification.
 
 ## 2. Déléguer les recherches larges
 
@@ -28,7 +25,7 @@ Pour tout travail qui touche plusieurs fichiers, ou dont l'approche n'est pas é
 
 Sauter cette étape quand le changement tient en une phrase (corriger une faute, ajouter une ligne de log, renommer quelque chose).
 
-**Avant d'écrire un plan**, auditer le jeu de `.md` : `python3 ${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh "$PWD"`, puis relire les documents contre le code. Corriger chaque écart **dans la même conversation, avant de livrer le plan** — jamais en faire une tâche du plan. Un plan de phases suit en plus `porte-de-phase.md` : sa première phase doit pouvoir s'ouvrir le jour où il est livré.
+**Avant d'écrire un plan**, auditer le jeu de `.md` : le contrôle du jeu de documents de `/verifier`, puis relire les documents contre le code. Corriger chaque écart **dans la même conversation, avant de livrer le plan** — jamais en faire une tâche du plan. Un plan de phases suit en plus `porte-de-phase.md` : sa première phase doit pouvoir s'ouvrir le jour où il est livré.
 
 Pour une grosse fonctionnalité : interroger l'utilisateur d'abord avec l'outil de questions — sur le métier seulement : ce que la fonctionnalité doit faire, les cas limites vus côté utilisateur, les arbitrages de stratégie ; l'implémentation, Claude la tranche — jusqu'à ce que tout soit couvert, écrire la spec dans un fichier, puis l'exécuter dans une conversation neuve.
 
@@ -37,3 +34,13 @@ Pour une grosse fonctionnalité : interroger l'utilisateur d'abord avec l'outil 
 Si une même erreur a été corrigée deux fois sans succès, la conversation est encombrée d'approches ratées qui polluent le raisonnement.
 
 Le dire à l'utilisateur et proposer de repartir d'une conversation neuve avec une consigne plus précise, enrichie de ce qui a été appris. Une session propre avec une bonne consigne bat presque toujours une longue session pleine de corrections.
+
+## 5. Un défaut repéré se dit, dans la réponse
+
+Un défaut trouvé en travaillant — par un audit, un relecteur, un test ou une
+lecture — se dit à l'utilisateur dans la réponse de la session où il est trouvé,
+avec ce qu'il casse, même hors du périmètre ou de faible confiance (un constat
+douteux se vérifie à la source, souvent en deux minutes). L'écrire seulement
+dans une mémoire ne suffit pas : une mémoire ne se relit pas d'elle-même, et
+plusieurs sessions peuvent passer devant sans rien dire. Avant un push ou une
+publication, relire les points ouverts et les dire avant d'agir.

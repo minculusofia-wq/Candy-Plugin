@@ -13,4 +13,4 @@
 - Faire un commit AVANT de commencer à modifier du code (snapshot de l'état actuel)
 - Faire un commit APRÈS chaque fix ou feature qui fonctionne
 - Messages de commit clairs et en français : "fix: le bot ne s'arrête plus après 3 pertes" ou "ajout: alerte quand drawdown > 10%"
-- Si un changement casse quelque chose et que le fix n'est pas évident, proposer à l'utilisateur de revenir au commit précédent
+- Si un changement casse quelque chose et que le fix n'est pas évident : mettre d'abord l'état cassé à l'abri (commit sur une branche, ou stash), revenir au commit précédent, l'annoncer en une ligne — un reset sans abri effacerait le travail non commité

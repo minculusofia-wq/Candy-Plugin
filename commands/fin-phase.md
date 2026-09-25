@@ -13,7 +13,8 @@ description: Fin de phase d une app — controle mecanique, porte de sortie relu
 Quand l'utilisateur écrit « fin de phase », « phase X terminée », ou qu'une phase d'un
 plan d'app vient d'être construite.
 
-**Pour les apps.** Les bots utilisent `/fin-session`.
+**Pour les apps, et les bots découpés en phases** (une `ROADMAP.md` en
+`### Phase N`). Les autres projets utilisent `/fin-session`.
 
 ## Le principe, avant tout le reste
 
@@ -53,7 +54,8 @@ Lancer le contrôle du projet, **détecté et non supposé**, dans cet ordre :
    (c'est la forme documentée comme porte de sortie ; la lancer telle qu'elle est
    écrite, au moins une fois).
 2. Sinon, un `Makefile` avec une cible `verifier` ou `test` à la racine.
-3. Sinon, repli : `bash ${CLAUDE_PLUGIN_ROOT}/hooks/verifier-projet.sh "$PWD"`.
+3. Sinon, repli : `bash ${CLAUDE_PLUGIN_ROOT}/hooks/verifier-projet.sh "$(git -C "${CLAUDE_PROJECT_DIR}" rev-parse --show-toplevel 2>/dev/null || pwd)"` —
+   la racine du dépôt : le dossier courant glisse souvent dans `backend/` ou `ios/`.
 
 **Afficher la sortie réelle**, pas un résumé. « Les tests passent » n'est pas un
 verdict.
@@ -79,12 +81,16 @@ Le proposer, avec le niveau d'insistance qui correspond à la phase :
 
 | La phase touche à | Formulation |
 |---|---|
-| Chiffrement, clés, secrets, micro, position, données personnelles | « Cette phase touche à `<quoi>`. Je te conseille `/code-review <niveau> <cible>` avant de passer à l'appareil réel, parce que <raison>. En complément je peux passer les subagents `relecteur-securite` et `relecteur-de-phase`, qui ne sont pas facturés à part. » Niveau et cible : `rules/choix-du-modele.md`, « Relecture ». |
+| Chiffrement, clés, secrets, micro, position, données personnelles | « Cette phase touche à `<quoi>`. Je te conseille `/code-review <niveau> <cible>` avant de passer à l'appareil réel, parce que <raison>. En complément, ou à la place si tu ne veux pas cette dépense, je peux passer les subagents `relecteur-securite` et `relecteur-de-phase`. » Niveau et cible : `rules/choix-du-modele.md`, « Relecture ». |
 | Écrans, navigation, réglages seulement | Le mentionner en une ligne, puis passer. |
 
-**Ne jamais la lancer.** C'est une commande de l'utilisateur, facturée à part. Claude n'a
-ni le droit ni les moyens de la déclencher — la proposer, attendre, et poursuivre
-s'il passe. Un « non » ne se redemande pas deux fois dans la même phase.
+**Ne jamais la lancer.** C'est une dépense de l'utilisateur — du quota aux niveaux
+locaux, des crédits pour `ultra` après ses passages gratuits. Claude Code permet
+pourtant à Claude de la lancer seul (doc code-review, « Let Claude start the
+review ») : Claude la propose, attend, et poursuit s'il passe. Pour que Claude Code
+ne la lance jamais d'office, ajouter à `~/.claude/settings.json` :
+`"skillOverrides": {"code-review": "user-invocable-only"}`. Un « non » ne se
+redemande pas deux fois dans la même phase.
 
 Si elle est lancée, ses conclusions se traitent **avant** l'étape suivante : un
 défaut trouvé ici change ce qu'il faut regarder sur l'appareil.
@@ -138,12 +144,12 @@ porte son sujet.
 | Mot nouveau du métier | `CONTEXT.md`, si le projet en a un |
 
 - **Carnet de bord**, **état du projet**, **changelog** → mis à jour dans le même
-  mouvement. Le garde-fou au commit refuse un changement d'état de phase dans
-  `ROADMAP.md` si ses documents compagnons ne bougent pas avec.
-- L'entête « Dernière mise à jour » de chaque `.md` touché porte la date du jour —
-  le garde-fou au commit le refuse sinon.
+  mouvement : un changement d'état de phase dans `ROADMAP.md` entraîne ses
+  documents compagnons. Aucun hook du plugin ne le vérifie — c'est à Claude ; un
+  projet peut ajouter son propre pre-commit pour le refuser.
+- L'entête « Dernière mise à jour » de chaque `.md` touché porte la date du jour.
 
-**Le jeu de documents** : lancer `python3 ${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh "$PWD"` et montrer sa sortie — fichiers
+**Le jeu de documents** : lancer `python3 -I ${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh "$(git -C "${CLAUDE_PROJECT_DIR}" rev-parse --show-toplevel 2>/dev/null || pwd)"` et montrer sa sortie — fichiers
 manquants, hors du jeu, liens cassés, `CLAUDE.md` trop long. Écrire dans le
 fichier qui porte déjà le sujet, ne pas en créer un du jeu à côté. Ne pas
 restructurer en fin de phase, mais reporter chaque 🔴 et 🟡 dans le verdict
@@ -198,6 +204,16 @@ passer tous les autres — `fix(phase N): …` en cours de phase n'est jamais g�
 
 - passer la phase 🟢 dans `ROADMAP.md` et propager aux documents compagnons ;
 - poser l'étiquette git `phase-N-done`.
+
+Ils viennent **après** le commit de clôture de l'étape 8 : un second commit les
+porte, sans marqueur de clôture (le hook de clôture ne le gêne pas), puis
+l'étiquette sur ce commit-là, puis le push :
+
+```bash
+git commit -am "docs(phase N): phase N passe en 🟢" && git tag phase-N-done && git push && git push --tags
+```
+
+Sans ce second commit, l'étiquette tombe sur un commit où la phase est encore 🟡.
 
 En `EN ATTENTE DE TON APPAREIL`, la phase **garde son 🟡** et **aucune étiquette
 n'est posée**. Tranché par l'utilisateur le 2026-08-08 : un 🟢 et une étiquette sont des
@@ -293,7 +309,7 @@ pas s'en souvenir : le déposer dans un fichier que le hook `SessionStart`
 suivante.
 
 ```bash
-cat > "$PWD/.claude-phase-suivante" <<'FIN'
+cat > "$(git -C "${CLAUDE_PROJECT_DIR}" rev-parse --show-toplevel 2>/dev/null || pwd)/.claude-phase-suivante" <<'FIN'
 Phase <N+1> — <titre>
 Mode : plan (non négociable pour ouvrir une phase)
 Effort : <cran>, parce que <motif en une ligne>

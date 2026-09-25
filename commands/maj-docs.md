@@ -10,14 +10,15 @@ Exécuter les étapes dans l'ordre, sans en sauter.
 
 ## Étape 1 : identifier le périmètre
 
-1. Déterminer le projet via le working directory courant.
+1. Déterminer le projet : la racine du dépôt git courant (le dossier courant peut
+   avoir glissé dans un sous-dossier).
 2. Lister tous les `.md` du projet.
 3. Exclure au jugement : dépendances (`node_modules/`, `venv/`, `.venv/`), builds, fichiers générés automatiquement, dossiers `archives/`.
 4. Situer le projet et son jeu attendu avec le contrôle, sans refaire son travail
    à la main :
 
    ```bash
-   python3 ${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh "$PWD"
+   python3 -I ${CLAUDE_PLUGIN_ROOT}/hooks/jeu-de-documents.sh "$(git -C "${CLAUDE_PROJECT_DIR}" rev-parse --show-toplevel 2>/dev/null || pwd)"
    ```
 
    Il donne le type (bot ou service qui tourne, app par phases, petit projet),
@@ -31,7 +32,7 @@ Exécuter les étapes dans l'ordre, sans en sauter.
 Lancer le script d'audit sur le projet :
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-md-audit.sh "$PWD"
+bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-md-audit.sh "$(git -C "${CLAUDE_PROJECT_DIR}" rev-parse --show-toplevel 2>/dev/null || pwd)"
 ```
 
 Le script vérifie 4 choses :

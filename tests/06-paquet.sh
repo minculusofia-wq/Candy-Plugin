@@ -218,6 +218,32 @@ PROFIL=$(git ls-files '*.md' 2>/dev/null | tr '\n' '\0' | xargs -0 grep -n -i -E
     2>/dev/null | grep -v '^tests/06-paquet.sh' | cut -d: -f1-2 | tr '\n' ' ')
 verifie "aucun .md ne dit que l'utilisateur n'est pas développeur :${PROFIL:+ }$PROFIL" "" "$PROFIL"
 
+section "Paquet — les règles et les commandes désignent ce qui existe"
+# Les règles se copient à la main dans ~/.claude/rules (README) : Claude Code n'y
+# remplace aucune variable, et ${CLAUDE_PLUGIN_ROOT} est vide dans l'outil Bash
+# (doc des plugins, « Where each variable resolves »). Cinq chemins de la 0.3.4
+# devenaient « bash /hooks/verifier-projet.sh ». Une règle désigne donc une
+# commande du plugin, jamais un fichier.
+verifie "aucune règle n'écrit de chemin \${CLAUDE_PLUGIN_ROOT} :$(grep -ln 'CLAUDE_PLUGIN_ROOT' rules/*.md 2>/dev/null | tr '\n' ' ')" \
+        0 "$(grep -c 'CLAUDE_PLUGIN_ROOT' rules/*.md 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')"
+CITEES=$(grep -ohE '`/[a-z][a-z-]+`' rules/*.md 2>/dev/null | tr -d '`/' | sort -u)
+ABSENTES=""
+for c in $CITEES; do
+    case "$c" in effort|model|plugin|code-review|clear|compact|config|mcp|hooks) continue ;; esac
+    [ -f "commands/$c.md" ] || ABSENTES="$ABSENTES $c"
+done
+verifie "chaque commande citée par une règle existe :$ABSENTES" "" "$ABSENTES"
+# Dans une commande, seule la forme ${CLAUDE_PROJECT_DIR} est remplacée ; sans
+# accolades, elle arrive vide dans Bash (fin-session, 0.3.4).
+verifie "aucune commande n'écrit \$CLAUDE_PROJECT_DIR sans accolades" \
+        0 "$(grep -c '\$CLAUDE_PROJECT_DIR' commands/*.md 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')"
+# Les contrôles portent sur la racine du dépôt : « $PWD » glisse dans backend/
+# ou ios/ au fil d'une session, et le contrôle ne voyait plus que ce dossier.
+verifie "aucune commande ne lance un contrôle sur \"\$PWD\" :$(grep -nE '(verifier-projet|session-end-md-audit|jeu-de-documents)\.sh"? "\$PWD"' commands/*.md | cut -d: -f1-2 | tr '\n' ' ')" \
+        0 "$(grep -cE '(verifier-projet|session-end-md-audit|jeu-de-documents)\.sh"? "\$PWD"' commands/*.md | awk -F: '{s+=$2} END {print s+0}')"
+verifie "/verifier lance aussi le contrôle du jeu de documents" \
+        1 "$(grep -c 'hooks/jeu-de-documents.sh' commands/verifier.md)"
+
 section "Paquet — les images des README existent"
 ABSENTES=$(python3 - <<'PY'
 import re, os
