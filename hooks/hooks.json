@@ -75,6 +75,17 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/rule12-phase-debug-required.sh\" apres'"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

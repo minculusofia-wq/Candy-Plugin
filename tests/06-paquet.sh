@@ -73,6 +73,11 @@ for hook in ("protect-secrets.sh", "rule12-phase-debug-required.sh", "validate-b
 for o in ("Write", "Edit", "Read", "Grep"):
     if o not in outils("pre-edit-guard.sh"):
         manque.append(f"pre-edit-guard.sh:{o}")
+# Le témoin de /fin-phase n'est retiré qu'après le commit réellement passé.
+apres = [h["command"] for g in json.load(open("hooks/hooks.json"))["hooks"].get("PostToolUse", [])
+         if "Bash" in re.split(r"[|,]", g.get("matcher", "")) for h in g["hooks"]]
+if not any("rule12-phase-debug-required.sh" in c and c.rstrip("'").endswith(" apres") for c in apres):
+    manque.append("PostToolUse:rule12 apres")
 print(" ".join(manque))
 PY
 )

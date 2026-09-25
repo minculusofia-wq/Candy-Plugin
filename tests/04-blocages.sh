@@ -47,8 +47,12 @@ mkdir -p "$BAC/avec" && git -C "$BAC/avec" init -q && touch "$BAC/avec/.claude-p
 verifie "avec le témoin de clôture, le commit passe" \
         0 "$(code_hook "$PHASE" "$COMMIT_PHASE" CLAUDE_PROJECT_DIR="$BAC/avec")"
 
-verifie "le témoin est consommé : il ne vaut pas deux fois" \
-        2 "$(code_hook "$PHASE" "$COMMIT_PHASE" CLAUDE_PROJECT_DIR="$BAC/avec")"
+# Depuis la 0.3.5, le témoin n'est plus consommé AVANT le commit : un commit
+# refusé ensuite (pre-commit, autre garde-fou) se relance sans refaire
+# /fin-phase. Il est retiré après le commit de clôture réellement passé (mode
+# « apres », PostToolUse) — voir tests/essais/cloture.py.
+verifie "le témoin reste après la vérification : une relance passe" \
+        0 "$(code_hook "$PHASE" "$COMMIT_PHASE" CLAUDE_PROJECT_DIR="$BAC/avec")"
 
 # Le témoin a une date de péremption : trente minutes. Sans ce cas, on pouvait
 # retirer la fenêtre du hook sans qu'aucun test ne s'en aperçoive — un témoin

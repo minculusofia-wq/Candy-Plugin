@@ -181,9 +181,12 @@ grep -qx '.claude-phase-debug-done' "$EXCLU" 2>/dev/null || echo '.claude-phase-
 printf '%s\n' "<VERDICT> — <points en attente, un par ligne>" > "$RACINE/.claude-phase-debug-done"
 ```
 
-Le témoin va à la racine du dépôt (le hook le cherche à la racine du projet),
-et il est exclu de git localement : un `git add -A` ne doit jamais l'emporter.
-Un témoin suivi par git ne vaut rien.
+Le témoin va à la racine du dépôt (le hook le cherche à la racine du dépôt du
+commit), et il est exclu de git localement : un `git add -A` ne doit jamais
+l'emporter. Un témoin suivi par git ne vaut rien. Il reste en place jusqu'à ce
+que le commit de clôture soit **réellement passé** : un commit refusé (pre-commit
+du projet, autre garde-fou, refus de l'utilisateur) se relance sans refaire
+/fin-phase.
 
 Puis le commit, dont le message **commence par le marqueur de clôture** :
 
@@ -195,8 +198,11 @@ suivi, en clair, de la liste des points en attente. Une dette écrite vaut mieux
 qu'un blocage contourné : bloquer ferait sauter le dispositif au bout de deux fois.
 
 Ce marqueur est réservé à ce commit. Le hook `rule12-phase-debug-required.sh`
-refuse tout commit qui le porte sans témoin de moins de 30 minutes, et laisse
-passer tous les autres — `fix(phase N): …` en cours de phase n'est jamais gêné.
+refuse tout commit dont le **titre** le porte sans témoin de moins de 30
+minutes — le titre, c'est la première ligne du message, qu'il soit donné par
+`-m`, par un fichier (`-F`) ou par un document `"$(cat <<'EOF' … EOF)"`. Il
+laisse passer tous les autres : `fix(phase N): …` en cours de phase n'est jamais
+gêné, et un corps de message qui cite une clôture passée non plus.
 
 ## 9. Fermer la phase — seulement en `VERT`
 
