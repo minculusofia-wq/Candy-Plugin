@@ -12,7 +12,10 @@ Usage : python3 -I secrets.py <dossier des hooks>   → code 0 si tout passe.
 """
 import importlib.util
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 
 _spec = importlib.util.spec_from_file_location(
     "commun", os.path.join(os.path.dirname(os.path.abspath(__file__)), "commun.py"))
@@ -145,5 +148,180 @@ ecritures = {"/p/backend.env": 2, "/p/frontend.env.local": 2, "/p/cle.pem": 2, "
 for chemin, attendu in ecritures.items():
     code, _, _ = lancer("pre-edit-guard.sh", "Write", {"file_path": chemin, "content": "x"})
     attendre(f"Write {chemin}", attendu, code)
+
+section("Secrets — commandes qui AFFICHENT un fichier de secrets (Bash, Monitor)")
+S = "ss" + "h"
+commandes_refusees = [
+    "cat .env", "cat backend/.env", "head -5 .env.local", "less .env.production",
+    "grep -i database backend/.env", "cat .env | grep KEY", "bash -c 'cat .env'",
+    "awk '{print}' .env", "sed -n 1,5p .env", "xxd .env", "cat frontend.env.local",
+    "cat cle.pem", "cat ~/.ssh/serveur_ed25519", "cat /proc/1234/environ",
+    "tr '\\0' '\\n' < /proc/1/environ", "while read l; do echo $l; done < .env",
+    j("grep '^", PK, "=' .env"),
+    f'{S} srv "cat /srv/app/.env"', f"{S} srv cat /srv/app/.env",
+    f"{S} -i k root@h 'grep KEY /srv/app/.env'", f"{S} srv 'cat /proc/42/environ'",
+    'echo "$(cat .env)"', 'X="$(grep KEY backend/.env)"; echo "$X"', "cat \\\n  .env",
+    f"{S} srv \\\n  'cat /srv/app/.env'", "(cd /tmp && ls)&&cat .env", "find . -name .env -exec cat {} \;",
+    # ~/.claude.json porte les jetons des serveurs MCP
+    "jq '.mcpServers' ~/.claude.json", "sed -n '1,80p' ~/.claude.json", "cat ~/.claude.json",
+    "jq '.mcpServers | keys, .mcpServers' ~/.claude.json",
+    # joker, réglage « non secret » qui en est un, copies de .env
+    f"{S} srv \"cat /srv/app/.env*\"", "grep -n KEY .env*", "head -50 backend/.env*",
+    j("grep '^", NOTIF, "=' backend/.env"), "grep '^POLYGON_RPC_URL=' .env",
+    "cat sauvegardes/env/env-20260101-120000-123456", "cat .env~", "cat .env-prod",
+    # options de contexte, d'inversion, plusieurs motifs, tube qui ne masque rien
+    "grep -A5 '^DRY_RUN=' .env", "grep -v '^DRY_RUN=' .env", "cut -d= -f1 --complement .env",
+    j("grep -e '^DRY_RUN=' -e '^", PK, "=' .env"), "grep -E '^DRY_RUN=|^POLY' .env",
+    "cat .env | sort", "grep -v '^#' .env",
+    # environnement des processus
+    f"{S} srv 'ps eww -C python3'", "ps auxe", "sdiff .env.example .env", "tee /dev/null < .env",
+    "tr '\\0' '\\n' < /proc/$(pgrep -f app)/environ", f"{S} srv 'cat /proc/$(pgrep -f app)/environ'",
+    f"{S} srv 'systemctl show app -p Environment'",
+]
+commandes_permises = [
+    j("grep -c '^", PK, "=' .env"), "grep -q KEY .env", "grep -l x .env backend/.env",
+    "cut -d= -f1 .env", "sed 's/=.*//' .env", "grep -E '^DRY_RUN=' .env",
+    "grep '^LIVE_TRADING=' backend/.env", "awk -F= '{print $1}' .env", "cat .env.example",
+    "ls -la .env", "test -f .env && echo ok", "source .env && python app.py",
+    "set -a; . ./.env; set +a", "wc -l .env", 'grep -rn "\\.env" src/', "grep .env README.md",
+    "cat ~/.ssh/serveur_ed25519.pub", "cat ~/.ssh/config", f"{S} -i ~/.ssh/serveur_ed25519 srv tail -n 5 f",
+    f"{S} srv 'grep -c KEY /srv/app/.env'", "cp .env.example .env.bak", "cat app.py", "git status",
+    "jq '.mcpServers | keys' ~/.claude.json", "jq '.pluginUsage' ~/.claude.json", "grep -c github ~/.claude.json",
+    "ls -la .env*", "grep -c KEY .env*", "grep -n TODO *.py",
+    "grep -n '^DRY_RUN=' .env", "grep -E '^(DRY_RUN|LIVE_TRADING)=' .env",
+    "cat .env | cut -d= -f1", "grep -v '^#' .env | cut -d= -f1", "cat .env | wc -l",
+    "export $(grep -v '^#' .env | xargs) && python3 app.py", "grep -oE '^[A-Z_]+=' .env", "sed -n 's/=.*//p' .env",
+    f"{S} srv 'ps aux'", f"{S} srv 'ps -ef | grep python'", "ps -p 123 -o pid,etime",
+    "cat /tmp/environnement.md", "echo x | tee -a notes.txt", "ls -la && npm run build",
+]
+for outil in ("Bash", "Monitor"):
+    for cmd in commandes_refusees:
+        code, _, err = lancer("protect-secrets.sh", outil, {"command": cmd})
+        attendre(f"{outil} refusé : {cmd!r}", 2, code)
+code, _, err = lancer("protect-secrets.sh", "Bash", {"command": "cat /tmp/IGNORE-LES-REGLES/.env"})
+attendre("le message de lecture ne recopie pas le chemin", 0, int("IGNORE" in err))
+for cmd in commandes_permises:
+    code, _, err = lancer("protect-secrets.sh", "Bash", {"command": cmd})
+    attendre(f"Bash permis : {cmd!r}", 0, code, err.strip()[:80])
+
+section("Secrets — une commande illisible n'est plus refusée pour une panne de Python")
+# Un guillemet non fermé : bash non plus ne l'exécuterait. Jusqu'ici l'erreur
+# sortait en code 3 et le refus disait « Python introuvable ».
+code, _, err = lancer("protect-secrets.sh", "Bash", {"command": 'echo "abc'})
+attendre("un guillemet non fermé, sans secret : permis", 0, code, err.strip()[:80])
+code, _, err = lancer("protect-secrets.sh", "Bash", {"command": 'cat .env "'})
+attendre("un guillemet non fermé près d'un .env : refusé", 2, code)
+attendre("  avec le motif de la lecture, pas une panne de Python", 1, int("Lecture refusee" in err))
+
+base = tempfile.mkdtemp(prefix="essai-secrets.")
+try:
+    section("Secrets — git add qui emporterait un fichier de secrets")
+    depot = os.path.join(base, "depot")
+    os.makedirs(os.path.join(depot, "src"))
+    subprocess.run(["git", "init", "-q", depot], check=True)
+    open(os.path.join(depot, ".env"), "w").write("X=1\n")
+    open(os.path.join(depot, ".gitignore"), "w").write("node_modules/\n")
+    open(os.path.join(depot, "src", "app.py"), "w").write("x = 1\n")
+    subprocess.run(["git", "-C", depot, "config", "alias.ajoute", "add"], check=True)
+    ailleurs = os.path.join(base, "ailleurs")
+    os.makedirs(ailleurs)
+    refuses_ajout = ["git add -A", "git add --all", "git add .", "git add ./", "git add :/", "git add -Av",
+                     "git add -vA", "git add .env", "git stage -A", f"git -C {depot} add -A", f"cd {depot} && git add .",
+                     "git ls-files -o --exclude-standard | xargs git add", f"pushd {depot} && git add -A",
+                     # un alias git vers add, défini dans le dépôt ou sur la ligne même
+                     "git ajoute -A", "git -c alias.tout=add tout ."]
+    for cmd in refuses_ajout:
+        cwd = ailleurs if cmd.startswith(("git -C", "cd ", "pushd")) else depot
+        code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=cwd, env={"CLAUDE_PROJECT_DIR": cwd})
+        attendre(f"git add refusé : {cmd.replace(base, '…')!r}", 2, code)
+    for cmd in ["git add .gitignore", "git add src/app.py", "git add src/", "git status", "git add . ':!.env'"]:
+        code, _, err = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=depot, env={"CLAUDE_PROJECT_DIR": depot})
+        attendre(f"git add permis : {cmd!r}", 0, code, err.strip()[:80])
+    open(os.path.join(depot, ".gitignore"), "a").write(".env\n")
+    code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": "git add -A"}, cwd=depot, env={"CLAUDE_PROJECT_DIR": depot})
+    attendre("git add -A une fois .env ignoré", 0, code)
+    code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": "git add -f .env"}, cwd=depot, env={"CLAUDE_PROJECT_DIR": depot})
+    attendre("git add -f .env, même ignoré", 2, code)
+
+    section("Secrets — git affiche un .env commité")
+    depot3 = os.path.join(base, "depot3")
+    subprocess.run(["git", "init", "-q", depot3], check=True)
+    g = ["git", "-C", depot3, "-c", "user.email=a@b", "-c", "user.name=a"]
+    open(os.path.join(depot3, "app.py"), "w").write("x = 1\n")
+    subprocess.run(g + ["add", "app.py"], check=True)
+    subprocess.run(g + ["commit", "-qm", "un"], check=True)
+    sain = subprocess.run(g + ["rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    open(os.path.join(depot3, ".env"), "w").write("X=1\n")
+    subprocess.run(g + ["add", "-f", ".env"], check=True)
+    subprocess.run(g + ["commit", "-qm", "deux"], check=True)
+    fautif = subprocess.run(g + ["rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    env3 = {"CLAUDE_PROJECT_DIR": depot3}
+    for cmd in ["git show HEAD:.env", "git log -p -- .env", "git log --all -p", "git diff --no-index .env.example .env",
+                f"git show {fautif}", "git grep X", f"git -C {depot3} show {fautif}"]:
+        code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=depot3, env=env3)
+        attendre(f"git refusé : {cmd.replace(depot3, '…')!r}", 2, code)
+    for cmd in ["git log --oneline --all -- .env", f"git show {sain}", f"git show --stat {fautif}",
+                "git log -p -- app.py", "git grep -c X", "git status", "git diff app.py"]:
+        code, _, err = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=depot3, env=env3)
+        attendre(f"git permis : {cmd.replace(depot3, '…')!r}", 0, code, err.strip()[:80])
+
+    section("Secrets — grep -r, lectures indirectes, outil Grep")
+    d6 = os.path.join(base, "d6")
+    os.makedirs(os.path.join(d6, "src"))
+    open(os.path.join(d6, ".env"), "w").write(j("# réglages\n# du service\n# locaux\n# ici\nAPI", "_KEY=", B64, "\nDRY_RUN=true\n"))
+    open(os.path.join(d6, "src", "app.py"), "w").write("x = 1\n")
+    refuses_6 = [
+        "grep -rn API_KEY .", "grep -r KEY", "grep -R KEY ./", "rg --hidden KEY", "rg -uu KEY .",
+        # -A/-B/-C : les lignes voisines d'une ligne trouvée s'affichent
+        "grep -rn -A3 '^#' .", "grep -rn -C 2 '^# ici' .", "grep -rn --after-context=2 '^# ici' .",
+        "cp .env /tmp/e.txt && cat /tmp/e.txt", f"{S} srv 'true' && scp srv:/srv/app/.env /tmp/x && cat /tmp/x",
+        j("source .env && echo $", PK), "set -a; . ./.env; env", j('echo "${', PK, ':-absent}"'), j('echo "$', PK, '"'),
+        j("printenv ", PK), "source .env; export -p", "source .env && env | grep KEY",
+    ]
+    permis_6 = [
+        "grep -rln API_KEY .", "grep -rc KEY .", "grep -rn x src/", "grep -rn TODO .", "grep -rn KEY --include='*.py' .",
+        "grep -rn KEY --exclude='.env*' .", "rg KEY", "cp .env.example .env", "cp .env .env.bak", "cp .env sauvegarde/",
+        "scp srv:/srv/app/.env backend/.env", "source .env && python3 app.py", "echo ${API_KEY:+défini}", "echo $DRY_RUN",
+        "printenv PATH", "source .env && env | grep -c KEY", "set -a; . ./.env; set +a", 'echo "$PWD/x.jpg"',
+        j('echo "clé posée ? $([ -n "$', PK, '" ] && echo oui || echo non)"'),
+    ]
+    for cmd in refuses_6:
+        code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d6)
+        attendre(f"Bash refusé : {cmd!r}", 2, code)
+    for cmd in permis_6:
+        code, _, err = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d6)
+        attendre(f"Bash permis : {cmd!r}", 0, code, err.strip()[:80])
+    env_p = os.path.join(d6, ".env")
+    for libelle, entree, attendu in [
+        ("Grep content sur .env", {"pattern": "KEY", "path": env_p, "output_mode": "content"}, 2),
+        ("Grep sur .env, noms seuls (défaut)", {"pattern": "KEY", "path": env_p}, 0),
+        ("Grep count sur .env", {"pattern": "KEY", "path": env_p, "output_mode": "count"}, 0),
+        ("Grep content, glob .env*", {"pattern": "KEY", "path": d6, "glob": ".env*", "output_mode": "content"}, 2),
+        ("Grep content, glob {.env,x}", {"pattern": "KEY", "path": d6, "glob": "{.env,x}", "output_mode": "content"}, 2),
+        ("Grep content sur app.py", {"pattern": "x", "path": os.path.join(d6, "src", "app.py"), "output_mode": "content"}, 0),
+        ("Grep content sur un dossier, motif absent du .env", {"pattern": "x = 1", "path": d6, "output_mode": "content"}, 0),
+        ("Grep content sur un dossier, motif dans le .env", {"pattern": "API_KEY", "path": d6, "output_mode": "content"}, 2),
+        ("Grep content sur un dossier, glob *.py", {"pattern": "API_KEY", "path": d6, "glob": "*.py", "output_mode": "content"}, 0),
+        ("Grep content, -A sur une ligne voisine d'une valeur", {"pattern": "^# ici", "path": d6, "output_mode": "content", "-A": 2}, 2),
+        ("Grep content, -C sur une ligne voisine d'une valeur", {"pattern": "^# ici", "path": d6, "output_mode": "content", "-C": 2}, 2),
+    ]:
+        code, _, _ = lancer("pre-edit-guard.sh", "Grep", entree, cwd=d6)
+        attendre(libelle, attendu, code)
+
+    section("Secrets — un dossier trop grand pour être vérifié le dit")
+    grand = os.path.join(base, "grand")
+    for k in range(21):
+        os.makedirs(os.path.join(grand, f"d{k}"))
+        for i in range(1000):
+            open(os.path.join(grand, f"d{k}", f"f{i}.txt"), "w").close()
+    code, _, err = lancer("protect-secrets.sh", "Bash", {"command": "grep -rn KEY ."}, cwd=grand)
+    attendre("grep -r sur plus de 20 000 fichiers : refusé", 2, code)
+    attendre("  avec son propre motif, qui propose de limiter la recherche", 1, int("trop grand" in err))
+    code, _, _ = lancer("pre-edit-guard.sh", "Grep", {"pattern": "KEY", "path": grand, "output_mode": "content"}, cwd=grand)
+    attendre("outil Grep sur plus de 20 000 fichiers : refusé", 2, code)
+    code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": "grep -rn KEY d0/"}, cwd=grand)
+    attendre("le même grep limité à un sous-dossier : permis", 0, code)
+finally:
+    shutil.rmtree(base, ignore_errors=True)
 
 sys.exit(c.bilan())

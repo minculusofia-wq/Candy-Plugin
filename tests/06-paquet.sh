@@ -38,7 +38,11 @@ section "Paquet — aucune dépendance non annoncée"
 # Seules les lignes tout en commentaire sont retirées : un « # » au milieu d'une
 # ligne peut se trouver dans une chaîne, et masquerait un appel réel.
 verifie "aucun hook n'appelle jq" \
-        0 "$(sed 's/^[[:space:]]*#.*$//' hooks/*.sh hooks/*.py hooks/hooks.json 2>/dev/null | grep -cE '(^|[^a-zA-Z0-9_.-])jq($|[^a-zA-Z0-9_.-])')"
+        0 "$(sed 's/^[[:space:]]*#.*$//' hooks/*.sh hooks/hooks.json 2>/dev/null | grep -cE '(^|[^a-zA-Z0-9_.-])jq($|[^a-zA-Z0-9_.-])')"
+# Dans un module Python, « jq » peut n'être qu'une donnée (le nom d'une commande
+# que le lecteur reconnaît) : seul un appel de sous-processus compte.
+verifie "aucun module Python des hooks n'appelle jq" \
+        0 "$(grep -cE '(run|Popen|call|check_output|check_call)\(\s*\[\s*["'"'"']jq["'"'"']' hooks/*.py 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')"
 verifie "aucun hook n'appelle python sans le 3" \
         0 "$(grep -rhoE '(^|[^a-z0-9_.-])python ' hooks/*.sh 2>/dev/null | grep -c .)"
 
@@ -66,7 +70,7 @@ for hook in ("protect-secrets.sh", "rule12-phase-debug-required.sh", "validate-b
     for o in ("Bash", "Monitor"):
         if o not in outils(hook):
             manque.append(f"{hook}:{o}")
-for o in ("Write", "Edit", "Read"):
+for o in ("Write", "Edit", "Read", "Grep"):
     if o not in outils("pre-edit-guard.sh"):
         manque.append(f"pre-edit-guard.sh:{o}")
 print(" ".join(manque))

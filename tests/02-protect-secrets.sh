@@ -68,9 +68,12 @@ ecriture "une valeur qui commence par le mot secret"    2 "$CLE_API = \"secretva
 ecriture "une clé contenant une accolade"               2 "$CLE_PRIVEE = \"aZ4{9Fj2LmQ8xT4vB7nR1cW0\""
 
 section "Secrets — le garde .env"
+# Depuis la 0.3.5, le garde demande à git lui-même ce qu'un « git add »
+# emporterait : le bac est donc un vrai dépôt. Hors dépôt, il n'y a rien à
+# ajouter, et rien à refuser.
 GIT_AJOUT="$(printf 'g%st a' 'i')dd"
-mkdir -p "$BAC/env" && echo "CLE=valeur" > "$BAC/env/.env"
-commande() { verifie "$1" "$2" "$(code_hook "$HOOK" "$(entree_commande "$3")" CLAUDE_PROJECT_DIR="$BAC/env")"; }
+mkdir -p "$BAC/env" && git -C "$BAC/env" init -q && echo "CLE=valeur" > "$BAC/env/.env"
+commande() { verifie "$1" "$2" "$(cd "$BAC/env" && code_hook "$HOOK" "$(entree_commande "$3")" CLAUDE_PROJECT_DIR="$BAC/env")"; }
 
 commande "un chemin qui commence par un point passe"  0 "$GIT_AJOUT .claude-plugin/manifeste.json"
 commande "un fichier nommé passe"                     0 "$GIT_AJOUT hooks/exemple.sh"
@@ -78,15 +81,15 @@ commande "tout ajouter est refusé si .env traîne"     2 "$GIT_AJOUT ."
 commande "l'ajout en masse est refusé"                2 "$GIT_AJOUT -A"
 commande "ajouter le .env lui-même est refusé"        2 "$GIT_AJOUT .env"
 verifie "la raison du refus arrive à Claude (sur stderr)" \
-        1 "$(raison_hook "$HOOK" "$(entree_commande "$GIT_AJOUT .env")" CLAUDE_PROJECT_DIR="$BAC/env")"
+        1 "$(cd "$BAC/env" && raison_hook "$HOOK" "$(entree_commande "$GIT_AJOUT .env")" CLAUDE_PROJECT_DIR="$BAC/env")"
 # Troisième relecture de la 0.3.4 : la seconde lecture de l'entrée (celle de la
 # commande) plantait sur un demi-caractère Unicode orphelin, le hook sortait en
 # 1 — non bloquant — et le .env partait dans git. Présent depuis la 0.3.3.
 ENTREE_ADD_PIEGE=$(python3 -I -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]+" . # \ud800"}}))' "$GIT_AJOUT")
 verifie "tout ajouter reste refusé avec un caractère invalide dans la commande" \
-        2 "$(code_hook "$HOOK" "$ENTREE_ADD_PIEGE" CLAUDE_PROJECT_DIR="$BAC/env")"
+        2 "$(cd "$BAC/env" && code_hook "$HOOK" "$ENTREE_ADD_PIEGE" CLAUDE_PROJECT_DIR="$BAC/env")"
 verifie "sans python3, le garde-fou refuse au lieu de laisser passer" \
-        2 "$(code_hook "$HOOK" "$(entree_commande "$GIT_AJOUT .")" CLAUDE_PROJECT_DIR="$BAC/env" PATH=/bin:/usr/sbin)"
+        2 "$(cd "$BAC/env" && code_hook "$HOOK" "$(entree_commande "$GIT_AJOUT .")" CLAUDE_PROJECT_DIR="$BAC/env" PATH=/bin:/usr/sbin)"
 
 echo ".env" > "$BAC/env/.gitignore"
 commande "une fois .env ignoré, tout redevient permis" 0 "$GIT_AJOUT ."

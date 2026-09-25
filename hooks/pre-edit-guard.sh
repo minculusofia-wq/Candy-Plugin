@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# pre-edit-guard.sh (PreToolUse : Write, Edit, Read)
-# Protege les fichiers de secrets : ni ecrits (Write, Edit), ni lus (Read).
+# pre-edit-guard.sh (PreToolUse : Write, Edit, Read, Grep)
+# Protege les fichiers de secrets : ni ecrits (Write, Edit), ni lus (Read, Grep).
 # Signale les fichiers de deploiement a l'ecriture.
 #
 # La liste des fichiers de secrets vit dans detection-secrets.py (.env et ses
@@ -34,9 +34,48 @@ refuser_illisible() {
     echo "Reparer Python, puis relancer. Un garde-fou qui ne voit rien ne laisse rien passer." >&2
     exit 2
 }
+# Outil Grep : son chemin est dans « path », pas « file_path ». En mode
+# « content », il affiche les lignes d'un fichier, meme cache ou ignore par
+# git ; -A, -B et -C y ajoutent les lignes voisines. Les noms seuls (defaut) et
+# les comptes restent permis. Un dossier est parcouru comme grep -r ; il n'est
+# refuse que si le motif trouve une ligne qui porte une valeur — ou s'il est
+# trop grand pour etre verifie.
+GREP=$(printf '%s' "$INPUT" | python3 -I -c "
+import importlib.util, json, os, sys
+d = json.loads(sys.stdin.buffer.read().decode('utf-8', 'replace'))
+if not isinstance(d, dict) or d.get('tool_name') != 'Grep':
+    print('NON'); sys.exit(0)
+t = d.get('tool_input') if isinstance(d.get('tool_input'), dict) else {}
+if t.get('output_mode') != 'content':
+    print('OK'); sys.exit(0)
+def charger(nom, chemin):
+    spec = importlib.util.spec_from_file_location(nom, chemin); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); return m
+ds = charger('ds', sys.argv[1]); ac = charger('ac', sys.argv[2])
+ac._detection = lambda: ds
+cwd = d.get('cwd') if isinstance(d.get('cwd'), str) else os.getcwd()
+chemin, motif = str(t.get('path') or cwd), str(t.get('glob') or '')
+# Le glob est developpe comme ripgrep ({.env,x}) et juge comme un joker de bash.
+if motif and any(ac.designe_un_secret(m.split('/')[-1], None, True, ds) for m in ac.accolades(motif)):
+    print('SECRET'); sys.exit(0)
+if ds.est_fichier_de_secrets(chemin):
+    print('SECRET'); sys.exit(0)
+if os.path.isdir(chemin):
+    options = ['-r'] + [f'--include={m}' for m in ac.accolades(motif) if motif]
+    try:
+        trouves = ac.recherche_recursive('grep', [chemin], options, None, ds)
+    except ac.TropGrand:
+        print('TROP_GRAND'); sys.exit(0)
+    drapeaux = ['-i'] if t.get('-i') else []
+    if any(t.get(k) for k in ('-A', '-B', '-C', 'context')):
+        drapeaux.append('-C=1')
+    if trouves and ac.motif_trouve('rg', trouves, [str(t.get('pattern') or '')], drapeaux, ds):
+        print('SECRET'); sys.exit(0)
+print('OK')
+" "$H/detection-secrets.py" "$H/analyse-commande.py" 2>/dev/null) || refuser_illisible
+
 FILE_PATH=$(json_get file_path) || refuser_illisible
 
-if [[ -z "$FILE_PATH" ]]; then
+if [[ -z "$FILE_PATH" && "$GREP" == "NON" ]]; then
     exit 0
 fi
 
@@ -78,6 +117,16 @@ refuser_lecture() {
     echo "Une URL de RPC ou de webhook, un sujet de notification sont des secrets." >&2
     exit 2
 }
+
+if [[ "$GREP" == "TROP_GRAND" ]]; then
+    echo "BLOCKED" >&2
+    echo "" >&2
+    echo "Recherche refusee : le dossier est trop grand pour verifier qu'aucun fichier de secrets" >&2
+    echo "(.env, cle, wallet) ne serait affiche. La limiter a un sous-dossier, ou a un glob (*.py)." >&2
+    exit 2
+fi
+[[ "$GREP" == "SECRET" ]] && refuser_lecture
+[[ "$GREP" == "OK" ]] && exit 0
 
 OUTIL=$(printf '%s' "$INPUT" | python3 -I -c "
 import sys, json
