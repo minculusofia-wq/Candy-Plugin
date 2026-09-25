@@ -6,65 +6,26 @@
 # et bloque la fin du tour si le controle echoue.
 #
 # - Hors depot git            -> ne fait rien
-# - Aucun fichier modifie     -> ne fait rien (une simple question ne declenche rien)
+# - Rien n'a bouge pendant    -> ne fait rien (une simple question ne declenche rien,
+#   le tour                      meme si du code etait deja modifie avant)
 # - Uniquement de la doc      -> ne bloque pas
-# - Au moins un fichier code  -> lance verifier-projet.sh
-#       sortie 0 -> laisse passer
-#       sortie 1 -> BLOQUE et renvoie la sortie reelle des tests
-#       sortie 2 -> ne bloque pas, signale qu'il manque un controle
+# - Au moins un fichier code  -> lance verifier-projet.sh sur la RACINE du depot,
+#   (modifie, nouveau, ou        en 240 s au plus (CONTROLE_BUDGET)
+#    commite pendant le tour)    sortie 0 -> laisse passer
+#                                sortie 1 -> BLOQUE et renvoie la sortie reelle des tests,
+#                                            encadree comme une donnee du depot
+#                                sortie 2 -> ne bloque pas (aucun moyen de verification :
+#                                            la consigne vit dans rules/reflexes-de-travail.md)
+#                                trop long -> BLOQUE et dit que le controle n'a rien prouve
+#
+# Le coeur est dans controle-fin-de-tour.py. Jusqu'a la 0.3.4, ce hook n'avait
+# aucune limite de temps, et ne partait ni d'un sous-dossier, ni pour un
+# dossier nouveau, ni pour un nom avec espace ou accent, ni apres un commit
+# fait pendant le tour. Le budget de 240 s tient sous le « timeout » de 300 s
+# donne a ce hook dans hooks.json.
+#
+# python3 et non jq : jq n'est pas garanti sur toutes les machines.
 #
 set -u
-
-INPUT=$(cat 2>/dev/null || echo '{}')
-
-# Anti-boucle : si Claude a deja ete relance par un hook Stop, ne pas rebloquer.
-if echo "$INPUT" | grep -q '"stop_hook_active"[[:space:]]*:[[:space:]]*true'; then
-    exit 0
-fi
-
-# python3 et non jq : jq n'est pas garanti sur toutes les machines. Un hook qui
-# depend d'un binaire absent echoue en SILENCE — ici il aurait controle le mauvais
-# dossier, ou rien du tout, sans le moindre message. python3 est deja requis par
-# tous les autres hooks du paquet.
-PROJET=$(printf '%s' "$INPUT" | python3 -I -c "import sys,json; print(json.load(sys.stdin).get('cwd',''))" 2>/dev/null)
-[ -z "$PROJET" ] && PROJET="${CLAUDE_PROJECT_DIR:-$PWD}"
-cd "$PROJET" 2>/dev/null || exit 0
-
-# 1. Hors depot git -> rien
-git rev-parse --git-dir >/dev/null 2>&1 || exit 0
-
-# 2. Rien de modifie -> rien
-MODIFIES=$(git status --porcelain 2>/dev/null | awk '{print $NF}')
-[ -z "$MODIFIES" ] && exit 0
-
-# 3. Uniquement de la doc -> ne bloque pas
-CODE_TOUCHE=0
-while IFS= read -r f; do
-    case "$f" in
-        *.py|*.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.swift|*.go|*.rs|*.rb|*.java|*.kt|*.php|*.sh|*.sql|*.prisma|*.vue|*.svelte|*.c|*.h|*.cpp)
-            CODE_TOUCHE=1; break ;;
-    esac
-done <<< "$MODIFIES"
-[ "$CODE_TOUCHE" -eq 0 ] && exit 0
-
-# 4. Du code a bouge -> controle
-SORTIE=$(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/hooks/verifier-projet.sh" "$PROJET" 2>&1)
-CODE=$?
-
-case "$CODE" in
-    0) exit 0 ;;
-    2)
-        # Aucun moyen de verification dans ce projet. Un message ici, sorti en
-        # code 0, n'irait qu'au journal de debogage (doc hooks) : la consigne
-        # vit dans rules/reflexes-de-travail.md, point 1.
-        exit 0
-        ;;
-    *)
-        echo "=== CONTROLE DU PROJET EN ECHEC — LE TRAVAIL N'EST PAS TERMINE ===" >&2
-        echo "$SORTIE" >&2
-        echo "" >&2
-        echo "Corriger les echecs ci-dessus avant d'annoncer que c'est fait." >&2
-        echo "Montrer la sortie reelle du controle, pas une affirmation." >&2
-        exit 2
-        ;;
-esac
+H="$(cd "${BASH_SOURCE[0]%/*}" 2>/dev/null && pwd)"
+exec python3 -I "$H/controle-fin-de-tour.py" "${CONTROLE_BUDGET:-240}"

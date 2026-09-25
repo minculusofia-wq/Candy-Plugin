@@ -34,6 +34,10 @@
           {
             "type": "command",
             "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/rule13-source-or-silence.sh\"'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'cat | python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/controle-fin-de-tour.py\" debut'"
           }
         ]
       }
@@ -91,7 +95,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/controle-si-code-modifie.sh\"'"
+            "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/controle-si-code-modifie.sh\"'",
+            "timeout": 300
           },
           {
             "type": "command",

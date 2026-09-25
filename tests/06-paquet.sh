@@ -223,7 +223,7 @@ while IFS= read -r CMD; do
     ( cd "$PIEGE" && printf '%s' "$ENTREE_PIEGE" \
         | env CLAUDE_PLUGIN_ROOT="$RACINE" CLAUDE_PROJECT_DIR="$PIEGE" RAPPEL_MAISON="$PIEGE" \
               RAPPELS_PROJETS="$PIEGE/.rappels.txt" JEU_CACHE="$PIEGE/.cache-jeu" \
-              bash -c "$CMD" >/dev/null 2>&1 )
+              CONTROLE_ETATS="$PIEGE/.etats" bash -c "$CMD" >/dev/null 2>&1 )
     [ -f "$PIEGE/.temoin" ] && FAUTIFS="$FAUTIFS hooks.json#$N($(printf '%s' "$CMD" | grep -oE 'hooks/[a-zA-Z0-9._-]+' | tail -1 | sed 's#hooks/##'), $FICHIER)"
 done <<< "$(python3 -c 'import json
 for groupes in json.load(open("hooks/hooks.json"))["hooks"].values():

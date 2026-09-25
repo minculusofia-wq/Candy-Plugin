@@ -38,14 +38,28 @@ CODE_NEUTRE=""
 lancer() {
     local nom="$1"; shift
     local neutre="$CODE_NEUTRE"; CODE_NEUTRE=""
+    # La sortie va dans un fichier, pas dans « $( ) » : un processus laisse en
+    # arriere-plan par les tests tenait la capture ouverte, et le controle
+    # attendait jusqu'a la fin du budget du hook Stop. bash attend la commande,
+    # pas ses enfants. Entree fermee : un test qui attend le clavier ne pend pas.
     local sortie code
-    sortie="$("$@" 2>&1)"
-    code=$?
+    # Sans fichier temporaire (disque plein), le controle n'a pas tourne : c'est
+    # un echec, pas une absence de controle, qui passerait pour un vert.
+    if sortie=$(mktemp "${TMPDIR:-/tmp}/verifier-projet.XXXXXX"); then
+        "$@" > "$sortie" 2>&1 < /dev/null
+        code=$?
+    else
+        sortie=/dev/null
+        echo "impossible de creer un fichier temporaire : $nom n'a pas tourne"
+        code=1
+    fi
     if [ -n "$neutre" ] && [ "$code" -eq "$neutre" ]; then
+        [ "$sortie" = /dev/null ] || rm -f "$sortie"
         return 0
     fi
     echo "--- $nom ---"
-    printf '%s\n' "$sortie" | tail -25
+    tail -25 "$sortie"
+    [ "$sortie" = /dev/null ] || rm -f "$sortie"
     if [ "$code" -eq 0 ]; then
         echo "  [OK] $nom"
         RESUME="${RESUME}  OK     $nom\n"
@@ -58,18 +72,35 @@ lancer() {
     TROUVE=1
 }
 
+# L'audit des dependances (pip-audit, npm audit) va sur le reseau et peut
+# installer des paquets : le controle de fin de tour le coupe
+# (VERIFIER_SANS_AUDIT=1). /verifier le garde.
+CIBLES="test lint typecheck audit"
+[ "${VERIFIER_SANS_AUDIT:-0}" = 1 ] && CIBLES="test lint typecheck"
+
+# La cible « test » du Makefile lance-t-elle pytest elle-meme ? Alors pytest
+# n'est pas relance plus bas : jusqu'a la 0.3.4, il tournait deux fois. Une
+# cible qui ne l'appelle pas (« test: @true ») ne masque toujours rien.
+recette_test_lance_pytest() {
+    awk '/^test:/ { dans = 1; if ($0 ~ /pytest/) { print "oui"; exit } ; next }
+         dans && /^[^\t]/ { dans = 0 }
+         dans && /pytest/ { print "oui"; exit }' Makefile 2>/dev/null | grep -q oui
+}
+PYTEST_PAR_MAKE=0
+
 # --- Makefile : la source de vérité si elle existe ---
 if [ -f Makefile ]; then
-    for cible in test lint typecheck audit; do
+    for cible in $CIBLES; do
         if grep -qE "^${cible}:" Makefile; then
             lancer "make $cible" make "$cible"
+            [ "$cible" = test ] && recette_test_lance_pytest && PYTEST_PAR_MAKE=1
         fi
     done
 fi
 
 # --- Backend dans un sous-dossier ---
 if [ -f backend/Makefile ]; then
-    for cible in test lint typecheck audit; do
+    for cible in $CIBLES; do
         if grep -qE "^${cible}:" backend/Makefile; then
             lancer "backend: make $cible" make -C backend "$cible"
         fi
@@ -92,7 +123,7 @@ if [ -z "$PYTEST" ] && command -v pytest >/dev/null 2>&1; then PYTEST="pytest"; 
 # Son code 5 signifie « aucun test collecte » : le projet n'a pas de tests
 # Python, ce controle n'existe pas ici — ni echec, ni controle trouve. C'est le
 # cas de ce depot-ci, dont les tests sont des scripts shell.
-if [ -n "$PYTEST" ]; then
+if [ -n "$PYTEST" ] && [ "$PYTEST_PAR_MAKE" -eq 0 ]; then
     CODE_NEUTRE=5
     # -p no:cacheprovider : ne rien ecrire dans le projet. Sans cette option,
     # pytest depose un dossier .pytest_cache chez l'utilisateur — y compris dans
@@ -107,7 +138,16 @@ done
 
 # --- Node / JS ---
 if [ -f package.json ]; then
-    if grep -q '"test"' package.json; then lancer "npm test" npm test --silent; fi
+    # Le script « test » que cree npm init (« no test specified ») n'est pas un
+    # test : il faisait echouer chaque controle, donc chaque fin de tour. Un
+    # package.json illisible, lui, lance npm test : son echec se voit.
+    SCRIPT_TEST=$(python3 -I -c 'import json
+try:
+    t = (json.load(open("package.json")).get("scripts") or {}).get("test") or ""
+except Exception:
+    t = "illisible"
+print("" if "no test specified" in str(t) else t)' 2>/dev/null)
+    if [ -n "$SCRIPT_TEST" ]; then lancer "npm test" npm test --silent; fi
     if grep -q '"lint"' package.json; then lancer "npm run lint" npm run lint --silent; fi
 fi
 

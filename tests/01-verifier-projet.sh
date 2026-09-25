@@ -112,4 +112,63 @@ mkdir -p "$BAC/vide"
 bash "$CONTROLE" "$BAC/vide" >/dev/null 2>&1
 verifie "un projet sans aucun moyen de vérification sort en 2" 2 $?
 
+section "Contrôle universel — ce que la 0.3.5 corrige"
+# Un faux pytest, qui compte ses appels : ces cas n'ont pas besoin du vrai.
+mkdir -p "$BAC/outils"
+cat > "$BAC/outils/pytest" <<'FIN'
+#!/bin/bash
+echo x >> "$COMPTEUR_PYTEST"
+exit 0
+FIN
+chmod +x "$BAC/outils/pytest"
+# « make test » qui lance pytest : pytest ne tourne plus une seconde fois.
+mkdir -p "$BAC/deuxfois"
+printf 'test:\n\tpytest -q\n' > "$BAC/deuxfois/Makefile"
+: > "$BAC/compte-deuxfois"
+env PATH="$BAC/outils:$PATH" COMPTEUR_PYTEST="$BAC/compte-deuxfois" bash "$CONTROLE" "$BAC/deuxfois" >/dev/null 2>&1
+verifie "make test lance pytest : pytest ne tourne qu'une fois" 1 "$(grep -c . "$BAC/compte-deuxfois")"
+# … mais une cible test qui ne l'appelle pas ne masque toujours rien.
+mkdir -p "$BAC/masque"
+printf 'test:\n\t@true\n' > "$BAC/masque/Makefile"
+: > "$BAC/compte-masque"
+env PATH="$BAC/outils:$PATH" COMPTEUR_PYTEST="$BAC/compte-masque" bash "$CONTROLE" "$BAC/masque" >/dev/null 2>&1
+verifie "« test: @true » : pytest tourne quand même" 1 "$(grep -c . "$BAC/compte-masque")"
+# Le script test que crée « npm init » n'est pas un test.
+if outil npm; then
+    mkdir -p "$BAC/npminit"
+    printf '{"name":"n","scripts":{"test":"echo \\"Error: no test specified\\" && exit 1"}}\n' > "$BAC/npminit/package.json"
+    SORTIE=$(bash "$CONTROLE" "$BAC/npminit" 2>&1); CODE=$?
+    verifie "le test par défaut de npm init n'est pas lancé" 0 "$(echo "$SORTIE" | grep -c 'npm test')"
+    verifie "  et ne met pas le projet en échec" 2 "$CODE"
+    # Un package.json illisible lance npm test : son échec se voit, il ne passe
+    # pas pour un projet sans contrôle.
+    mkdir -p "$BAC/npmcasse"
+    printf '{"name": "n", "scripts": {"test": \n' > "$BAC/npmcasse/package.json"
+    bash "$CONTROLE" "$BAC/npmcasse" >/dev/null 2>&1
+    verifie "package.json illisible : npm test lancé, et en échec" 1 $?
+else
+    saute "le test par défaut de npm init n'est pas lancé" "npm absent de cette machine"
+    saute "package.json illisible : npm test lancé" "npm absent de cette machine"
+fi
+# L'audit des dépendances ne tourne pas en fin de tour.
+mkdir -p "$BAC/audit"
+printf 'test:\n\t@true\naudit:\n\t@exit 1\n' > "$BAC/audit/Makefile"
+SORTIE=$(VERIFIER_SANS_AUDIT=1 bash "$CONTROLE" "$BAC/audit" 2>&1); CODE=$?
+verifie "VERIFIER_SANS_AUDIT=1 : make audit n'est pas lancé" 0 "$(echo "$SORTIE" | grep -c 'make audit')"
+verifie "  et le projet reste vert" 0 "$CODE"
+SORTIE=$(bash "$CONTROLE" "$BAC/audit" 2>&1)
+verifie "sans elle, /verifier lance toujours make audit" 1 "$(echo "$SORTIE" | grep -c 'ECHEC  make audit')"
+# Sans fichier temporaire, le contrôle n'a pas tourné : c'est un échec, pas un
+# projet « sans moyen de vérification » que la fin de tour laisse passer.
+mkdir -p "$BAC/sanstmp"
+printf 'test:\n\t@true\n' > "$BAC/sanstmp/Makefile"
+TMPDIR="$BAC/nexiste-pas" bash "$CONTROLE" "$BAC/sanstmp" >/dev/null 2>&1
+verifie "fichier temporaire impossible : échec, pas « aucun contrôle »" 1 $?
+# Un test qui laisse un processus en arrière-plan ne fait plus attendre.
+mkdir -p "$BAC/fond"
+printf 'test:\n\t@(sleep 997 &); true\n' > "$BAC/fond/Makefile"
+debut=$(date +%s); bash "$CONTROLE" "$BAC/fond" >/dev/null 2>&1; duree=$(( $(date +%s) - debut ))
+pkill -f 'sleep 997' 2>/dev/null
+verifie "un processus laissé en arrière-plan ne fait pas attendre le contrôle" 1 "$([ "$duree" -lt 10 ] && echo 1 || echo 0)"
+
 bilan
