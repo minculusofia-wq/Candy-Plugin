@@ -102,6 +102,36 @@ printf '## Phase 1 — debut\n' > "$F/ROADMAP.md"; echo x > "$F/CLAUDE.md"; comm
 verifie "roadmap au format inconnu : le rouge arrive quand meme a la porte" 1 "$(a "$(porte "$F")" "🔴 POINT ROUGE")"
 
 # ------------------------------------------------------------------------------
+section "Porte d'entrée — ce qui doit arriver jusqu'à Claude"
+# Au-delà de 10 000 caractères, Claude Code ne transmet d'une sortie de hook
+# qu'un aperçu des 2 000 premiers (doc hooks, « JSON output »). Jusqu'à la 0.3.4,
+# les alertes git venaient en dernier : un long conseil ou une longue liste de
+# rouges les faisait disparaître. Et le conseil, que /fin-phase écrit à la racine
+# du dépôt, n'était cherché que dans le dossier de la session.
+L=$(projet porte-longue)
+printf '### Phase 1 — Base 🟢\n### Phase 2 — Suite\n' > "$L/ROADMAP.md"
+for f in CLAUDE SPEC JOURNAL README; do echo "# $f" > "$L/$f.md"; done
+python3 -c 'print("\n".join("[lien %d](absent-%d.md)" % (i, i) for i in range(60)))' >> "$L/README.md"
+python3 -c 'print("conseil " * 2500)' > "$L/.claude-phase-suivante"
+mkdir -p "$L/backend"; echo x > "$L/backend/app.py"
+commiter "$L" init; echo "x = 2" > "$L/backend/app.py"
+S=$(porte "$L")
+verifie "60 liens cassés et un conseil de 20 000 caractères : sortie sous 10 000" \
+        1 "$(python3 -c 'import sys; print(int(len(sys.argv[1]) < 10000))' "$S")"
+verifie "  l'alerte « dépôt non propre » est dans les 2 000 premiers caractères" \
+        1 "$(python3 -c 'import sys; print(int(0 <= sys.argv[1].find("DEPOT NON PROPRE") < 2000))' "$S")"
+verifie "  le conseil coupé le dit" 1 "$(a "$S" "conseil coupe")"
+verifie "  la liste des rouges coupée le dit" 1 "$(a "$S" "autre(s) ligne(s)")"
+verifie "session ouverte dans un sous-dossier : la porte d'entrée s'affiche" \
+        1 "$(a "$(porte "$L/backend")" "=== PORTE D'ENTREE — Phase 2 ===")"
+verifie "  et le conseil écrit à la racine est lu" \
+        1 "$(a "$(porte "$L/backend")" "Reglage conseille")"
+verifie "--roadmap depuis un sous-dossier : la roadmap de la racine" \
+        "$(cd "$L" && pwd -P)/ROADMAP.md" "$(jeu --roadmap "$L/backend")"
+verifie "le hook ne cite plus un contrôle qui n'existe pas dans le plugin" \
+        0 "$(grep -c 'etat-des-phases' "$OUVERTURE")"
+
+# ------------------------------------------------------------------------------
 section "Petit projet, hors projet"
 P=$(projet petit); echo x > "$P/code.py"; commiter "$P" init
 verifie "depot git sans CLAUDE.md : 🔴" 1 "$(a "$(jeu "$P")" "🔴 manquant : CLAUDE.md")"

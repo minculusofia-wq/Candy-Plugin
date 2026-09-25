@@ -27,6 +27,18 @@ muet  "un fichier à déplacer"                "deplace ce fichier dans un autre
 muet  "une relecture de code demandée"       "fais une revue de code de la phase 3"
 muet  "« comment » et « bot » dans la phrase" "comment je garde ca en memoire pour mon bot"
 
+section "Déclencheurs — ni « par rapport à », ni « rapporté », ni un chemin"
+# Jusqu'à la 0.3.4 : grep lisait « par rapport à » comme une demande de rapport,
+# un chemin ou un nom de fichier comme un mot, et, sous la langue C, le « é » de
+# « rapporté » comme une frontière de mot.
+muet  "« par rapport à »"                     "compare par rapport à la version d'hier"
+muet  "« rapporté »"                          "le bug rapporté hier est corrigé"
+muet  "un chemin de fichier"                  "ouvre analyses/rapport-juin.md"
+muet  "un nom de fichier"                     "corrige le hook analyse-commande.py"
+parle "une vraie demande à côté d'un chemin"  "analyse le fichier hooks/x.sh"
+verifie "« rapporté » muet aussi avec LC_ALL=C" 0 \
+        "$(printf '%s' "$(entree_prompt "le bug rapporté hier est corrigé")" | LC_ALL=C bash "$HOOK" 2>/dev/null | grep -cF "$REGLE")"
+
 section "Déclencheurs — les messages automatiques ne sont pas des demandes"
 muet  "l'avis de fin d'une tâche de fond"    "<task-notification> <task-id>a1</task-id> rapport : analyse terminee"
 muet  "le rapport d'un sous-agent"           "<agent-message from=\"a1\"> analyse du module"

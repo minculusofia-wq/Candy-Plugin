@@ -19,13 +19,26 @@
 #
 # Ne corrige rien. Signale, et rend la main.
 #
-# Usage :  bash verifier-setup.sh [dossier]     (défaut : ~/.claude)
+# Usage :  bash verifier-setup.sh [--releve] [dossier]     (défaut : ~/.claude)
 # Code retour : 0 si rien à signaler, 1 sinon.
+#
+# --releve : écrire le relevé d'entretien (date et poids du setup). Seule
+# /maintenance le passe. Jusqu'à la 0.3.4, chaque passage le réécrivait, et un
+# contrôle lancé à la main repoussait de 30 jours le rappel d'entretien
+# (rappel-entretien.sh lit sa date).
 #
 
 set -u
 
-CLAUDE="${1:-$HOME/.claude}"
+ECRIRE_RELEVE=0
+CLAUDE=""
+for a in "$@"; do
+    case "$a" in
+        --releve) ECRIRE_RELEVE=1 ;;
+        *) CLAUDE="$a" ;;
+    esac
+done
+CLAUDE="${CLAUDE:-$HOME/.claude}"
 ALERTES=0
 
 if [ -t 1 ]; then
@@ -767,10 +780,12 @@ if [ -f "$RELEVE" ]; then
     else
         ok "$LISIBLE"
     fi
+elif [ "$ECRIRE_RELEVE" = 1 ]; then
+    ok "$LISIBLE — premier relevé, sert de référence au prochain entretien"
 else
-    ok "$LISIBLE — premier relevé, sert de référence au prochain contrôle"
+    ok "$LISIBLE — aucun relevé d'entretien (seule /maintenance en écrit un)"
 fi
-[ -n "${KO:-}" ] && echo "$(date +%Y-%m-%d) $KO" > "$RELEVE" 2>/dev/null
+[ "$ECRIRE_RELEVE" = 1 ] && [ -n "${KO:-}" ] && echo "$(date +%Y-%m-%d) $KO" > "$RELEVE" 2>/dev/null
 
 # --------------------------------------------------------------- BILAN -------
 echo

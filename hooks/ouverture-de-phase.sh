@@ -24,6 +24,13 @@
 #   - verifie mecaniquement les deux points de la porte d'entree qu'une
 #     commande peut verifier seule : depot propre, depot pousse.
 #
+# Au-dela de 10 000 caracteres, Claude Code ne transmet d'une sortie de hook
+# qu'un apercu des 2 000 premiers (doc hooks, « JSON output »). Jusqu'a la
+# 0.3.4, les alertes git venaient en dernier, et un long conseil ou une longue
+# liste de rouges les faisait disparaitre. Elles viennent donc juste sous le
+# titre, le conseil est coupe a 3 000 caracteres et la liste des rouges a
+# 25 lignes.
+#
 # Il ne remplace PAS la porte d'entree : lire les documents et verifier les
 # constats a la source reste le travail de Claude. Il empeche seulement de
 # demarrer sans savoir qu'elle existe.
@@ -44,6 +51,15 @@ set -u
 ICI="$(cd "$(dirname "$0")" && pwd)"
 PROJET="${CLAUDE_PROJECT_DIR:-$PWD}"
 cd "$PROJET" 2>/dev/null || exit 0
+# Une session ouverte dans backend/ ou docs/ garde la porte du projet entier :
+# jusqu'a la 0.3.4, la roadmap n'etait cherchee que dans ce sous-dossier, et la
+# porte se taisait.
+ORIGINE="$PROJET"
+RACINE_DEPOT=$(git rev-parse --show-toplevel 2>/dev/null)
+if [[ -n "$RACINE_DEPOT" ]]; then
+    PROJET="$RACINE_DEPOT"
+    cd "$PROJET" 2>/dev/null || exit 0
+fi
 
 # Consomme l'entree JSON du hook sans la lire : on ne depend d'aucun champ.
 cat >/dev/null 2>&1 || true
@@ -75,7 +91,10 @@ bloc_documents() {
     case $CODE_JEU in
         0) return 1 ;;
         1)  echo "🔴 POINT ROUGE — jeu de documents (point 4) :"
-            echo "$SORTIE" | sed 's/^/     /'
+            local N
+            N=$(printf '%s\n' "$SORTIE" | wc -l | tr -d ' ')
+            printf '%s\n' "$SORTIE" | head -25 | sed 's/^/     /'
+            [[ "$N" -gt 25 ]] && echo "     … et $((N - 25)) autre(s) ligne(s) : python3 -I \"$JEU\" --rouges \"$PROJET\""
             echo "   Le corriger dans cette conversation, avant tout plan et toute ligne"
             echo "   de code (une-info-un-fichier.md)." ;;
         *)  echo "⚠️ Controle du jeu de documents hors service (code $CODE_JEU) : $SORTIE"
@@ -88,8 +107,8 @@ BLOC_DOCS=$(bloc_documents)
 
 # --- La prochaine phase : la premiere ligne « ### Phase N » sans 🟢 ----------
 #
-# Le marqueur fait foi dans la roadmap — c'est la meme source que le controle
-# `etat-des-phases` du garde-fou. On ne devine pas depuis un autre document.
+# Le marqueur fait foi dans la roadmap. On ne devine pas depuis un autre
+# document.
 PROCHAINE=$(grep -E '^### Phase [0-9]+' "$ROADMAP" 2>/dev/null \
     | grep -v '🟢' \
     | head -1 \
@@ -110,8 +129,44 @@ fi
 
 NUMERO=$(echo "$PROCHAINE" | grep -oE '[0-9]+')
 
+# --- Les deux points que ce hook peut trancher seul --------------------------
+# Calcules ici, affiches juste sous le titre (voir l'en-tete).
+alertes_git() {
+    if git rev-parse --git-dir >/dev/null 2>&1; then
+        NB_SALE=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+        if [[ "$NB_SALE" != "0" ]]; then
+            echo "⚠️ DEPOT NON PROPRE — $NB_SALE fichier(s) non commite(s) :"
+            git status --porcelain 2>/dev/null | head -5 | sed 's/^/     /'
+            [[ "$NB_SALE" -gt 5 ]] && echo "     … et $((NB_SALE - 5)) autre(s)"
+            echo
+            echo "   Deux lectures, et il faut trancher AVANT de continuer :"
+            echo "   — si cette conversation OUVRE la phase, elle ne s'ouvre pas la-dessus ;"
+            echo "   — si du travail est EN COURS (ici ou dans une autre conversation sur le"
+            echo "     meme depot), ne rien annuler, ne rien commiter a la place de l'autre."
+            echo
+            echo "   Dans les deux cas : du code non commite n'est ni datable ni"
+            echo "   reproductible. C'est ce qui a rendu l'incident du piege n°51 impossible"
+            echo "   a prouver — 17 fichiers hors de git, le dernier commit vieux de 2 jours."
+            echo
+        fi
+
+        BRANCHE=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+        if git rev-parse --verify "origin/$BRANCHE" >/dev/null 2>&1; then
+            AVANCE=$(git rev-list --count "origin/$BRANCHE..HEAD" 2>/dev/null || echo 0)
+            if [[ "$AVANCE" != "0" ]]; then
+                echo "⚠️ $AVANCE COMMIT(S) NON POUSSE(S) sur $BRANCHE."
+                echo "   Le controle avant commit ne peut pas le voir : ce point (3) est"
+                echo "   a la charge de Claude."
+                echo
+            fi
+        fi
+    fi
+}
+ALERTES_GIT=$(alertes_git)
+
 echo "=== PORTE D'ENTREE — $PROCHAINE ==="
 echo
+[[ -n "$ALERTES_GIT" ]] && { echo "$ALERTES_GIT"; echo; }
 echo "Si cette conversation OUVRE cette phase, avant toute ligne de code (rules/porte-de-phase.md) :"
 echo "  1. lancer le controle du projet et montrer sa sortie reelle ;"
 echo "  2. verifier que le depot est propre ;"
@@ -131,10 +186,19 @@ echo "script ne le verifie. « Tu peux demarrer » ne se dit qu'apres l'avoir fa
 echo
 
 # --- Le conseil de reglage, ecrit par /fin-phase a la cloture precedente -----
-CONSEIL="$PROJET/.claude-phase-suivante"
-if [[ -f "$CONSEIL" ]]; then
+# /fin-phase l'ecrit a la racine du depot ; jusqu'a la 0.3.4, il n'etait
+# cherche que dans le dossier de la session, qui reste lu en second.
+CONSEIL=""
+for c in "$PROJET/.claude-phase-suivante" "$ORIGINE/.claude-phase-suivante"; do
+    [[ -f "$c" ]] && { CONSEIL="$c"; break; }
+done
+if [[ -n "$CONSEIL" ]]; then
     echo "--- Reglage conseille pour cette phase (ecrit a la cloture de la precedente) ---"
-    cat "$CONSEIL"
+    python3 -I -c 'import sys
+t = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+print(t[:3000].rstrip())
+if len(t) > 3000:
+    print("[... conseil coupe a 3 000 caracteres : le lire en entier dans " + sys.argv[1] + "]")' "$CONSEIL"
     echo
     echo "⚠️ DEUX reglages, pas trois : le mode (plan/edit/auto) et le curseur"
     echo "   d'effort, dont ultracode est la DERNIERE position — pas un interrupteur"
@@ -145,37 +209,6 @@ if [[ -f "$CONSEIL" ]]; then
     echo "   changement garde le cache ; sur un autre modele, plus tard, il fait"
     echo "   relire la conversation sans cache."
     echo
-fi
-
-# --- Les deux points que ce hook peut trancher seul --------------------------
-if git rev-parse --git-dir >/dev/null 2>&1; then
-    NB_SALE=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
-    if [[ "$NB_SALE" != "0" ]]; then
-        echo "⚠️ DEPOT NON PROPRE — $NB_SALE fichier(s) non commite(s) :"
-        git status --porcelain 2>/dev/null | head -5 | sed 's/^/     /'
-        [[ "$NB_SALE" -gt 5 ]] && echo "     … et $((NB_SALE - 5)) autre(s)"
-        echo
-        echo "   Deux lectures, et il faut trancher AVANT de continuer :"
-        echo "   — si cette conversation OUVRE la phase, elle ne s'ouvre pas la-dessus ;"
-        echo "   — si du travail est EN COURS (ici ou dans une autre conversation sur le"
-        echo "     meme depot), ne rien annuler, ne rien commiter a la place de l'autre."
-        echo
-        echo "   Dans les deux cas : du code non commite n'est ni datable ni"
-        echo "   reproductible. C'est ce qui a rendu l'incident du piege n°51 impossible"
-        echo "   a prouver — 17 fichiers hors de git, le dernier commit vieux de 2 jours."
-        echo
-    fi
-
-    BRANCHE=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
-    if git rev-parse --verify "origin/$BRANCHE" >/dev/null 2>&1; then
-        AVANCE=$(git rev-list --count "origin/$BRANCHE..HEAD" 2>/dev/null || echo 0)
-        if [[ "$AVANCE" != "0" ]]; then
-            echo "⚠️ $AVANCE COMMIT(S) NON POUSSE(S) sur $BRANCHE."
-            echo "   Le controle avant commit ne peut pas le voir : ce point (3) est"
-            echo "   a la charge de Claude."
-            echo
-        fi
-    fi
 fi
 
 echo "Roadmap : $ROADMAP_REL, section « ### $PROCHAINE » (numero $NUMERO)."

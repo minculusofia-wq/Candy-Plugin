@@ -11,54 +11,43 @@
 set -e
 
 INPUT=$(cat)
-PROMPT=$(python3 -I -c "import sys,json; sys.stdout.reconfigure(errors='replace'); d=json.loads(sys.stdin.buffer.read().decode('utf-8', 'replace')); print(d.get('prompt') or '')" <<< "$INPUT" 2>/dev/null)
 
-if [[ -z "$PROMPT" ]]; then
-    exit 0
-fi
-
+# La detection se fait en Python, en mots entiers Unicode — la meme quelle que
+# soit la langue du systeme. Historique :
+# - en sous-chaine, « edge » se declenchait sur « knowledge » ; les mots de
+#   jargon trading (edge, sweep, longshot, scanner, mm, market maker) ont ete
+#   retires : trop generiques hors de ce domaine, inutiles dedans ;
+# - retires ensuite : « revue », « comment ... bot », « verifie ... code » — ils
+#   reagissaient aux consignes de phase et aux demandes de relecture de code ;
+# - jusqu'a la 0.3.4, grep lisait « par rapport a » comme une demande de
+#   rapport, un chemin (analyses/rapport-juin.md) ou un nom de fichier
+#   (analyse-commande.py) comme un mot, et sous la langue C le « e » accentue
+#   de « rapporte » comme une frontiere de mot. Chemins, noms de fichiers et
+#   « par rapport a » sont retires avant de chercher.
 # Les messages automatiques ne sont pas des demandes de l'utilisateur : avis de
 # fin d'une tache de fond, rapport d'un sous-agent, message d'une autre session.
 # Rejeu d'un mois de messages de l'auteur : pres de trois declenchements sur
 # quatre venaient d'eux.
-DEBUT="${PROMPT#"${PROMPT%%[![:space:]]*}"}"
-case "$DEBUT" in
-    "<task-notification"*|"<agent-message"*|"<cross-session-message"*) exit 0 ;;
-esac
+DECLENCHE=$(python3 -I -c '
+import json, re, sys, unicodedata
+try:
+    d = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))
+except ValueError:
+    sys.exit(0)
+p = d.get("prompt") if isinstance(d, dict) else None
+if not isinstance(p, str) or p.lstrip().startswith(("<task-notification", "<agent-message", "<cross-session-message")):
+    sys.exit(0)
+t = unicodedata.normalize("NFC", p).lower()
+t = re.sub(r"\S*[/\\]\S*", " ", t)
+t = re.sub(r"\S+\.(?:md|py|sh|json|jsonl|txt|ya?ml|toml|log|csv|js|ts|tsx|swift|go|rs|html|css)\b", " ", t)
+t = re.sub(r"\bpar rapport (?:à|a|au|aux)\b", " ", t)
+if re.search(r"\b(?:rapports?|analyses?|analyser|pertinence|critiques?|strat[eé]gies?|que penses|qu.en penses|pourquoi le bot)\b", t):
+    print("oui")
+' <<< "$INPUT" 2>/dev/null) || true
 
-PROMPT_LOWER=$(echo "$PROMPT" | tr '[:upper:]' '[:lower:]')
+[[ "$DECLENCHE" == "oui" ]] || exit 0
 
-# Mots ENTIERS uniquement. En sous-chaine, « edge » se declenchait sur
-# « knowledge » : le prompt « ajoute un champ knowledge au formulaire » recevait
-# le pave complet de la regle. Les mots de jargon trading (edge, sweep, longshot,
-# scanner, mm, market maker) ont ete retires : trop generiques hors de ce domaine,
-# inutiles dedans puisque « rapport » et « analyse » couvrent le vrai declencheur.
-# Retires ensuite : « revue », « comment ... bot », « verifie ... code » — ils
-# reagissaient aux consignes de phase et aux demandes de relecture de code, pas
-# a des demandes de rapport. « strat(e|é)gie » s'ecrit en alternative : entre
-# crochets, le « é » (deux octets) n'etait pas reconnu avec la langue C.
-TRIGGERS=(
-    '\brapports?\b'
-    '\banalyses?\b'
-    '\banalyser\b'
-    '\bpertinence\b'
-    '\bcritiques?\b'
-    '\bstrat(e|é)gies?\b'
-    '\bque penses\b'
-    "\\bqu.en penses\\b"
-    '\bpourquoi le bot\b'
-)
-
-TRIGGERED=false
-for trigger in "${TRIGGERS[@]}"; do
-    if echo "$PROMPT_LOWER" | grep -qE "$trigger"; then
-        TRIGGERED=true
-        break
-    fi
-done
-
-if [[ "$TRIGGERED" == "true" ]]; then
-    cat <<'EOF'
+cat <<'EOF'
 === REGLE 13 ACTIVE: SOURCE-OR-SILENCE ===
 Rapport/analyse detecte. Chaque affirmation chiffree ou technique DOIT etre sourcee.
 
@@ -90,6 +79,5 @@ EXEMPLE DE FAUTE RECENTE (a ne pas refaire):
 Realite dans [constants.py:90]: MIN_ORDER_SIZE_SHARES = 5.0 (5 shares, pas $5)
 === FIN REGLE 13 ===
 EOF
-fi
 
 exit 0

@@ -494,6 +494,25 @@ verifie "un simple grep en aurait compté trois" \
 verifie "un dossier sans transcription ne fait pas planter" \
         0 "$(python3 "$COMPTEUR" 0 "$BAC/absent" >/dev/null 2>&1; echo $?)"
 
+section "Relevé d'entretien — seule /maintenance l'écrit"
+# Jusqu'à la 0.3.4, chaque passage réécrivait le relevé : un contrôle lancé à la
+# main repoussait de 30 jours le rappel d'entretien.
+RV="$BAC/releve"; mkdir -p "$RV"; echo '{}' > "$RV/settings.json"
+bash "$CONTROLE" "$RV" >/dev/null 2>&1
+verifie "passage à la main, sans relevé : aucun n'est créé" \
+        0 "$([ -f "$RV/.maintenance-dernier-releve" ] && echo 1 || echo 0)"
+printf '2026-01-01 1\n' > "$RV/.maintenance-dernier-releve"
+bash "$CONTROLE" "$RV" >/dev/null 2>&1
+verifie "passage à la main : le relevé existant n'est pas touché" \
+        "2026-01-01 1" "$(cat "$RV/.maintenance-dernier-releve")"
+bash "$CONTROLE" --releve "$RV" >/dev/null 2>&1
+verifie "--releve : relevé à la date du jour" \
+        "$(date +%Y-%m-%d)" "$(awk '{print $1}' "$RV/.maintenance-dernier-releve")"
+verifie "/maintenance lance le contrôle avec --releve" \
+        1 "$(grep -c 'verifier-setup.sh --releve' "$RACINE/commands/maintenance.md")"
+verifie "les commandes lancent python3 avec -I" \
+        0 "$(grep -h 'python3 ' "$RACINE"/commands/*.md | grep -vc 'python3 -I')"
+
 section "Le dépôt du plugin sort propre"
 bash "$CONTROLE" "$VIERGE" >/dev/null 2>&1
 verifie "un setup vierge ne rend que l'avertissement de dépôt" 1 $?

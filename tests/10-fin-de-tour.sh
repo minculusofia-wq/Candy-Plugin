@@ -170,4 +170,22 @@ python3 -I -c 'import json, sys
 e = json.load(open(sys.argv[1])); e["head"] = "0" * 40; json.dump(e, open(sys.argv[1], "w"))' "$REEC/essai.json"
 verifie "commit du relevé disparu : contrôle lancé" 2 "$(CONTROLE_ETATS="$REEC" fin_s "$FAUX")"
 
+section "Fin de tour — la relecture de la réponse"
+# relire-ma-reponse.sh relisait encore toute la transcription à chaque tour,
+# pour un contrôle de longueur retiré depuis longtemps ; une ligne « user » mal
+# formée le faisait planter (code 1) et la relecture était sautée.
+RELIRE="$RACINE/hooks/relire-ma-reponse.sh"
+relire() {  # relire <réponse> <prompt_id> [transcription] → code
+    python3 -I -c 'import json, sys; print(json.dumps({"last_assistant_message": sys.argv[1], "prompt_id": sys.argv[2], "transcript_path": sys.argv[3]}))' "$1" "$2" "${3:-}" \
+        | env TMPDIR="$BAC" python3 -I "$RELIRE" >/dev/null 2>&1; echo $?
+}
+MAL="$BAC/mal-formee.jsonl"
+printf '%s\n' '{"type": "user", "message": "texte au lieu d un objet"}' > "$MAL"
+verifie "formule de flatterie : correction demandée" 2 "$(relire "Bonne question, voici." p1)"
+verifie "  sans boucle ensuite" 0 "$(relire "Bonne question, voici." p1)"
+verifie "transcription mal formée : la relecture a lieu quand même" 2 "$(relire "Bonne question, voici." p2 "$MAL")"
+verifie "formule seulement citée : rien" 0 "$(relire "Le contrôle attrape « bonne question »." p3)"
+verifie "entrée qui n'est pas un objet : rien, sans planter" \
+        0 "$(printf '[1]' | env TMPDIR="$BAC" python3 -I "$RELIRE" >/dev/null 2>&1; echo $?)"
+
 bilan

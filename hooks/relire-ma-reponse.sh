@@ -42,8 +42,6 @@ import sys
 import unicodedata
 from pathlib import Path
 
-LIGNES_MAX = 40
-
 # Les formules interdites par la regle « honnetete brutale ». Comparaison faite
 # sans accents ni casse : « Ça dépend » et « ca depend » sont la meme faute.
 FLATTERIE = (
@@ -79,43 +77,11 @@ SUPPOSITION = (
     "probablement",
 )
 
-# Quand l'utilisateur demande ca, la longueur est le format attendu, pas une derive.
-DEMANDE_LONGUE = (
-    "analyse", "analyser", "rapport", "explique", "explication", "detaille",
-    "detail", "compare", "comparaison", "audit", "avis", "critique", "resume",
-    "presente", "pourquoi", "comment",
-)
-
-
 def sans_accents(texte: str) -> str:
     return "".join(
         c for c in unicodedata.normalize("NFD", texte.lower())
         if unicodedata.category(c) != "Mn"
     )
-
-
-def dernier_message_utilisateur(chemin: str) -> str:
-    """Le dernier message de l'utilisateur, lu dans la transcription."""
-    try:
-        lignes = Path(chemin).read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return ""
-    for ligne in reversed(lignes):
-        try:
-            evenement = json.loads(ligne)
-        except ValueError:
-            continue
-        if evenement.get("type") != "user":
-            continue
-        contenu = evenement.get("message", {}).get("content")
-        if isinstance(contenu, str):
-            return contenu
-        if isinstance(contenu, list):
-            return " ".join(
-                bloc.get("text", "") for bloc in contenu
-                if isinstance(bloc, dict) and bloc.get("type") == "text"
-            )
-    return ""
 
 
 def citations_retirees(reponse: str) -> str:
@@ -140,29 +106,20 @@ def citations_retirees(reponse: str) -> str:
     return sans
 
 
-def longueur_utile(reponse: str) -> int:
-    """Lignes non vides, blocs de code exclus.
-
-    Un bloc de code est une PREUVE — la sortie reelle d'un controle, un extrait
-    de fichier. Le compter comme du bavardage pousserait a masquer les preuves,
-    ce qui est l'inverse du but.
-    """
-    sans_code = re.sub(r"```.*?```", "", reponse, flags=re.S)
-    return len([l for l in sans_code.splitlines() if l.strip()])
-
-
 def main() -> int:
     try:
         entree = json.load(sys.stdin)
     except (ValueError, OSError):
         return 0  # Jamais bloquer sur une entree illisible.
+    if not isinstance(entree, dict):
+        return 0
 
     reponse = entree.get("last_assistant_message") or ""
-    if not reponse.strip():
+    if not isinstance(reponse, str) or not reponse.strip():
         return 0
 
     # ─── Anti-boucle : un seul refus par message de l'utilisateur ───────────────────
-    prompt_id = entree.get("prompt_id") or entree.get("session_id") or "inconnu"
+    prompt_id = str(entree.get("prompt_id") or entree.get("session_id") or "inconnu")
     marqueur = Path(
         os.environ.get("TMPDIR", "/tmp")
     ) / f".relecture-{re.sub(r'[^A-Za-z0-9_-]', '', prompt_id)}"
@@ -170,7 +127,6 @@ def main() -> int:
         marqueur.unlink(missing_ok=True)
         return 0
 
-    demande = sans_accents(dernier_message_utilisateur(entree.get("transcript_path", "")))
     corps = sans_accents(citations_retirees(reponse))
     motifs: list[str] = []
 
@@ -192,7 +148,9 @@ def main() -> int:
         )
 
     # Le controle de LONGUEUR a ete retire le 2026-08-08 — voir l'entete : il
-    # rallongeait ce qu'il pretendait raccourcir.
+    # rallongeait ce qu'il pretendait raccourcir. Jusqu'a la 0.3.5, son reste
+    # relisait encore toute la transcription a chaque tour, sans s'en servir,
+    # et une ligne « user » mal formee faisait planter la relecture.
 
     if not motifs:
         return 0

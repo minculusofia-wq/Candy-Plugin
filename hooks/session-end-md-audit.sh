@@ -59,6 +59,7 @@ COEUR=$(mktemp -t md-audit-XXXXXX.py)
 trap 'rm -f "$COEUR"' EXIT
 cat > "$COEUR" <<'PYFIN'
 import sys, re, os
+from urllib.parse import unquote
 
 MODE = sys.argv[1]
 PROJET = os.path.abspath(sys.argv[2])
@@ -83,6 +84,19 @@ def sans_citations(ligne):
     return ligne
 
 LIEN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+SCHEMA = re.compile(r"[a-zA-Z][a-zA-Z0-9+.-]*:")
+
+# La cible d'un lien, lue comme un lecteur Markdown la lit. Jusqu'a la 0.3.5,
+# des liens valides etaient declares casses — et ce rouge ferme la porte de
+# phase : <chemin avec espaces>, chemin 'titre' ou (titre), ?requete, %20, ~/.
+def cible_du_lien(brute):
+    cible = brute.strip()
+    if cible.startswith("<"):
+        cible = cible[1:].split(">", 1)[0]
+    else:
+        cible = cible.split(None, 1)[0] if cible.split() else ""
+    cible = unquote(cible.split("#", 1)[0].split("?", 1)[0])
+    return os.path.expanduser(cible) if cible.startswith("~/") else cible
 STATUTS = re.compile(r"(à créer|a creer|à trancher|a trancher|non commencé|non commence)", re.I)
 
 vus = set()
@@ -96,9 +110,9 @@ for f in fichiers:
         ligne = sans_citations(brute)
         if MODE == "liens":
             for cible in LIEN.findall(ligne):
-                if cible.startswith(("http://", "https://", "mailto:", "#")):
-                    continue
-                chemin = cible.split("#")[0].strip()
+                if cible.strip().startswith("#") or SCHEMA.match(cible.strip()):
+                    continue                    # ancre, ou adresse (https:, mailto:, vscode:…)
+                chemin = cible_du_lien(cible)
                 if not chemin:
                     continue
                 if os.path.exists(os.path.join(os.path.dirname(f), chemin)):
@@ -144,7 +158,9 @@ echo -e "${BOLD}[2/4] References a des fichiers/dossiers supprimes${NC}"
 DELETED_REFS=0
 # Detecter les fichiers/dossiers supprimes dans les 50 derniers commits
 if git -C "$PROJECT_DIR" rev-parse --git-dir > /dev/null 2>&1; then
-    DELETED_PATHS=$(git -C "$PROJECT_DIR" log -50 --diff-filter=D --name-only --pretty=format: 2>/dev/null | \
+    # core.quotePath=false : sans lui, git ecrit « "docs/strat\303\251gie.md" »
+    # entre guillemets, et un nom accentue n'etait jamais retrouve.
+    DELETED_PATHS=$(git -C "$PROJECT_DIR" -c core.quotePath=false log -50 --diff-filter=D --name-only --pretty=format: 2>/dev/null | \
         grep -v '^$' | sort -u)
     if [[ -n "$DELETED_PATHS" ]]; then
         while IFS= read -r deleted; do
@@ -155,13 +171,15 @@ if git -C "$PROJECT_DIR" rev-parse --git-dir > /dev/null 2>&1; then
             # Journaux, decisions et analyses racontent le passe : y nommer un
             # fichier supprime est normal (« MEMORY.md supprime » dans un JOURNAL
             # sortait en rouge).
-            HITS=$(echo "$MD_FILES" | xargs grep -lF "$deleted" 2>/dev/null | \
+            # Noms separes par des octets nuls : xargs coupait « bot meteo/A.md »
+            # en deux chemins inexistants, et s'arretait sur une apostrophe.
+            HITS=$(printf '%s\n' "$MD_FILES" | tr '\n' '\0' | xargs -0 grep -lF -- "$deleted" 2>/dev/null | \
                 grep -viE "CHANGELOG|archives|JOURNAL|DECISIONS|/analyses/" || true)
             if [[ -n "$HITS" ]]; then
                 while IFS= read -r hit; do
                     [[ -z "$hit" ]] && continue
                     rel_hit="${hit#$PROJECT_DIR/}"
-                    line=$(grep -nF "$deleted" "$hit" | head -1 | cut -d: -f1)
+                    line=$(grep -nF -- "$deleted" "$hit" | head -1 | cut -d: -f1)
                     echo -e "  ${RED}✗${NC} $rel_hit:$line → mention de '$deleted' (supprime)"
                     DELETED_REFS=$((DELETED_REFS + 1))
                 done <<< "$HITS"

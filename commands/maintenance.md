@@ -25,13 +25,17 @@ modèle de la session n'a jamais été audité.
 ## Étape 1 — Contrôle mécanique
 
 **Avant de le lancer, noter la date de `~/.claude/.maintenance-dernier-releve`**
-(s'il existe) : le contrôle la réécrit à la date du jour, et c'est la date lue
-avant qui borne l'étape 2b. Relue après, elle donnerait « aujourd'hui », donc une
-relecture vide.
+(s'il existe) : avec `--releve`, le contrôle la réécrit à la date du jour, et
+c'est la date lue avant qui borne l'étape 2b. Relue après, elle donnerait
+« aujourd'hui », donc une relecture vide.
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/hooks/verifier-setup.sh
+bash ${CLAUDE_PLUGIN_ROOT}/hooks/verifier-setup.sh --releve
 ```
+
+`--releve` n'appartient qu'à cette étape : c'est lui qui date l'entretien et
+remet à zéro le rappel mensuel. Un contrôle lancé à la main, ou celui de la fin
+de cette commande, s'en passe.
 
 Sept points : hooks branchés ou appelés, hooks entendus, skills chargeables,
 mémoires périmées, historique, duplication règle ↔ hook, poids du setup.
@@ -73,8 +77,8 @@ a enfreint une règle. Ces corrections sont enregistrées dans les transcription
 et se comptent :
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/hooks/compter-relectures.py 30   # 30 derniers jours
-python3 ${CLAUDE_PLUGIN_ROOT}/hooks/compter-relectures.py      # tout l'historique
+python3 -I ${CLAUDE_PLUGIN_ROOT}/hooks/compter-relectures.py 30   # 30 derniers jours
+python3 -I ${CLAUDE_PLUGIN_ROOT}/hooks/compter-relectures.py   # tout l'historique
 ```
 
 **Ne pas compter au `grep`.** Les transcriptions contiennent aussi la sortie des

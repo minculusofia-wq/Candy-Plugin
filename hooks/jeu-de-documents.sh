@@ -455,6 +455,9 @@ def main(argv):
         # Code 0 dans les deux cas, chemin ou rien : un code non nul veut dire
         # PANNE et rien d'autre. « Pas de roadmap » en 1 se confondait avec un
         # plantage de Python — et ouverture-de-phase.sh se taisait sur les deux.
+        # A la racine du depot, comme le bilan : depuis backend/, rien n'etait
+        # trouve et la porte d'entree se taisait (jusqu'a la 0.3.4).
+        projet = racine_du_projet(os.path.abspath(projet))
         rel = trouver_roadmap(projet)
         if rel:
             print(os.path.join(projet, rel))

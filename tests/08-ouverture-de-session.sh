@@ -39,6 +39,13 @@ verifie "200 lignes pile : silence" \
         0 "$(sortie "$TAILLE" "$BAC/juste" | grep -c .)"
 verifie ".claude/CLAUDE.md compte aussi" \
         1 "$(sortie "$TAILLE" "$BAC/cache" | message | grep -c '.claude/CLAUDE.md : 250 lignes')"
+# Jusqu'à la 0.3.4, seules les lignes comptaient : 150 lignes très longues passaient.
+mkdir -p "$BAC/lourd" "$BAC/leger"
+python3 -c 'print("\n".join("x" * 300 for _ in range(150)))' > "$BAC/lourd/CLAUDE.md"
+python3 -c 'print("\n".join("x" * 200 for _ in range(110)))' > "$BAC/leger/CLAUDE.md"
+verifie "150 lignes mais 45 Ko : signalé, avec le poids" \
+        1 "$(sortie "$TAILLE" "$BAC/lourd" | message | grep -c 'CLAUDE.md : 150 lignes, 45 Ko')"
+verifie "110 lignes, 22 Ko : silence" 0 "$(sortie "$TAILLE" "$BAC/leger" | grep -c .)"
 verifie "pas de CLAUDE.md : silence et sortie 0" \
         "0 0" "$(sortie "$TAILLE" "$BAC/vide" | grep -c .) $(printf '{}' | CLAUDE_PROJECT_DIR="$BAC/vide" bash "$TAILLE" >/dev/null 2>&1; echo $?)"
 

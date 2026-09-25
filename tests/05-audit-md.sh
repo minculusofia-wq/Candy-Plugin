@@ -87,6 +87,52 @@ verifie "une date de mise à jour périmée est comptée" \
 verifie "  le bilan additionne bien les deux" \
         1 "$(echo "$HISTO" | grep -c 'TOTAL : 2 point')"
 
+section "Audit des .md — des liens valides ne sont pas déclarés cassés"
+# Jusqu'à la 0.3.4, ces formes Markdown valides sortaient en rouge, et ce rouge
+# ferme la porte de phase.
+mkdir -p "$BAC/liens" "$BAC/maison"
+echo "# a" > "$BAC/liens/a b.md"
+echo "# c" > "$BAC/liens/C.md"
+echo "# note" > "$BAC/maison/note.md"
+cat > "$BAC/liens/INDEX.md" <<EOF
+# Index
+[encodé](a%20b.md)
+[chevrons](<a b.md>)
+[titre simple](C.md 'titre')
+[titre entre parenthèses](C.md (titre))
+[requête](C.md?x=1)
+[dossier personnel](~/note.md)
+[absolu]($BAC/liens/C.md)
+[éditeur](vscode://file/x)
+[vraiment cassé](absent%20fichier.md)
+EOF
+LIENS=$(HOME="$BAC/maison" bash "$AUDIT" "$BAC/liens" 2>&1)
+verifie "%20, <…>, 'titre', (titre), ?x=1, ~/, absolu, vscode: : aucun signalé" \
+        0 "$(echo "$LIENS" | grep '→ lien casse' | grep -vc 'absent fichier.md')"
+verifie "  le vrai lien cassé l'est toujours" 1 "$(echo "$LIENS" | grep -c 'Liens casses          : 1')"
+
+section "Audit des .md — un nom avec espace, apostrophe ou accent"
+mkdir -p "$BAC/noms/docs" "$BAC/noms/bot meteo" "$BAC/noms/notes d'équipe"
+(
+  cd "$BAC/noms"
+  git init -q && git config user.email t@t.t && git config user.name t
+  echo x > "docs/l'ancien guide.md"; echo x > "docs/stratégie.md"; echo x > docs/parti.md
+  printf '# Suivi\nVoir docs/l'"'"'ancien guide.md et docs/stratégie.md\n' > SUIVI.md
+  printf '# Notes\nVoir docs/parti.md\n' > "bot meteo/NOTES.md"
+  printf '# Equipe\nVoir docs/parti.md\n' > "notes d'équipe/A.md"
+  git add -A && git commit -qm depart
+  git rm -q "docs/l'ancien guide.md" "docs/stratégie.md" docs/parti.md && git commit -qm suppression
+) >/dev/null 2>&1
+NOMS=$(bash "$AUDIT" "$BAC/noms" 2>&1)
+verifie "fichier supprimé au nom avec apostrophe : sa mention est vue" \
+        1 "$(echo "$NOMS" | grep -c "mention de 'docs/l'ancien guide.md'")"
+verifie "fichier supprimé au nom accentué : sa mention est vue" \
+        1 "$(echo "$NOMS" | grep -c "mention de 'docs/stratégie.md'")"
+verifie "mention dans un dossier au nom avec espace : vue" \
+        1 "$(echo "$NOMS" | grep -c "bot meteo/NOTES.md:2 → mention de 'docs/parti.md'")"
+verifie "mention dans un dossier au nom avec apostrophe : vue" \
+        1 "$(echo "$NOMS" | grep -c "notes d'équipe/A.md:2 → mention de 'docs/parti.md'")"
+
 section "Audit des .md — le dépôt lui-même sort propre"
 bash "$AUDIT" "$RACINE" >/dev/null 2>&1
 verifie "aucun signalement sur Candy-Plugin" 0 $?
