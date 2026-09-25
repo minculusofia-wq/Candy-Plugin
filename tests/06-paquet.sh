@@ -38,7 +38,7 @@ section "Paquet — aucune dépendance non annoncée"
 # Seules les lignes tout en commentaire sont retirées : un « # » au milieu d'une
 # ligne peut se trouver dans une chaîne, et masquerait un appel réel.
 verifie "aucun hook n'appelle jq" \
-        0 "$(sed 's/^[[:space:]]*#.*$//' hooks/*.sh hooks/hooks.json 2>/dev/null | grep -cE '(^|[^a-zA-Z0-9_.-])jq($|[^a-zA-Z0-9_.-])')"
+        0 "$(sed 's/^[[:space:]]*#.*$//' hooks/*.sh hooks/*.py hooks/hooks.json 2>/dev/null | grep -cE '(^|[^a-zA-Z0-9_.-])jq($|[^a-zA-Z0-9_.-])')"
 verifie "aucun hook n'appelle python sans le 3" \
         0 "$(grep -rhoE '(^|[^a-z0-9_.-])python ' hooks/*.sh 2>/dev/null | grep -c .)"
 
@@ -46,7 +46,7 @@ section "Paquet — tout ce qui est branché existe"
 MANQUANTS=$(python3 - <<'PY'
 import json, os, re
 d = json.load(open("hooks/hooks.json"))
-refs = set(re.findall(r'hooks/([a-zA-Z0-9._-]+\.sh)', json.dumps(d)))
+refs = set(re.findall(r'hooks/([a-zA-Z0-9._-]+\.(?:sh|py))', json.dumps(d)))
 print(sum(1 for r in refs if not os.path.exists("hooks/" + r)))
 PY
 )
@@ -68,7 +68,7 @@ section "Paquet — aucun hook ne plante sur une entrée ordinaire"
 INTERPRETEURS=$(python3 - <<'FIN_PY_INTERP'
 import json, re
 d = json.dumps(json.load(open("hooks/hooks.json")))
-motif = r'(bash|python3)(?: -I)? \\"\$\{CLAUDE_PLUGIN_ROOT\}/hooks/([a-zA-Z0-9._-]+\.sh)\\"'
+motif = r'(bash|python3)(?: -I)? \\"\$\{CLAUDE_PLUGIN_ROOT\}/hooks/([a-zA-Z0-9._-]+\.(?:sh|py))\\"'
 for interp, nom in re.findall(motif, d):
     print(nom, interp)
 FIN_PY_INTERP
@@ -89,12 +89,20 @@ for f in hooks/*.sh; do
         bash -n "$f" 2>/dev/null || CASSES="$CASSES $NOM"
     fi
 done
+# Les modules Python des hooks (.py) : toujours lus par python3. Un .py cassé
+# ferait refuser toutes les commandes par les garde-fous qui l'importent.
+for f in hooks/*.py; do
+    [ -f "$f" ] || continue
+    python3 -I -c 'import sys; compile(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1], "exec")' "$f" 2>/dev/null \
+        || CASSES="$CASSES $(basename "$f")"
+done
 verifie "chaque hook est lisible par son interpréteur :$CASSES" "" "$CASSES"
 
 # Second contrôle : le comportement réel.
 PLANTES=0
 DETAIL=""
-for f in hooks/*.sh; do
+BRANCHES_PY=$(echo "$INTERPRETEURS" | awk '$1 ~ /\.py$/ {print "hooks/" $1}')
+for f in hooks/*.sh $BRANCHES_PY; do
     NOM="$(basename "$f")"
     # Ceux-là attendent un dossier en argument, pas du JSON : ils ont leurs
     # propres groupes de cas (01, 05, 07 et 09).
@@ -142,6 +150,15 @@ for f in sorted(glob.glob("hooks/*.sh")) + ["hooks/hooks.json"]:
         # « | "$PY" ») : ceux-la aussi.
         for m in re.finditer(r"(?<![\w.-])python3(?![\w.-])|(?:\$\(|\|\s*|^\s*)\"\$(?:PY|cand)\"", ligne):
             if not ligne[m.end():].startswith(" -I"):
+                n.append(f"{f}:{i}")
+# Dans les modules .py, un python3 lancé en sous-processus (« "python3" » ou
+# sys.executable dans une liste d'arguments) doit porter "-I" juste après.
+for f in sorted(glob.glob("hooks/*.py")):
+    for i, ligne in enumerate(open(f, encoding="utf-8"), 1):
+        if ligne.lstrip().startswith("#"):
+            continue
+        for m in re.finditer(r"([\"'])python3\1|sys\.executable", ligne):
+            if not re.match(r"\s*,\s*([\"'])-I\1", ligne[m.end():]):
                 n.append(f"{f}:{i}")
 print(" ".join(n))
 FIN_PY_I
@@ -191,6 +208,15 @@ printf 'x\n' > "$PIEGE/reglages/settings.json"
 ( cd "$PIEGE" && bash "$RACINE/hooks/verifier-setup.sh" "$PIEGE/reglages" >/dev/null 2>&1 )
 [ -f "$PIEGE/.temoin" ] && FAUTIFS="$FAUTIFS verifier-setup.sh"
 verifie "aucun hook n'exécute un module posé dans le projet (json, re, glob…) :$FAUTIFS" "" "$FAUTIFS"
+
+section "Paquet — rien ne présente l'utilisateur comme débutant"
+# /debug affirmait à tout utilisateur du plugin « L'utilisateur n'est pas dev »
+# (0.3.4, commands/debug.md). Le profil décrit par communication-style.md est
+# facultatif ; aucun texte livré n'a à supposer qui lit.
+PROFIL=$(git ls-files '*.md' 2>/dev/null | tr '\n' '\0' | xargs -0 grep -n -i -E \
+    "pas dev([^a-z]|$)|non-dev|n.est pas (un )?d[ée]veloppeu|non-d[ée]veloppeu|d[ée]butant|not a dev|non-dev|isn.t a dev|beginner" \
+    2>/dev/null | grep -v '^tests/06-paquet.sh' | cut -d: -f1-2 | tr '\n' ' ')
+verifie "aucun .md ne dit que l'utilisateur n'est pas développeur :${PROFIL:+ }$PROFIL" "" "$PROFIL"
 
 section "Paquet — les images des README existent"
 ABSENTES=$(python3 - <<'PY'

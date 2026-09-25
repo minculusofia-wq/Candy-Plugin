@@ -47,4 +47,3 @@ RÈGLES ANTI-RÉGRESSION :
 Ne PAS demander de précisions, ne PAS demander "quel type de debug".
 Ne PAS proposer de debugger sur le VPS ou donner des commandes SSH.
 Ne PAS donner des commandes à taper — exécuter soi-même.
-L'utilisateur n'est pas dev, il délègue toute la partie technique à Claude.
