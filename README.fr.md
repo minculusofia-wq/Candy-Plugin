@@ -52,7 +52,7 @@ Elles fonctionnent séparément — prenez-en une, pas les neuf.
 | **9 règles** | vérifier avant d'affirmer · honnêteté brutale · discipline de code · porte de phase · choix du modèle · réflexes de travail · style de communication · routage des commandes · une information, un seul fichier |
 | **6 commandes** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
 | **2 agents** | `relecteur-securite` · `relecteur-de-phase` (contexte neuf, ne consomment pas la conversation) |
-| **11 hooks + 6 scripts** | rappel d'ouverture de phase, rappel des tâches en attente sur un projet, rappel d'entretien du setup, contrôle du jeu de documents à chaque ouverture (fichiers manquants, hors du jeu, CLAUDE.md trop long), garde avant écriture, protection des secrets, contrôle avant push, relecture de la réponse en fin de tour, contrôle du setup lui-même |
+| **12 hooks + 8 scripts** | rappel d'ouverture de phase, rappel des tâches en attente sur un projet, rappel d'entretien du setup, contrôle du jeu de documents à chaque ouverture (fichiers manquants, hors du jeu, CLAUDE.md trop long), fichiers de secrets gardés en écriture et en lecture, protection des secrets (une valeur écrite, un `.env` affiché, un `git add` qui l'emporterait), contrôle avant push (le dépôt et les commits réellement poussés), contrôle du projet en fin de tour (borné dans le temps, seulement sur ce qui a bougé pendant le tour), relecture de la réponse en fin de tour, contrôle du setup lui-même |
 
 ### La pièce la plus utile : `hooks/verifier-projet.sh`
 
@@ -190,11 +190,12 @@ s'ouvrir est un plan faux.
 make test
 ```
 
-Neuf groupes (`make test` affiche le nombre de cas de chacun) : *j'envoie ceci à ce hook, j'attends ce verdict*. Ceux
-des huit premiers groupes ont été vérifiés en remettant le défaut d'origine — un
-test qui passe toujours ne vaut rien. Le neuvième rejoue l'incident qui a fait
-naître le contrôle du jeu de documents, et les pannes qu'il doit signaler au lieu
-de se taire. Voir [tests/README.md](tests/README.md).
+`make test` affiche le nombre de groupes et de cas : *j'envoie ceci à ce hook,
+j'attends ce verdict*. Chaque défaut corrigé a ses cas, joués sur la version qui
+avait le défaut : ils doivent y échouer — un test qui passe toujours ne vaut
+rien. Le groupe 09 rejoue l'incident qui a fait naître le contrôle du jeu de
+documents, et les pannes qu'il doit signaler au lieu de se taire. Voir
+[tests/README.md](tests/README.md).
 
 ## Prérequis
 
@@ -207,17 +208,28 @@ de se taire. Voir [tests/README.md](tests/README.md).
   silence : sur une machine qui ne l'avait pas, le contrôle avant push ne se
   déclenchait tout simplement jamais. Cette dépendance a été supprimée.
 - **Claude Code 2.1.196 ou plus récent** pour la relecture de la réponse : elle
-  lit le champ `last_assistant_message`, que les versions antérieures n'envoient
-  pas toujours. En dessous, elle ne signale qu'une faute sur deux.
+  lit le champ `prompt_id` pour n'intervenir qu'une fois par message, et les
+  versions antérieures ne l'envoient pas. En dessous, elle ne signale qu'une
+  faute sur deux.
 - `pytest` et `npm` sont **facultatifs**, et seulement pour les tests du paquet :
-  quatorze cas vérifient que le contrôle universel lance bien ces familles. Sans
+  quelques cas vérifient que le contrôle universel lance bien ces familles. Sans
   eux, ces cas sont sautés en le disant, et la suite reste verte.
 - Testé sur macOS. Les hooks sont du bash POSIX-ish ; Linux devrait passer, non testé.
-- **À savoir** : en fin de tour, si un fichier de code a changé dans un dépôt
-  git, le contrôle universel lance la suite de tests du projet — c'est son
-  travail. Dans un dépôt dont vous ne connaissez pas le code, c'est ce code qui
+- **À savoir** : en fin de tour, si un fichier de code a changé *pendant le
+  tour* dans un dépôt git, le contrôle universel lance la suite de tests du
+  projet depuis la racine du dépôt — c'est son travail. Il est coupé à 240
+  secondes, et s'il n'a pas fini, il le dit au lieu de laisser croire que tout
+  passe. Dans un dépôt dont vous ne connaissez pas le code, c'est ce code qui
   tourne. Les hooks, eux, n'exécutent jamais un module Python posé dans le
-  projet (`python3 -I`, vérifié par `tests/06-paquet.sh`).
+  projet (`python3 -I`, vérifié par `tests/06-paquet.sh`). Pour savoir ce qui a
+  bougé pendant le tour, le plugin relève l'état du dépôt à chaque message, dans
+  son dossier de données (`~/.claude/plugins/data/`).
+- **À savoir aussi** : Claude ne lit plus un fichier de secrets — ni `.env` et
+  ses variantes, ni clé (`.pem`, `.key`, `~/.ssh`), ni wallet. L'outil Read, la
+  recherche Grep et une commande comme `cat .env` sont refusés. Ce qui ne montre
+  que les noms reste permis : `grep -c`, `cut -d= -f1`, et la lecture d'un
+  réglage non secret (`grep '^DRY_RUN=' .env`). Si vous voulez que Claude voie
+  une valeur, copiez-la vous-même dans la conversation.
 
 ## Ce qui n'est pas là, volontairement
 

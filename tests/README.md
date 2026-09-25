@@ -4,24 +4,26 @@
 make test
 ```
 
-Neuf groupes ; `make test` affiche le nombre de cas de chacun. Chacun dit la même chose : *j'envoie ceci à ce hook,
-j'attends ce verdict*.
+`make test` affiche le nombre de groupes et de cas de chacun. Tous disent la
+même chose : *j'envoie ceci à ce hook, j'attends ce verdict*.
 
 | groupe | ce qu'il garde |
 |---|---|
 | `01-verifier-projet.sh` | le contrôle universel lance TOUS les contrôles trouvés, et rend les quatre verdicts justes |
 | `02-protect-secrets.sh` | la protection des secrets bloque une valeur, jamais un nom de variable |
-| `03-declencheurs.sh` | « source ou silence » se tait sur le travail ordinaire et sur les messages automatiques |
+| `03-declencheurs.sh` | « source ou silence » se tait sur le travail ordinaire, sur les messages automatiques, sur « par rapport à » et sur un chemin de fichier |
 | `04-blocages.sh` | les hooks qui annoncent bloquer sortent bien en 2 |
-| `05-audit-md.sh` | l'audit des `.md` compte juste et ignore ce qui est cité |
+| `05-audit-md.sh` | l'audit des `.md` compte juste, ignore ce qui est cité, lit un lien comme un lecteur Markdown et suit un nom avec espace, apostrophe ou accent |
 | `06-paquet.sh` | le paquet reste installable, ne dépend que de `python3`, et aucun hook n'exécute un module Python posé dans le projet |
 | `07-controle-du-setup.sh` | le contrôle du setup voit chaque panne visée — dont un hook branché que personne n'entend — et ne signale pas ce qui est légitime |
 | `08-ouverture-de-session.sh` | l'alerte CLAUDE.md trop long, le rappel de projet et le rappel d'entretien parlent au bon endroit, se taisent ailleurs, rendent un JSON lisible — et une panne du rappel d'entretien s'affiche au lieu de se taire |
-| `09-jeu-de-documents.sh` | le jeu de documents : l'incident rejoué (bot à roadmap sans STRATEGY, JOURNAL, DEPLOY), chaque règle du tableau, le point rouge à la porte, et aucune panne qui passe pour un silence |
+| `09-jeu-de-documents.sh` | le jeu de documents : l'incident rejoué (bot à roadmap sans STRATEGY, JOURNAL, DEPLOY), chaque règle du tableau, le point rouge à la porte, et aucune panne qui passe pour un silence ; la porte d'entrée tient sous la limite de sortie d'un hook, alertes git en tête |
+| `10-fin-de-tour.sh` | le contrôle de fin de tour part de la racine du dépôt, seulement sur ce qui a bougé pendant le tour, rend la main à temps, ne croit pas un relevé qu'un autre compte a pu écrire ; la relecture de la réponse ne plante pas sur une transcription mal formée |
+| `11-lecteur-de-commandes.sh` | les garde-fous qui lisent une commande comme bash : secrets (valeur, lecture d'un fichier de secrets, `git add`) et clôture de phase. Les cas vivent dans `essais/*.py`, un fichier par garde-fou |
 
 ## Les cas sautés
 
-Le paquet ne dépend que de `python3`. Quatorze cas ont besoin de `pytest` ou de
+Le paquet ne dépend que de `python3`. Quelques cas ont besoin de `pytest` ou de
 `npm` pour exister — ils vérifient que le contrôle universel lance bien ces
 familles. Sans ces outils, ces cas sont **sautés en le disant** (« pytest absent
 de cette machine »), pas comptés pour verts. Le bilan affiche alors le nombre de
@@ -33,6 +35,13 @@ Ils prouvent qu'un défaut corrigé ne revient pas. Chacun a été vérifié en
 remettant le défaut d'origine : les défauts des deux chantiers font tomber les
 tests quand on les réintroduit. Un test qui passe toujours ne sert à rien — il
 doit savoir dire non.
+
+Depuis la 0.3.5, chaque correction est prouvée sur la version précédente
+elle-même : ses cas sont joués sur une copie de la 0.3.4, et une correction dont
+aucun cas n'y échoue est abandonnée — le défaut n'existait pas. Les cas qui y
+passent gardent ce qui doit rester permis (un garde-fou qui bloque du travail
+ordinaire finit contourné), ou un comportement que la 0.3.4 n'avait pas encore
+et qu'il faut protéger d'une régression.
 
 Une relecture a montré que cette exigence se vérifie mal soi-même : trois de ces
 tests passaient toujours, et l'un d'eux couvrait le seul cas que son auteur avait

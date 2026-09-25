@@ -55,7 +55,7 @@ They work on their own. Take one, not all nine.
 | **9 rules** | verify before asserting · brutal honesty · code discipline · phase gate · model choice · working reflexes · communication style · command routing · one piece of information, one file |
 | **6 commands** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
 | **2 agents** | `relecteur-securite` · `relecteur-de-phase` — security and phase reviewers running in a fresh context, so they don't eat your conversation |
-| **11 hooks + 6 scripts** | phase-opening reminder, reminder of the task waiting on a project, setup maintenance reminder, document-set check at every session start (missing files, files outside the set, oversized CLAUDE.md), pre-write guard, secret protection, pre-push check, answer review at the end of each turn, a check on the setup itself |
+| **12 hooks + 8 scripts** | phase-opening reminder, reminder of the task waiting on a project, setup maintenance reminder, document-set check at every session start (missing files, files outside the set, oversized CLAUDE.md), secret files guarded against both writing and reading, secret protection (a value written out, a `.env` printed, a `git add` that would take it along), pre-push check (the repo and the commits actually pushed), end-of-turn project check (time-boxed, only on what changed during the turn), answer review at the end of each turn, a check on the setup itself |
 
 ### The most useful piece: `hooks/verifier-projet.sh`
 
@@ -188,11 +188,12 @@ plan is written: a plan whose first phase cannot open is a wrong plan.
 make test
 ```
 
-Nine groups (`make test` prints how many cases each one plays): *send this to that hook, expect that verdict*. Those in
-the first eight groups were checked by putting the original defect back; the
-ninth replays the incident that gave birth to the document-set check, and the
-failures it must report instead of staying silent. A test that always passes is
-worth nothing. See [tests/README.md](tests/README.md).
+`make test` prints how many groups and cases it plays: *send this to that hook,
+expect that verdict*. Every fixed defect has its cases, played against the
+version that had the defect: they must fail there — a test that always passes
+is worth nothing. Group 09 replays the incident that gave birth to the
+document-set check, and the failures it must report instead of staying quiet.
+See [tests/README.md](tests/README.md).
 
 ## Requirements
 
@@ -205,17 +206,27 @@ worth nothing. See [tests/README.md](tests/README.md).
   on a machine without it, the pre-push check simply never ran. That dependency
   was removed.
 - **Claude Code 2.1.196 or later** for the answer review: it reads the
-  `last_assistant_message` field, which earlier versions don't always send.
-  Below that version it catches about one slip in two.
+  `prompt_id` field to step in only once per message, and earlier versions
+  don't send it. Below that version it catches about one slip in two.
 - `pytest` and `npm` are **optional**, and only for the package's own tests:
-  fourteen cases check that the universal control does run those families.
+  a few cases check that the universal control does run those families.
   Without them those cases are skipped out loud, and the suite stays green.
 - Tested on macOS. The hooks are plain bash; Linux should work, untested.
-- **Worth knowing**: at the end of a turn, if a code file changed in a git
-  repo, the universal check runs the project's test suite — that's its job. In
-  a repo whose code you don't know, that code is what runs. The hooks
+- **Worth knowing**: at the end of a turn, if a code file changed *during the
+  turn* in a git repo, the universal check runs the project's test suite from
+  the repo root — that's its job. It is cut off after 240 seconds, and if it
+  hasn't finished it says so instead of letting you believe everything passed.
+  In a repo whose code you don't know, that code is what runs. The hooks
   themselves never execute a Python module dropped in the project
-  (`python3 -I`, checked by `tests/06-paquet.sh`).
+  (`python3 -I`, checked by `tests/06-paquet.sh`). To know what changed during
+  the turn, the plugin records the repo's state at each message, in its data
+  folder (`~/.claude/plugins/data/`).
+- **Also worth knowing**: Claude no longer reads a secrets file — not `.env` or
+  its variants, not a key (`.pem`, `.key`, `~/.ssh`), not a wallet. The Read
+  tool, a Grep search and a command such as `cat .env` are refused. What only
+  shows names is still allowed: `grep -c`, `cut -d= -f1`, and reading a
+  non-secret setting (`grep '^DRY_RUN=' .env`). If you want Claude to see a
+  value, paste it into the conversation yourself.
 
 ## Deliberately not included
 
