@@ -283,6 +283,10 @@ repère désormais ce genre de hook muet.
 
 Partagé tel quel. Les issues sont lues, pas garanties.
 
+## Confidentialité
+
+Tout tourne sur votre machine ; l'auteur ne collecte rien. Ce que le plugin lit et écrit : [PRIVACY.md](PRIVACY.md) (en anglais).
+
 ## Licence
 
 MIT.

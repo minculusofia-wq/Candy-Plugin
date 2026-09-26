@@ -276,6 +276,10 @@ kind of silent hook.
 
 Shared as is. Issues are read, not guaranteed.
 
+## Privacy
+
+Everything runs on your machine; the author collects nothing. What the plugin reads and writes: [PRIVACY.md](PRIVACY.md).
+
 ## License
 
 MIT.
