@@ -53,23 +53,46 @@ def charger(nom, chemin):
 ds = charger('ds', sys.argv[1]); ac = charger('ac', sys.argv[2])
 ac._detection = lambda: ds
 cwd = d.get('cwd') if isinstance(d.get('cwd'), str) else os.getcwd()
-chemin, motif = str(t.get('path') or cwd), str(t.get('glob') or '')
-# Le glob est developpe comme ripgrep ({.env,x}) et juge comme un joker de bash.
-if motif and any(ac.designe_un_secret(m.split('/')[-1], None, True, ds) for m in ac.accolades(motif)):
+chemin = os.path.expanduser(str(t.get('path') or cwd))
+chemin = chemin if os.path.isabs(chemin) else os.path.join(cwd, chemin)
+# Les globs : plusieurs, separes par une virgule ou une espace hors accolades,
+# developpes comme ripgrep ({.env,x}) ; avec un « / » ils visent le chemin
+# (**/*.json, config/*.json), sans, le nom. Jusqu'a la passe 3, seul le nom de
+# base etait compare et « ~ » n'etait pas developpe : un wallet.json passait.
+def globs(texte):
+    res, cur, prof = [], '', 0
+    for ch in texte:
+        prof += (ch == '{') - (ch == '}')
+        if ch in ', \t' and prof <= 0:
+            if cur:
+                res.append(cur)
+            cur = ''
+        else:
+            cur += ch
+    if cur:
+        res.append(cur)
+    return [g for m in res for g in ac.accolades(m)]
+motifs = globs(str(t.get('glob') or ''))
+if any(ac.designe_un_secret(m.split('/')[-1], None, True, ds) for m in motifs):
     print('SECRET'); sys.exit(0)
 if ds.est_fichier_de_secrets(chemin):
     print('SECRET'); sys.exit(0)
 if os.path.isdir(chemin):
-    options = ['-r'] + [f'--include={m}' for m in ac.accolades(motif) if motif]
+    options = ['-r'] + [f'--include={m}' for m in motifs]
     try:
         trouves = ac.recherche_recursive('grep', [chemin], options, None, ds)
     except ac.TropGrand:
         print('TROP_GRAND'); sys.exit(0)
     drapeaux = ['-i'] if t.get('-i') else []
-    # multiline : un motif sur plusieurs lignes, que la lecture ligne a ligne
-    # ne verrait jamais ; juge comme des lignes voisines (relecture de la 0.3.5).
-    if any(t.get(k) for k in ('-A', '-B', '-C', 'context', 'multiline')):
-        drapeaux.append('-C=1')
+    # -A/-B/-C : les lignes voisines s'affichent aussi ; multiline : le motif
+    # court sur plusieurs lignes. Juges sur ce que le motif trouve dans le
+    # fichier de secrets (passe 3 : ils etaient refuses avant de regarder).
+    for cle, lettre in (('-A', 'A'), ('-B', 'B'), ('-C', 'C'), ('context', 'C')):
+        v = t.get(cle)
+        if v not in (None, False, ''):
+            drapeaux.append(f'-{lettre}={v}' if str(v).isdigit() else f'-{lettre}=?')
+    if t.get('multiline'):
+        drapeaux.append('--multiline')
     if trouves and ac.motif_trouve('rg', trouves, [str(t.get('pattern') or '')], drapeaux, ds):
         print('SECRET'); sys.exit(0)
 print('OK')

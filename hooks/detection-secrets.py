@@ -37,7 +37,13 @@ NOMS_EXACTS = {".env", ".envrc", "credentials", "credentials.json", "keystore.js
                "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa", ".claude.json", ".git-credentials",
                # Seconde relecture de la 0.3.5 : wallets et fichiers d'identifiants courants.
                "keypair.json", "wallet.dat", "secrets.toml", "secrets.json", "secrets.yml", "secrets.yaml",
-               ".npmrc", "application_default_credentials.json"}
+               "application_default_credentials.json"}
+# .npmrc : celui du dossier personnel porte le jeton de « npm login » ; celui
+# d'un projet (registry=…, save-exact=true) n'est un fichier de secrets que s'il
+# porte un jeton en clair (_authToken=npm_…, pas ${NPM_TOKEN}). Jusqu'à la
+# passe 3, tout .npmrc était refusé en lecture comme en écriture.
+NPMRC_JETON = re.compile(r"(?im)^\s*(?://[^\s=]*:)?_(?:auth|authToken|password)\s*=\s*(\S+)")
+DOSSIER_PERSONNEL = re.compile(r"/(?:Users|home)/[^/]+|/root|/var/root")
 # Du code source n'est pas un fichier de secrets, même rangé sous wallet/ ou
 # nommé mnemonic.py : Read, cat et git add en étaient refusés.
 CODE_SOURCE = re.compile(r"\.(py|pyi|js|mjs|cjs|ts|tsx|jsx|go|rs|rb|java|kt|swift|c|h|cpp|hpp|cs|php|sh|md|"
@@ -56,15 +62,32 @@ def est_fichier_de_secrets(chemin):
     0.3.5, Read, Write et Grep passaient par un lien nommé « notes »."""
     if not chemin or not isinstance(chemin, str):
         return False
-    if par_le_nom(chemin):
+    if par_le_nom(chemin) or npmrc_porte_un_jeton(chemin):
         return True
     try:
         if os.path.islink(chemin) or os.path.exists(chemin):
             reel = os.path.realpath(chemin)
-            return reel != os.path.abspath(chemin) and par_le_nom(reel)
+            return reel != os.path.abspath(chemin) and (par_le_nom(reel) or npmrc_porte_un_jeton(reel))
     except (OSError, ValueError):
         pass
     return False
+
+
+def npmrc_porte_un_jeton(chemin):
+    """Un .npmrc du dossier personnel (par son nom), ou un .npmrc de projet qui
+    porte une valeur d'authentification en clair (par son contenu)."""
+    try:
+        chemin = os.path.expanduser(chemin)
+        if os.path.basename(os.path.normpath(unicodedata.normalize("NFKC", chemin).casefold())) != ".npmrc":
+            return False
+        parent = os.path.dirname(os.path.abspath(chemin))
+        if DOSSIER_PERSONNEL.fullmatch(parent) or os.path.normcase(parent) == os.path.normcase(os.path.expanduser("~")):
+            return True
+        with open(chemin, encoding="utf-8", errors="replace") as h:
+            texte = h.read(200_000)
+    except (OSError, ValueError):
+        return False
+    return any(not GABARIT.search(m.group(1)) and not FACTICE.match(m.group(1)) for m in NPMRC_JETON.finditer(texte))
 
 
 def par_le_nom(chemin):
@@ -109,6 +132,14 @@ SENSIBLE = re.compile(r"(priv(ate)?[_-]?key|secret|api[_-]?key|access[_-]?token|
 # … sauf s'il désigne autre chose que la valeur (CLIENT_SECRET_FILE, API_KEY_HEADER).
 PAS_UNE_VALEUR = re.compile(r"[_-](name|file|path|dir|id|ids|arn|url|uri|env|var|header|field|type|"
                             r"len|length|hash|prefix|suffix|count|enabled|set|present|ok|regex|pattern)$", re.I)
+# pk, sk : un identifiant Django (pk="<uuid>") ou une clé composite DynamoDB
+# ("pk": "USER#…", "sk": "PROFILE#…") portent ces noms sans rien de secret.
+# Sous ces deux noms courts seuls, la valeur doit avoir la matière d'une clé :
+# 32 caractères ou plus de base58, base64 ou hexadécimal, ni UUID ni « # »
+# (passe 3 : ces identifiants étaient refusés).
+NOM_COURT_DE_CLE = re.compile(r"(?i)(?:.*[_-])?[ps]k$")
+MATIERE_DE_CLE = re.compile(r"[A-Za-z0-9+/=_-]{32,}")
+UUID = re.compile(r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 # (?<![\w.-]) : le nom commence au début d'un mot. Sans cela, chaque caractère
 # d'un long mot (bytecode hexadécimal) relançait la recherche jusqu'au bout de
@@ -277,8 +308,10 @@ def valeur_secrete(texte):
             for motif, cite in ((CITE, True), (NUE, False)):
                 for m in motif.finditer(morceau):
                     n = m.group("n").split(".")[-1]
-                    if SENSIBLE.search(n) and not PAS_UNE_VALEUR.search(n) \
-                            and ressemble_a_un_secret(m.group("v"), cite):
+                    v = m.group("v").strip()
+                    if SENSIBLE.search(n) and not PAS_UNE_VALEUR.search(n) and ressemble_a_un_secret(v, cite) \
+                            and (not NOM_COURT_DE_CLE.fullmatch(n)
+                                 or (MATIERE_DE_CLE.fullmatch(v) and not UUID.fullmatch(v))):
                         return n
     return None
 

@@ -479,6 +479,128 @@ try:
     code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": "grep -rnE '=(([0-9a-f]|[0-9a-f])*!|.)' ."}, cwd=d8)
     attendre("motif à retours en arrière explosifs : refusé, et vite", "2 1", f"{code} {int(time.time() - debut < 10)}")
 
+    section("Secrets — passe 3 : les refus gênants ajoutés par les deux passes sont retirés")
+    # Les deux relectures avaient ajouté des refus sur du travail ordinaire : une
+    # clé générée (-out lu comme une entrée), un réglage jugé sur son NOM (api,
+    # db, session) et non sur sa valeur, une archive écrite (rien ne s'affiche),
+    # pk/sk de Django et DynamoDB, un .npmrc de projet, les lignes voisines
+    # (-A/-B/-C) et multiline refusées avant même de regarder si le motif
+    # trouve quelque chose, sed -i pris pour une lecture.
+    d10 = os.path.join(base, "d10")
+    os.makedirs(os.path.join(d10, "src"))
+    os.makedirs(os.path.join(d10, "paquet"))
+    open(os.path.join(d10, ".env"), "w").write(j("# réglages\nMAX_API_CALLS=100\nDB_POOL_SIZE=5\nSESSION_TIMEOUT=3600\n"
+                                                "DRY_RUN=true\nAPI", "_KEY=", B64, "\nDATABASE_URL=postgres://app:", B64, "@h/db\n"))
+    open(os.path.join(d10, ".env.example"), "w").write("MAX_API_CALLS=\n")
+    open(os.path.join(d10, "src", "app.py"), "w").write("def foo():\n    return 1  # TODO\n")
+    open(os.path.join(d10, ".npmrc"), "w").write("registry=https://registry.npmjs.org/\nsave-exact=true\n")
+    open(os.path.join(d10, "paquet", ".npmrc"), "w").write(j("//registry.npmjs.org/:_auth", "Token=npm_", "aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY2zA4", "\n"))
+    permis_10 = [
+        "openssl genrsa -out key.pem 2048", "openssl genpkey -algorithm RSA -out key.pem -pkeyopt rsa_keygen_bits:2048",
+        "openssl ecparam -genkey -name prime256v1 -out key.pem",
+        "grep '^MAX_API_CALLS=' .env", "grep '^DB_POOL_SIZE=' .env", "grep '^SESSION_TIMEOUT=' .env",
+        "grep -E '^(MAX_API_CALLS|DRY_RUN)=' .env", "cat .env | grep '^DB_POOL_SIZE='",
+        "tar -czf env-backup.tgz .env", "tar czf env-backup.tgz .env", "tar -cf sauvegarde.tar .env .env.example",
+        "zip sauvegarde.zip .env",
+        "find . -type f -exec grep -n TODO {} +", "find . -name '*.py' -exec grep -n TODO {} \\;",
+        "grep -rn -C2 'def foo' .", "grep -rn -A2 'def foo' .", "grep -rnB1 'def foo' .", "grep -rn --context=2 'def foo' .",
+        "sed -i 's/^DRY_RUN=true/DRY_RUN=false/' .env", "sed -i '' 's/^DRY_RUN=true/DRY_RUN=false/' .env",
+        "sed -i.bak 's/^DRY_RUN=true/DRY_RUN=false/' .env", "sed -i -e 's/^DRY_RUN=true/DRY_RUN=false/' .env",
+        "cat .npmrc", "grep registry .npmrc",
+    ]
+    # Ce qui doit RESTER refusé, à côté de chaque refus retiré.
+    refuses_10 = [
+        "openssl rsa -in key.pem -text", "openssl base64 -in .env",
+        "grep '^DATABASE_URL=' .env", j("grep '^API", "_KEY=' .env"), "grep -E '^(MAX_API_CALLS|DATABASE_URL)=' .env",
+        "tar -czf - .env", "tar -czf /dev/stdout .env", "tar -cO .env", "zip - .env",
+        j("find . -type f -exec grep -n API", "_KEY {} +"), "find . -name .env -exec cat {} \\;",
+        "grep -rn -A1 '^# réglages' .", "grep -rn -B1 '^DRY_RUN' .", "grep -rn -C1 'SESSION' .", "grep -rn --context=1 '^# réglages' .",
+        "sed -n 's/^DRY_RUN=true/DRY_RUN=false/p' .env", "sed -i 's/^DRY_RUN=true/DRY_RUN=false/w /dev/stdout' .env",
+        "cat paquet/.npmrc", "cat ~/.npmrc",
+    ]
+    for cmd in permis_10:
+        code, _, err = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d10)
+        attendre(f"Bash permis : {cmd!r}", 0, code, err.strip()[:80])
+    for cmd in refuses_10:
+        code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d10)
+        attendre(f"Bash refusé : {cmd!r}", 2, code)
+    UUID = j("550e8400-e29b-41d4-", "a716-446655440000")
+    B58 = j("5Kb8kLf9zgWQnogidDA76MzPL6TsZZY36hWXMssSzNyd", "XkS8b4Gd3v9Jx2q1xYJsZmFhKtLbRnM2pZq")
+    for libelle, texte, attendu in [
+        ("Django : pk=\"<uuid>\"", j('obj = Model.objects.get(pk="', UUID, '")'), 0),
+        ("DynamoDB : pk/sk composites", j('{"pk": "USER#', UUID, '", "sk": "PROFILE#2024-01-01T00:00:00Z"}'), 0),
+        ("un sk de la taille d'une clé Solana", j("SOLANA_", 'SK = "', B58, '"'), 2),
+        ("un pk hexadécimal 0x", j('pk = "', CLE, '"'), 2),
+    ]:
+        code, _, _ = lancer("protect-secrets.sh", "Write", {"file_path": os.path.join(d10, "src", "x.py"), "content": texte}, cwd=d10)
+        attendre(f"Write : {libelle}", attendu, code)
+    for outil, entree, attendu in [
+        ("Read", {"file_path": os.path.join(d10, ".npmrc")}, 0),
+        ("Edit", {"file_path": os.path.join(d10, ".npmrc"), "old_string": "save-exact=true", "new_string": "save-exact=false"}, 0),
+        ("Write", {"file_path": os.path.join(d10, ".npmrc"), "content": "registry=https://registry.npmjs.org/\n"}, 0),
+        ("Read", {"file_path": os.path.join(d10, "paquet", ".npmrc")}, 2),
+        ("Grep", {"pattern": "registry", "path": os.path.join(d10, ".npmrc"), "output_mode": "content"}, 0),
+        ("Grep", {"pattern": "registry", "path": os.path.join(d10, "paquet", ".npmrc"), "output_mode": "content"}, 2),
+        # -A/-B/-C et multiline : jugés sur ce que le motif trouve dans le .env
+        ("Grep", {"pattern": "def foo", "path": d10, "output_mode": "content", "-A": 2}, 0),
+        ("Grep", {"pattern": "def foo", "path": d10, "output_mode": "content", "-B": 1}, 0),
+        ("Grep", {"pattern": "def foo", "path": d10, "output_mode": "content", "-C": 1}, 0),
+        ("Grep", {"pattern": "def foo\\(\\):\\n", "path": d10, "output_mode": "content", "multiline": True}, 0),
+        ("Grep", {"pattern": "^# réglages", "path": d10, "output_mode": "content", "-A": 1}, 2),
+        ("Grep", {"pattern": "SESSION", "path": d10, "output_mode": "content", "-C": 1}, 2),
+        ("Grep", {"pattern": "DRY_RUN=true\\nAPI", "path": d10, "output_mode": "content", "multiline": True}, 2),
+    ]:
+        code, _, _ = lancer("pre-edit-guard.sh", outil, entree, cwd=d10)
+        attendre(f"{outil} {'permis' if attendu == 0 else 'refusé'} : {json.dumps(entree, ensure_ascii=False).replace(d10, '…')}", attendu, code)
+    subprocess.run(["git", "init", "-q", d10], check=True)
+    open(os.path.join(d10, ".gitignore"), "w").write(".env\n")
+    code, _, _ = lancer("pre-edit-guard.sh", "Grep", {"pattern": "def foo\\(\\):\\n", "path": d10, "output_mode": "content", "multiline": True}, cwd=d10)
+    attendre("Grep multiline à la racine d'un dépôt dont le .env est ignoré par git : permis", 0, code)
+
+    section("Secrets — passe 3 : les contournements des correctifs de la passe 2 sont fermés")
+    # La passe 2 avait reconnu « ssh srv bash -s <<EOF » ; « sudo -u app bash »,
+    # « sudo -i » et « python3 - » lisaient le même document sans être vus. Le
+    # glob de l'outil Grep n'était comparé qu'au nom de base (« **/*.json »,
+    # « config/*.json », plusieurs globs) et « ~ » n'était pas développé.
+    d11 = os.path.join(base, "d11")
+    os.makedirs(os.path.join(d11, "config"))
+    os.makedirs(os.path.join(d11, "home", "proj"))
+    for f in ("wallet.json", "config/wallet.json"):
+        open(os.path.join(d11, f), "w").write(j('{"', "private", '_key": "', B64, '"}\n'))
+    open(os.path.join(d11, "app.py"), "w").write("x = 1\n")
+    open(os.path.join(d11, "home", "proj", ".env"), "w").write(j("API", "_KEY=", B64, "\n"))
+    refuses_11 = [
+        f"{S} srv sudo -u app bash <<EOF\ncat /srv/app/.env\nEOF", f"{S} srv 'sudo -u app bash -s' <<EOF\ncat /srv/app/.env\nEOF",
+        f"{S} srv 'sudo -u app bash -s' <<'EOF'\ncat /srv/app/.env\nEOF", f"{S} srv sudo -i <<EOF\ncat /srv/app/.env\nEOF",
+        f"{S} srv python3 - <<EOF\nprint(open('/srv/app/.env').read())\nEOF",
+    ]
+    permis_11 = [
+        f"{S} srv sudo -u app bash <<EOF\ncat /srv/app/notes.txt\nEOF", f"{S} srv 'sudo -u app bash -s' <<'EOF'\nsystemctl status app\nEOF",
+        f"{S} srv sudo -i <<EOF\nls -la /srv/app\nEOF", f"{S} srv python3 - <<EOF\nprint(open('/srv/app/version.txt').read())\nEOF",
+        f"{S} srv 'cat > /tmp/notes.txt' <<EOF\nle .env reste ignore\nEOF", f"{S} srv sudo -u app bash <<EOF\ngrep -c KEY /srv/app/.env\nEOF",
+    ]
+    for cmd in refuses_11:
+        code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d11)
+        attendre(f"Bash refusé : {cmd!r}", 2, code)
+    for cmd in permis_11:
+        code, _, err = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d11)
+        attendre(f"Bash permis : {cmd!r}", 0, code, err.strip()[:80])
+    home = os.path.join(d11, "home")
+    for libelle, entree, attendu in [
+        ("glob **/*.json", {"pattern": "key", "path": d11, "glob": "**/*.json", "output_mode": "content"}, 2),
+        ("glob config/*.json", {"pattern": "key", "path": d11, "glob": "config/*.json", "output_mode": "content"}, 2),
+        ("globs multiples, virgule", {"pattern": "key", "path": d11, "glob": "*.py,*.json", "output_mode": "content"}, 2),
+        ("globs multiples, espace", {"pattern": "key", "path": d11, "glob": "*.py *.json", "output_mode": "content"}, 2),
+        ("path ~/proj (un .env qui porte KEY)", {"pattern": "KEY", "path": "~/proj", "output_mode": "content"}, 2),
+        ("glob **/*.py", {"pattern": "key", "path": d11, "glob": "**/*.py", "output_mode": "content"}, 0),
+        ("glob config/*.json, motif absent", {"pattern": "absent-de-tout", "path": d11, "glob": "config/*.json", "output_mode": "content"}, 0),
+        ("globs multiples sans fichier de secrets", {"pattern": "key", "path": d11, "glob": "*.py, *.md", "output_mode": "content"}, 0),
+        ("glob src/**/*.ts", {"pattern": "key", "path": d11, "glob": "src/**/*.ts", "output_mode": "content"}, 0),
+        ("path ~/proj, motif absent", {"pattern": "absent-de-tout", "path": "~/proj", "output_mode": "content"}, 0),
+    ]:
+        code, _, _ = lancer("pre-edit-guard.sh", "Grep", entree, cwd=home, env={"HOME": home})
+        attendre(f"Grep {'refusé' if attendu == 2 else 'permis'} : {libelle}", attendu, code)
+
     section("Secrets — git ne lance aucun programme configuré par le dépôt")
     d9 = os.path.join(base, "d9")
     os.makedirs(d9)
