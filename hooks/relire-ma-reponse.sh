@@ -148,7 +148,7 @@ def main() -> int:
         )
 
     # Le controle de LONGUEUR a ete retire le 2026-08-08 — voir l'entete : il
-    # rallongeait ce qu'il pretendait raccourcir. Jusqu'a la 0.3.5, son reste
+    # rallongeait ce qu'il pretendait raccourcir. Jusqu'a la 0.4.0, son reste
     # relisait encore toute la transcription a chaque tour, sans s'en servir,
     # et une ligne « user » mal formee faisait planter la relecture.
 

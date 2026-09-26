@@ -36,7 +36,7 @@ from urllib.parse import unquote
 PROFONDEUR = 6
 # Réglages que git applique à chaque appel d'un hook : un dépôt (une archive qui
 # contient son .git) peut configurer un programme que git lancerait — surveillant
-# de fichiers, vérification de signature (relecture de sécurité de la 0.3.5).
+# de fichiers, vérification de signature (relecture de sécurité de la 0.4.0).
 GIT_SUR = ["-c", "core.fsmonitor=false", "-c", "log.showSignature=false", "-c", "gpg.program=false"]
 INCONNU = "__texte_calcule__"          # commande dont le texte n'est connu qu'à l'exécution
 ENVELOPPES = {"sudo", "env", "nohup", "time", "exec", "command", "builtin", "caffeinate",
@@ -173,7 +173,7 @@ ECHAPPEMENTS_C = {"a": b"\a", "b": b"\b", "e": b"\x1b", "E": b"\x1b", "f": b"\f"
 def chaine_ansi_c(t, j):
     """Le texte d'un $'…' qui commence en t[j] (après « $' ») décodé comme bash
     (\\x2e, \\056, \\u00e9, \\cA, \\'…), et l'indice qui suit l'apostrophe
-    fermante. Jusqu'à la relecture de la 0.3.5, cat $'\\x2eenv' passait, et
+    fermante. Jusqu'à la relecture de la 0.4.0, cat $'\\x2eenv' passait, et
     $'a\\'b' faisait échouer tout le découpage."""
     res, n = bytearray(), len(t)
     while j < n:
@@ -482,7 +482,7 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None):
             # {} vaut chaque fichier trouvé : il est remplacé par un repère qui
             # porte les dossiers et les motifs de find, jugé en parcourant le
             # dossier comme lui (fichiers cachés compris). Jusqu'à la relecture
-            # de la 0.3.5, sans -name, {} était retiré et cat jugé sans argument.
+            # de la 0.4.0, sans -name, {} était retiré et cat jugé sans argument.
             cherche = repere_find(mots_cmd)
             k = 1
             while k < len(mots_cmd):
@@ -699,14 +699,14 @@ PROGRAMME_D_ABORD = CHERCHEURS | AWK | {"sed", "jq", "yq", "tr"}
 # ntfy, topic, webhook, rpc, dsn : un sujet de notification se lit comme un mot
 # de passe (quiconque le connaît lit et envoie les alertes), une URL de RPC ou
 # un DSN portent souvent leur clé.
-# Relecture de la 0.3.5 : url, api, database, session… manquaient (DATABASE_URL,
+# Relecture de la 0.4.0 : url, api, database, session… manquaient (DATABASE_URL,
 # ALCHEMY_API, ETH_WSS_URL passaient pour des réglages).
 NOM_SECRET = re.compile(r"key|secret|token|pass|pwd|cred|auth|mnemonic|seed|priv|wallet|signer"
                         r"|ntfy|topic|webhook|rpc|dsn|url|uri|api|database|(^|_)db(_|$)|conn|wss|blind|salt"
                         r"|cookie|session|jwt|bearer|account|keypair|(^|_)[ps]k(_|$)|(^|_)pat(_|$)", re.I)
 # Pour une variable affichée hors de tout .env chargé : la liste d'avant, plus
 # étroite. La large refusait « for url in … ; echo $url », $BASE_URL,
-# $SSH_CONNECTION (seconde relecture de la 0.3.5).
+# $SSH_CONNECTION (seconde relecture de la 0.4.0).
 NOM_SECRET_VAR = re.compile(r"key|secret|token|pass|pwd|cred|auth|mnemonic|seed|priv|wallet|signer"
                             r"|ntfy|topic|webhook|rpc|dsn", re.I)
 # Valeur d'un réglage qui peut s'afficher : booléen, nombre, mot court.
@@ -868,7 +868,7 @@ def reglage_nom_prudent(motifs):
 def reglages_inoffensifs(motifs, fichiers, dossier):
     """grep '^DRY_RUN=' .env : permis si chaque valeur que la commande
     afficherait est un booléen, un nombre ou un mot court. Jusqu'à la
-    relecture de la 0.3.5, seul le nom était jugé : grep '^DATABASE_URL=' .env
+    relecture de la 0.4.0, seul le nom était jugé : grep '^DATABASE_URL=' .env
     affichait le mot de passe de la base."""
     noms = set()
     for m in motifs:
@@ -1036,7 +1036,7 @@ def noms_passes_a_xargs(cmds, k, dossier, distant, detection):
     """« … | xargs cat » : xargs donne à cat les noms qu'écrit la commande
     d'avant. Les fichiers de secrets qu'elle peut écrire, ou [] :
     find sans -name → ceux du dossier parcouru ; find -name '.env*', echo .env,
-    grep -rl → ceux qu'ils désignent. Jusqu'à la relecture de la 0.3.5, xargs
+    grep -rl → ceux qu'ils désignent. Jusqu'à la relecture de la 0.4.0, xargs
     était une simple enveloppe et cat arrivait sans argument."""
     if k == 0 or cmds[k - 1][3] not in ("|", "|&"):
         return []
@@ -1239,7 +1239,7 @@ class TropGrand(Exception):
 
 
 # Nombre de fichiers et durée au-delà desquels on renonce (« trop grand »).
-# Jusqu'à la seconde relecture de la 0.3.5 : 20 000 fichiers, comptés même
+# Jusqu'à la seconde relecture de la 0.4.0 : 20 000 fichiers, comptés même
 # quand --include les écartait — rg, l'outil Grep et grep --include étaient
 # refusés dans tout projet avec un gros dossier de compilation.
 LIMITE_PARCOURS = int(os.environ.get("CANDY_LIMITE_PARCOURS") or 150000)
@@ -1436,7 +1436,7 @@ CLASSES_POSIX = {"alpha": "a-zA-Z", "digit": "0-9", "alnum": "a-zA-Z0-9", "upper
 
 def classes_posix(rx):
     """[[:print:]], \\< \\>, [[:<:]] de grep → Python, qui ne les connaît pas :
-    jusqu'à la relecture de la 0.3.5, grep -r '[[:print:]]' trouvait tout et
+    jusqu'à la relecture de la 0.4.0, grep -r '[[:print:]]' trouvait tout et
     le hook, rien. None si une classe est inconnue."""
     rx = rx.replace("[[:<:]]", r"\b").replace("[[:>:]]", r"\b")
     inconnues = []
@@ -1864,7 +1864,7 @@ def ajouts_git(texte, depart):
     if re.search(r"\bxargs\b[^|;&]*\bgit\b[^|;&]*\b(add|stage)\b", texte):
         res = [(d, a if any(not x.startswith("-") for x in a) else a + ["--all"]) for d, a in res]
     # git add $(…), git add "$f", git add `…` : le chemin n'est connu qu'à
-    # l'exécution ; jugé comme « git add -A » (relecture de la 0.3.5).
+    # l'exécution ; jugé comme « git add -A » (relecture de la 0.4.0).
     if re.search(r"\bgit\b[^|;&\n]*\b(add|stage|update-index)\b[^|;&\n]*[$`]", texte):
         res = [(d, [x for x in a if "$" not in x and "`" not in x] + ["--all"]) for d, a in res]
     return res
@@ -1927,7 +1927,7 @@ def depots_pousses(texte, depart):
                     d = depart
                 # « git commit -am x && git push » : le commit n'existe pas encore
                 # quand le hook lit les commits ; le disque est contrôlé aussi
-                # (régression de la 0.3.5, trouvée par sa seconde relecture) —
+                # (régression de la 0.4.0, trouvée par sa seconde relecture) —
                 # les fichiers SUIVIS, plus ce que la ligne ajoute (passe 3 :
                 # un brouillon non suivi bloquait « commit -am && push »).
                 disque = []

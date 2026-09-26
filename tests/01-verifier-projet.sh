@@ -112,7 +112,7 @@ mkdir -p "$BAC/vide"
 bash "$CONTROLE" "$BAC/vide" >/dev/null 2>&1
 verifie "un projet sans aucun moyen de vérification sort en 2" 2 $?
 
-section "Contrôle universel — ce que la 0.3.5 corrige"
+section "Contrôle universel — ce que la 0.4.0 corrige"
 # Un faux pytest, qui compte ses appels : ces cas n'ont pas besoin du vrai.
 mkdir -p "$BAC/outils"
 cat > "$BAC/outils/pytest" <<'FIN'

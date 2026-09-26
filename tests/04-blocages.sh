@@ -47,7 +47,7 @@ mkdir -p "$BAC/avec" && git -C "$BAC/avec" init -q && touch "$BAC/avec/.claude-p
 verifie "avec le témoin de clôture, le commit passe" \
         0 "$(code_hook "$PHASE" "$COMMIT_PHASE" CLAUDE_PROJECT_DIR="$BAC/avec")"
 
-# Depuis la 0.3.5, le témoin n'est plus consommé AVANT le commit : un commit
+# Depuis la 0.4.0, le témoin n'est plus consommé AVANT le commit : un commit
 # refusé ensuite (pre-commit, autre garde-fou) se relance sans refaire
 # /fin-phase. Il est retiré après le commit de clôture réellement passé (mode
 # « apres », PostToolUse) — voir tests/essais/cloture.py.
@@ -201,7 +201,7 @@ verifie "son texte est fixe : le chemin du fichier n'y figure pas" \
 section "Contrôle avant push"
 PUSH="$RACINE/hooks/validate-before-push.sh"
 
-# Un push envoie des COMMITS : depuis la 0.3.5, ce sont eux qui sont contrôlés,
+# Un push envoie des COMMITS : depuis la 0.4.0, ce sont eux qui sont contrôlés,
 # pas le disque. Chaque projet de test est donc un dépôt avec un commit, et le
 # hook reçoit une vraie commande « git push », lancée depuis ce dépôt.
 G=(git -c user.email=t@t.t -c user.name=t -c commit.gpgsign=false)
@@ -265,7 +265,7 @@ verifie "un code valide laisse passer le push" \
 
 # Un commit fait sur la MÊME ligne que le push n'existe pas encore quand le hook
 # lit les commits : « git commit -am fix && git push » partait avec un .py cassé
-# (régression de la 0.3.5, trouvée par sa relecture). Le disque est alors
+# (régression de la 0.4.0, trouvée par sa relecture). Le disque est alors
 # contrôlé aussi, comme en 0.3.4.
 mkdir -p "$BAC/memeligne"
 printf 'def ok():\n    return 1\n' > "$BAC/memeligne/a.py"
@@ -444,7 +444,7 @@ suivi "$BAC/lent"
 verifie "des tests en échec ne bloquent PAS le push, par choix" \
         0 "$(pousse "$BAC/lent")"
 
-# 0.3.5 : le dépôt POUSSÉ, pas le dossier d'ouverture de la session.
+# 0.4.0 : le dépôt POUSSÉ, pas le dossier d'ouverture de la session.
 # « git -C x push » ne déclenchait rien (le lanceur ne lisait que le texte
 # exact « git push ») ; « cd x && git push » contrôlait le dossier de départ.
 mkdir -p "$BAC/ailleurs" "$BAC/cassepush" "$BAC/sainpush"

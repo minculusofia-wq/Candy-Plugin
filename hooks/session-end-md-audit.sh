@@ -88,7 +88,7 @@ def sans_citations(ligne):
 LIEN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 SCHEMA = re.compile(r"[a-zA-Z][a-zA-Z0-9+.-]*:")
 
-# La cible d'un lien, lue comme un lecteur Markdown la lit. Jusqu'a la 0.3.5,
+# La cible d'un lien, lue comme un lecteur Markdown la lit. Jusqu'a la 0.4.0,
 # des liens valides etaient declares casses — et ce rouge ferme la porte de
 # phase : <chemin avec espaces>, chemin 'titre' ou (titre), ?requete, %20, ~/.
 def cible_du_lien(brute):

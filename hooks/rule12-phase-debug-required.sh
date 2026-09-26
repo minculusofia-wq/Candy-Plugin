@@ -36,7 +36,7 @@
 # donc bloquait chaque commit ordinaire en cours de phase. Et /fin-phase
 # ecrivait le temoin APRES le commit : la vraie cloture etait refusee aussi.
 #
-# Corrige dans la 0.3.5 : la commande etait decoupee a la main. Un « \ » +
+# Corrige dans la 0.4.0 : la commande etait decoupee a la main. Un « \ » +
 # retour a la ligne entre git et commit, un message range dans un fichier
 # (-F), git merge -m ou un alias (git ci) passaient ; un git log --grep ou un
 # corps de message qui citait une cloture passee bloquait un commit ordinaire ;

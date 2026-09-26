@@ -200,7 +200,7 @@ done
 # un conseil suivi, sous une autre casse, en lien vers un fichier hors du depot
 # (une cle), dans un projet sans .git (archive), ou exclu par un .gitignore —
 # qui voyage avec le depot — peut venir d'ailleurs, et son texte arriverait a
-# Claude comme une consigne (relecture de securite de la 0.3.5, trois passes).
+# Claude comme une consigne (relecture de securite de la 0.4.0, trois passes).
 conseil_exclu_localement() {  # 0 si git exclut $1 par le info/exclude DU depot, ce que seul /fin-phase ecrit ici
     local dossier source attendu
     dossier="$(dirname "$1")"

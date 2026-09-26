@@ -35,7 +35,7 @@ MODELES = re.compile(r"[._-](example|sample|template|dist|tmpl|tpl|defaults?)$")
 NOMS_EXACTS = {".env", ".envrc", "credentials", "credentials.json", "keystore.json", "wallet.json",
                "private_key.txt", "secret.key", ".netrc", ".pypirc", ".pgpass",
                "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa", ".claude.json", ".git-credentials",
-               # Seconde relecture de la 0.3.5 : wallets et fichiers d'identifiants courants.
+               # Seconde relecture de la 0.4.0 : wallets et fichiers d'identifiants courants.
                "keypair.json", "wallet.dat", "secrets.toml", "secrets.json", "secrets.yml", "secrets.yaml",
                "application_default_credentials.json"}
 # .npmrc : celui du dossier personnel porte le jeton de « npm login » ; celui
@@ -59,7 +59,7 @@ def est_fichier_de_secrets(chemin):
     NFKC, casse repliée (« .ENV », « wallet.jſon »). Les modèles sans valeur
     (.env.example, *.template) et les clés publiques (.pub) restent libres.
     Un lien vers un fichier de secrets en est un : jusqu'à la relecture de la
-    0.3.5, Read, Write et Grep passaient par un lien nommé « notes »."""
+    0.4.0, Read, Write et Grep passaient par un lien nommé « notes »."""
     if not chemin or not isinstance(chemin, str):
         return False
     if par_le_nom(chemin) or npmrc_porte_un_jeton(chemin):
@@ -146,7 +146,7 @@ UUID = re.compile(r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 # (?<![\w.-]) : le nom commence au début d'un mot. Sans cela, chaque caractère
 # d'un long mot (bytecode hexadécimal) relançait la recherche jusqu'au bout de
 # la fenêtre : 600 Ko prenaient 25 s, et un hook qui dépasse son délai laisse
-# passer l'action (relecture de la 0.3.5).
+# passer l'action (relecture de la 0.4.0).
 CITE = re.compile(r"(?<![\w.-])(?P<n>[A-Za-z_][\w.-]*)[\"']?\s*(?::=|=>|[:=])\s*(?P<q>[\"'])(?P<v>(?:(?!(?P=q)).){0,4000}?)(?P=q)")
 # La valeur nue s'arrête aussi sur un guillemet : echo "API_SECRET=…" >> .env,
 # docker run -e "…", - "…" d'un docker-compose.

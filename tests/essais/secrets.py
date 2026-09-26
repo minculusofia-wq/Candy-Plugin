@@ -93,7 +93,7 @@ for outil in ("Bash", "Monitor"):
     code, _, _ = lancer("protect-secrets.sh", outil, {"command": j("export PK=", CLE)})
     attendre(f"{outil} : export PK=0x…", 2, code)
 
-section("Secrets — valeurs écrites : ce que la relecture de la 0.3.5 a trouvé")
+section("Secrets — valeurs écrites : ce que la relecture de la 0.4.0 a trouvé")
 GHP = j("gh", "p_", "aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY3zA5")
 B58 = j("4Zq8xPw7LmK3y9Tr2VbN5cH6jD8fG1sA", "2qW3eR4tY5uI6oP7aS8dF9gH1jK2lZ3xC4v", "B5nM6qW7eR8tY9uI1oP2aS3dF4g")
 for libelle, texte in [
@@ -262,7 +262,7 @@ try:
                      "git ls-files -o --exclude-standard | xargs git add", f"pushd {depot} && git add -A",
                      # un alias git vers add, défini dans le dépôt ou sur la ligne même
                      "git ajoute -A", "git -c alias.tout=add tout .",
-                     # un chemin calculé, update-index (relecture de la 0.3.5)
+                     # un chemin calculé, update-index (relecture de la 0.4.0)
                      "git add $(echo .env)", 'f=.env; git add "$f"', "git add `echo .env`",
                      "git update-index --add .env"]
     for cmd in refuses_ajout:
@@ -344,8 +344,8 @@ try:
         code, _, _ = lancer("pre-edit-guard.sh", "Grep", entree, cwd=d6)
         attendre(libelle, attendu, code)
 
-    section("Secrets — relecture de sécurité de la 0.3.5 : ce qui passait encore")
-    # Toutes ces formes passaient (code 0) sur la 0.3.5 avant sa relecture : la
+    section("Secrets — relecture de sécurité de la 0.4.0 : ce qui passait encore")
+    # Toutes ces formes passaient (code 0) sur la 0.4.0 avant sa relecture : la
     # liste des programmes qui lisent était fermée, une redirection seule
     # ($(<f)) et les noms passés par xargs n'étaient pas lus, un lien n'était
     # pas suivi, $'…' n'était pas décodé, le code d'un interprète n'était pas
@@ -402,7 +402,7 @@ try:
                         {"notebook_path": os.path.join(d7, "n.ipynb"), "new_source": j(AK, ' = "', B64, '"')}, cwd=d7)
     attendre("NotebookEdit : une valeur secrète dans la cellule est refusée", 2, code)
 
-    section("Secrets — relecture de sécurité de la 0.3.5, passe 2 : ce qui passait encore")
+    section("Secrets — relecture de sécurité de la 0.4.0, passe 2 : ce qui passait encore")
     d8 = os.path.join(base, "d8")
     os.makedirs(os.path.join(d8, "src", "wallet"))
     os.makedirs(os.path.join(d8, "src", "keystore"))
@@ -727,7 +727,7 @@ try:
         for i in range(1000):
             open(os.path.join(grand, f"d{k}", f"f{i}.txt"), "w").close()
     # Un .env vu AVANT la limite : la liste partielle ne suffit pas, un autre
-    # .env peut suivre (relecture de la 0.3.5).
+    # .env peut suivre (relecture de la 0.4.0).
     open(os.path.join(grand, ".env"), "w").write("X=1\n")
     open(os.path.join(grand, "d20", ".env"), "w").write(j("API", "_KEY=", B64, "\n"))
     petit = {"CANDY_LIMITE_PARCOURS": "5000"}
@@ -740,7 +740,7 @@ try:
     code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": "grep -rn KEY d0/"}, cwd=grand, env=petit)
     attendre("le même grep limité à un sous-dossier : permis", 0, code)
     # 21 000 fichiers sans limite abaissée : un projet ordinaire n'est plus refusé
-    # (relecture de la 0.3.5 : rg, --include et l'outil Grep l'étaient dès 20 000).
+    # (relecture de la 0.4.0 : rg, --include et l'outil Grep l'étaient dès 20 000).
     code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": "grep -rn KEY ."}, cwd=grand)
     attendre("grep -r sur 21 000 fichiers : jugé sur le fond (le .env porte KEY : refusé)", 2, code)
     code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": "grep -rn 'fn main' --include='*.rs' ."}, cwd=grand)

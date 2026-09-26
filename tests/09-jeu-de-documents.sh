@@ -131,7 +131,7 @@ verifie "--roadmap depuis un sous-dossier : la roadmap de la racine" \
         "$(cd "$L" && pwd -P)/ROADMAP.md" "$(jeu --roadmap "$L/backend")"
 # /fin-phase écrit le conseil HORS de git : un conseil suivi vient d'ailleurs (un
 # dépôt cloné) et ne doit pas arriver à Claude comme une consigne (relecture de
-# sécurité de la 0.3.5).
+# sécurité de la 0.4.0).
 C=$(projet conseil-clone)
 printf '### Phase 1 — Base\n' > "$C/ROADMAP.md"
 for f in CLAUDE SPEC JOURNAL README; do echo "# $f" > "$C/$f.md"; done

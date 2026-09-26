@@ -68,7 +68,7 @@ ecriture "une valeur qui commence par le mot secret"    2 "$CLE_API = \"secretva
 ecriture "une clé contenant une accolade"               2 "$CLE_PRIVEE = \"aZ4{9Fj2LmQ8xT4vB7nR1cW0\""
 
 section "Secrets — le garde .env"
-# Depuis la 0.3.5, le garde demande à git lui-même ce qu'un « git add »
+# Depuis la 0.4.0, le garde demande à git lui-même ce qu'un « git add »
 # emporterait : le bac est donc un vrai dépôt. Hors dépôt, il n'y a rien à
 # ajouter, et rien à refuser.
 GIT_AJOUT="$(printf 'g%st a' 'i')dd"

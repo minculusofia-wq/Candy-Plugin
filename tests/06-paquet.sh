@@ -200,7 +200,7 @@ verifie "tout appel à python3 dans les hooks porte -I :${SANS_I:+ }$SANS_I" "" 
 # (core.fsmonitor) ou une vérification de signature (log.showSignature +
 # gpg.program) y lancent un programme, avant tout accord de l'utilisateur.
 # Tout appel à git d'un hook les coupe, ou passe par une fonction qui le fait
-# (seconde relecture de sécurité de la 0.3.5 : git show et git log les
+# (seconde relecture de sécurité de la 0.4.0 : git show et git log les
 # lançaient, et l'ouverture de session n'avait jamais coupé core.fsmonitor).
 SCRIPT_GIT=$(mktemp)
 cat > "$SCRIPT_GIT" <<'FIN_GIT'

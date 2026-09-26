@@ -36,7 +36,7 @@ remettant le défaut d'origine : les défauts des deux chantiers font tomber les
 tests quand on les réintroduit. Un test qui passe toujours ne sert à rien — il
 doit savoir dire non.
 
-Depuis la 0.3.5, chaque correction est prouvée sur la version précédente
+Depuis la 0.4.0, chaque correction est prouvée sur la version précédente
 elle-même : ses cas sont joués sur une copie de la 0.3.4, et une correction dont
 aucun cas n'y échoue est abandonnée — le défaut n'existait pas. Les cas qui y
 passent gardent ce qui doit rester permis (un garde-fou qui bloque du travail
