@@ -156,7 +156,10 @@ printf 'test:\n\t@true\naudit:\n\t@exit 1\n' > "$BAC/audit/Makefile"
 SORTIE=$(VERIFIER_SANS_AUDIT=1 bash "$CONTROLE" "$BAC/audit" 2>&1); CODE=$?
 verifie "VERIFIER_SANS_AUDIT=1 : make audit n'est pas lancé" 0 "$(echo "$SORTIE" | grep -c 'make audit')"
 verifie "  et le projet reste vert" 0 "$CODE"
-SORTIE=$(bash "$CONTROLE" "$BAC/audit" 2>&1)
+# La variable est posée à 0 explicitement : cette suite tourne aussi sous le
+# hook de fin de tour, qui exporte VERIFIER_SANS_AUDIT=1 — héritée, elle faisait
+# échouer ce cas alors que rien n'avait changé (vu le 2026-09-26).
+SORTIE=$(VERIFIER_SANS_AUDIT=0 bash "$CONTROLE" "$BAC/audit" 2>&1)
 verifie "sans elle, /verifier lance toujours make audit" 1 "$(echo "$SORTIE" | grep -c 'ECHEC  make audit')"
 # Sans fichier temporaire, le contrôle n'a pas tourné : c'est un échec, pas un
 # projet « sans moyen de vérification » que la fin de tour laisse passer.
