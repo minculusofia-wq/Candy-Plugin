@@ -328,6 +328,23 @@ verifie "session ouverte dans sub/, git add neuf.py && commit && push : REFUSÉ"
         2 "$(pousse "$BAC/sousdossier/sub" "git add neuf.py && git commit -m x && $PUSH_CMD")"
 verifie "cd sub && git add vieux.py (sain, suivi) && commit && push : le push passe" \
         0 "$(pousse "$BAC/sousdossier" "cd sub && git add vieux.py && git commit -m x && $PUSH_CMD")"
+# Relecture xhigh : « git commit -m » sans -a n'emporte que l'INDEX, pas le
+# disque — refus à tort d'une édition non indexée, et un index cassé partait
+# dès que le disque était réparé.
+mkdir -p "$BAC/index"
+printf 'def ok():\n    return 1\n' > "$BAC/index/a.py"
+suivi "$BAC/index"
+printf 'def casse(:\n' > "$BAC/index/a.py"                      # disque cassé, index sain
+verifie "index sain, disque cassé : « git commit -m x && push » passe" \
+        0 "$(pousse "$BAC/index" "git commit -m x && $PUSH_CMD")"
+verifie "  « git commit -am x && push » emporte le disque : REFUSÉ" \
+        2 "$(pousse "$BAC/index" "git commit -am x && $PUSH_CMD")"
+git -C "$BAC/index" add a.py                                      # index cassé
+printf 'def ok():\n    return 2\n' > "$BAC/index/a.py"          # disque réparé
+verifie "index cassé, disque réparé : « git commit -m x && push » REFUSÉ" \
+        2 "$(pousse "$BAC/index" "git commit -m x && $PUSH_CMD")"
+verifie "  « git add a.py && git commit -m x && push » (le disque réparé entre dans l'index) : passe" \
+        0 "$(pousse "$BAC/index" "git add a.py && git commit -m x && $PUSH_CMD")"
 
 # Ce qui ne part pas au push ne le bloque pas : un environnement non suivi
 # (code tiers, parfois en Python 2) faisait refuser le push et durer 12 s.

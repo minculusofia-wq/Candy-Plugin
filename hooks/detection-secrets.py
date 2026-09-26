@@ -117,8 +117,8 @@ def par_le_nom(chemin):
         return True                                 # ~/.config/solana/id.json : la clé en clair
     if len(parties) >= 2 and parties[-2] == ".kube" and b == "config":
         return True
-    if b == "environ" and len(parties) >= 3 and parties[-3] == "proc":
-        return True                                 # /proc/<pid>/environ : l'environnement d'un processus
+    if b == "environ" and "proc" in parties[:-1]:
+        return True                                 # /proc/<pid>/environ, /proc/<pid>/task/<tid>/environ : l'environnement d'un processus
     return False
 
 

@@ -105,6 +105,7 @@ ERREURS=$("$PY" -I -c '
 import os, shlex, subprocess, sys
 racine, refs = sys.argv[1], shlex.split(sys.argv[2])
 disque = "--disque" in refs
+index = "--index" in refs
 tout = "--disque-tout" in refs
 ajouts = [r[len("--ajout="):] for r in refs if r.startswith("--ajout=")]
 refs = [r for r in refs if r == "--all" or not r.startswith("--")] or ["HEAD"]
@@ -115,6 +116,30 @@ env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 g = ["git", "-c", "core.fsmonitor=false", "-c", "log.showSignature=false", "-c", "gpg.program=false", "-C", racine]
 def git(*args, entree=None):
     return subprocess.run(g + list(args), input=entree, capture_output=True, env=env, timeout=60)
+def compiler(objets):
+    # Compile chaque blob (sha, chemin) lu en memoire par cat-file ; rend le nombre de casses.
+    if not objets:
+        return 0
+    donnees = git("cat-file", "--batch", entree=b"".join(s + b"\n" for s, _ in objets)).stdout
+    pos, casses = 0, 0
+    for sha, chemin in objets:
+        fin = donnees.index(b"\n", pos)
+        entete = donnees[pos:fin].split(b" ")
+        if len(entete) < 3:
+            pos = fin + 1                           # objet absent
+            continue
+        taille = int(entete[2])
+        contenu = donnees[fin + 1:fin + 1 + taille]
+        pos = fin + 1 + taille + 1
+        if taille > 2_000_000:
+            continue
+        try:
+            compile(contenu, chemin.decode("utf-8", "replace"), "exec", dont_inherit=True)
+        except (SyntaxError, ValueError, RecursionError, MemoryError):
+            casses += 1
+        except Exception:
+            pass
+    return casses
 if refs == ["--all"]:
     refs = git("for-each-ref", "--format=%(refname)", "refs/heads").stdout.decode().split() or ["HEAD"]
 casses, vus = 0, set()
@@ -135,39 +160,42 @@ for ref in refs:
             continue
         vus.add(sha)
         objets.append((sha, chemin))
-    if not objets:
-        continue
-    donnees = git("cat-file", "--batch", entree=b"".join(s + b"\n" for s, _ in objets)).stdout
-    pos = 0
-    for sha, chemin in objets:
-        fin = donnees.index(b"\n", pos)
-        entete = donnees[pos:fin].split(b" ")
-        if len(entete) < 3:
-            pos = fin + 1                           # objet absent
-            continue
-        taille = int(entete[2])
-        contenu = donnees[fin + 1:fin + 1 + taille]
-        pos = fin + 1 + taille + 1
-        if taille > 2_000_000:
-            continue
-        try:
-            compile(contenu, chemin.decode("utf-8", "replace"), "exec", dont_inherit=True)
-        except (SyntaxError, ValueError, RecursionError, MemoryError):
-            casses += 1
-        except Exception:
-            pass
+    casses += compiler(objets)
 # Un commit fait sur la même ligne avant le push : ce que ce commit emportera
-# est sur le disque — les fichiers SUIVIS (git commit -am), plus les fichiers
-# non suivis que la ligne ajoute (git add -A ou . : tous ; git add chemin : ceux
-# du chemin). Fichiers ordinaires seulement, sans suivre de lien, jamais un tube.
+# n existe pas encore. Sans -a, c est l INDEX : ses blobs sont compiles comme
+# ceux des commits, sauf les chemins que git add remplace sur la ligne. Avec -a,
+# le disque des fichiers SUIVIS ; plus les fichiers que la ligne ajoute (git add
+# -A ou . : tous ; git add chemin : ceux du chemin), lus sur le disque —
+# fichiers ordinaires seulement, sans suivre de lien, jamais un tube.
+# Relecture xhigh : le disque etait toujours lu, a tort dans les deux sens.
 casses_disque = 0
-if disque:
+if index and not tout:
+    # realpath des deux cotes : sur macOS, /var est un lien vers /private/var.
+    exclus = [os.path.relpath(os.path.realpath(a), os.path.realpath(racine)).encode() for a in ajouts]
+    objets = []
+    for entree in git("ls-files", "-s", "-z").stdout.split(b"\0"):
+        if b"\t" not in entree:
+            continue
+        meta, chemin = entree.split(b"\t", 1)
+        mode, sha = meta.split(b" ")[:2]
+        if mode not in (b"100644", b"100755") or not chemin.endswith(b".py"):
+            continue
+        if any(ignore(x) for x in chemin.split(b"/")[:-1]) or sha in vus:
+            continue
+        if any(chemin == e or chemin.startswith(e + b"/") for e in exclus):
+            continue
+        vus.add(sha)
+        objets.append((sha, chemin))
+    casses_disque += compiler(objets)
+if disque or tout or ajouts:
     import stat
-    liste = git("ls-files", "-z", "--cached").stdout.split(b"\0")
+    liste = []
+    if disque or tout:
+        liste += git("ls-files", "-z", "--cached").stdout.split(b"\0")
     if tout:
         liste += git("ls-files", "-z", "--others", "--exclude-standard").stdout.split(b"\0")
     elif ajouts:
-        liste += git("ls-files", "-z", "--others", "--exclude-standard", "--", *ajouts).stdout.split(b"\0")
+        liste += git("ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", *ajouts).stdout.split(b"\0")
     for chemin in dict.fromkeys(liste):
         if not chemin.endswith(b".py") or any(ignore(x) for x in chemin.split(b"/")[:-1]):
             continue

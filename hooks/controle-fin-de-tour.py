@@ -75,6 +75,9 @@ HASH = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 # Marqueur « on ne sait pas ce qui a bougé » : l'historique a été réécrit
 # pendant le tour (reset, rebase), le contrôle part par prudence.
 INCONNU = "(historique reecrit).sh"
+# Clé du relevé qui porte l'empreinte des fichiers au-delà de la fenêtre de
+# 5 000 : si elle change, quelque chose a bougé là-bas et le contrôle part.
+HORS_FENETRE = "(fichiers au-dela du releve).sh"
 
 
 def dossier_sur():
@@ -130,15 +133,25 @@ def debut_du_tour(transcription):
 
 
 def etat_du_depot(racine):
-    """(HEAD, {chemin: signature}) des fichiers modifiés ou nouveaux."""
+    """(HEAD, {chemin: signature}) des fichiers modifiés ou nouveaux. Le relevé
+    garde 5 000 chemins au plus ; au-delà, une empreinte de la liste ENTIÈRE
+    (chemins et signatures) dit si quelque chose a bougé hors de la fenêtre
+    (relecture xhigh : un fichier créé au-delà de la fenêtre était invisible)."""
+    import hashlib
     head = git(racine, "rev-parse", "-q", "--verify", "HEAD").stdout.decode().strip()
-    signatures = {}
-    for c in chemins_modifies(racine)[:5000]:
+    chemins = chemins_modifies(racine)
+    signatures, empreinte = {}, hashlib.sha1()
+    for k, c in enumerate(chemins):
         try:
             st = os.lstat(os.path.join(racine, c))
-            signatures[c] = f"{st.st_mtime_ns}:{st.st_size}"
+            s = f"{st.st_mtime_ns}:{st.st_size}"
         except OSError:
-            signatures[c] = "absent"
+            s = "absent"
+        empreinte.update(f"{c}\0{s}\0".encode("utf-8", "replace"))
+        if k < 5000:
+            signatures[c] = s
+    if len(chemins) > 5000:
+        signatures[HORS_FENETRE] = empreinte.hexdigest()
     return head, signatures
 
 
@@ -166,7 +179,16 @@ def ecrire_etat(session, etat):
         return
     os.makedirs(ETATS, mode=0o700, exist_ok=True)
     if not dossier_sur():
-        return
+        # Un dossier à nous mais ouvert aux autres (umask 002) : on le referme au
+        # lieu de se taire pour toujours (relecture xhigh).
+        try:
+            st = os.lstat(ETATS)
+            if stat.S_ISDIR(st.st_mode) and st.st_uid == os.getuid():
+                os.chmod(ETATS, 0o700)
+        except OSError:
+            pass
+        if not dossier_sur():
+            return
     fd, tmp = tempfile.mkstemp(dir=ETATS, prefix=".tmp-")
     with os.fdopen(fd, "w") as h:
         json.dump(etat, h)
@@ -308,6 +330,7 @@ def main():
         releve_du_debut(d)
         return 0
     budget = float(arg)
+    depart_du_hook = time.monotonic()
     cwd = d.get("cwd") if isinstance(d.get("cwd"), str) else ""
     cwd = cwd or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
     r = git(cwd, "rev-parse", "--show-toplevel")
@@ -342,12 +365,18 @@ def main():
     # fichier : on attend bash, pas un enfant laissé en arrière-plan qui
     # tiendrait un tube ouvert. À la fin, tous les descendants sont tués.
     # L'audit réseau (pip-audit, npm audit) n'a rien à faire à chaque fin de tour.
+    # Le budget couvre tout le hook : le relevé git du début (DELAI_GIT au plus),
+    # celui de la fin et le nettoyage y sont comptés — sinon le hook dépassait
+    # son propre délai de 300 s (hooks.json) et son verdict était perdu
+    # (relecture xhigh).
+    reserve = min(DELAI_GIT + 10, budget / 4)      # un petit budget (essais) garde une petite réserve
+    attente = max(budget / 4, budget - (time.monotonic() - depart_du_hook) - reserve)
     with tempfile.TemporaryFile() as sortie_f:
         p = subprocess.Popen(["bash", VERIFIER, racine], stdout=sortie_f, stderr=subprocess.STDOUT,
                              stdin=subprocess.DEVNULL, start_new_session=True,
                              env=dict(os.environ, VERIFIER_SANS_AUDIT="1"))
         try:
-            p.wait(timeout=budget)
+            p.wait(timeout=attente)
             fini = True
         except subprocess.TimeoutExpired:
             fini = False
@@ -361,7 +390,7 @@ def main():
         ecrire_etat(session, etat)
     if not fini:
         sys.stderr.write(
-            f"=== CONTROLE DU PROJET INTERROMPU apres {int(budget)} s ===\n"
+            f"=== CONTROLE DU PROJET INTERROMPU apres {int(attente)} s ===\n"
             "Du code a change pendant ce tour, mais le controle n'a pas fini a temps : il n'a rien prouve.\n"
             "Le lancer a part (make test, ou /verifier) et montrer sa sortie avant d'annoncer que c'est fait.\n")
         return 2

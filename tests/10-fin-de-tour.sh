@@ -140,6 +140,22 @@ sleep 1; printf 'x = 6\n' > "$TRACE/app.py"
 verifie "des tests qui écrivent un fichier : refuse une fois" 2 "$(fin_s "$TRACE")"
 verifie "  sans boucle ensuite" 0 "$(fin_s "$TRACE" 1)"
 verifie "les relevés vont dans le dossier donné, pas ailleurs" 1 "$([ -f "$CONTROLE_ETATS/essai.json" ] && echo 1 || echo 0)"
+# Relecture xhigh : au-delà de 5 000 fichiers non suivis, un fichier créé après
+# la fenêtre du relevé était invisible ; et un dossier des relevés ouvert aux
+# autres (umask 002) faisait taire les relevés pour toujours, sans un mot.
+LARGE=$(depot large "exit 1")
+python3 -I -c 'import os, sys
+for i in range(5100):
+    open(os.path.join(sys.argv[1], "u%05d.txt" % i), "w").close()' "$LARGE"
+debut_tour "$LARGE"
+verifie "5 100 fichiers non suivis, simple question : rien" 0 "$(fin_s "$LARGE")"
+sleep 1; printf 'z = 1\n' > "$LARGE/zz_service.py"      # trié après la fenêtre
+verifie "un .py créé au-delà de la fenêtre du relevé : contrôle lancé" 2 "$(fin_s "$LARGE")"
+OUVERT=$(depot ouvert "exit 1")
+rm -rf "$CONTROLE_ETATS"; mkdir -p "$CONTROLE_ETATS"; chmod 775 "$CONTROLE_ETATS"
+debut_tour "$OUVERT"
+verifie "dossier des relevés ouvert aux autres : refermé (700) et relevé écrit" "700 1" \
+        "$(stat -f '%Lp' "$CONTROLE_ETATS" 2>/dev/null || stat -c '%a' "$CONTROLE_ETATS") $([ -f "$CONTROLE_ETATS/essai.json" ] && echo 1 || echo 0)"
 
 section "Fin de tour — la sortie des tests, une donnée et rien d'autre"
 # Le cadre portait un texte fixe : une sortie qui l'imitait (un O cyrillique

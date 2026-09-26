@@ -67,14 +67,17 @@ try:
                f"git commit -F - <<'FIN'\n{MARQUEUR}\nFIN", "git commit -aF msg-cloture.txt",
                f'git merge -m "{MARQUEUR}" autre', f"(cd {depot} && git commit -F msg-cloture.txt)",
                'git commit -m "$(cat msg-cloture.txt)"', "git commit -F lien.txt",
-               f'git -c alias.fin=commit fin -m "{MARQUEUR}"']
+               f'git -c alias.fin=commit fin -m "{MARQUEUR}"',
+               # relecture xhigh : un $( ) sans cat ni document laissait passer le marqueur
+               f'git commit -m "$(printf %s "{MARQUEUR}")"']
     for cmd in refuses:
         attendre(f"clôture refusée : {cmd.replace(depot, '…')[:55]!r}", 2, lancer(cmd, cwd=base if depot in cmd else depot))
     subprocess.run(["git", "-C", depot, "config", "alias.ci", "commit"], check=True)
     attendre("alias git ci = commit : refusé", 2, lancer(f'git ci -m "{MARQUEUR}"'))
     permis = [f'git log --grep "{MARQUEUR}" && git commit -m "fix: x"',
               f'git commit -m "fix: x" -m "suite de {MARQUEUR}"',
-              f"git commit -m \"$(cat <<'EOF'\nfix: x\n\nprépare {MARQUEUR}\nEOF\n)\""]
+              f"git commit -m \"$(cat <<'EOF'\nfix: x\n\nprépare {MARQUEUR}\nEOF\n)\"",
+              'git commit -m "$(date +%F) : fix x"']
     for cmd in permis:
         attendre(f"commit ordinaire permis : {cmd[:55]!r}", 0, lancer(cmd))
 

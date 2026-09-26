@@ -245,9 +245,14 @@ def lexer(texte):
             j = t.find("\n", i)
             i = n if j < 0 else j
         elif c in PONCTUATION:
-            fin()
             op = next(o for o in OPERATEURS if t.startswith(o, i))
-            mots.append("<<" if op == "<<-" else op)
+            op = "<<" if op == "<<-" else op
+            if cur is not None and cur.isdigit() and op[0] in "<>":
+                mots.append(cur + op)               # 2> f, 1>&2 : le descripteur reste collé à l'opérateur
+                cur = None
+            else:
+                fin()
+                mots.append(op)
             i += len(op)
         elif c == "`":
             fin()
@@ -406,19 +411,20 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None):
         if m in SEPARATEURS or m == "$" or m in ("<(", ">("):
             fermer(m)                               # <( ) et >( ) : une commande à part
             cur, ecrit, entrees = [], False, []
-        elif m in REDIRECTIONS or re.fullmatch(r"[<>&|]*[<>][<>&|]*", m):
+        elif m in REDIRECTIONS or re.fullmatch(r"\d*[<>&|]*[<>][<>&|]*", m):
+            op = m.lstrip("0123456789")             # 2> f : le descripteur est collé par le lexer
             cible = mots[i + 1] if i + 1 < len(mots) else ""
-            if ">" in m and not (cible == "/dev/null" or re.fullmatch(r"&?\d+|&?-", cible)):
+            if ">" in op and not (cible == "/dev/null" or re.fullmatch(r"&?\d+|&?-", cible)):
                 ecrit = True                        # > f, >> f, &> f, 2> f : un fichier est écrit
                 entrees.append(("sortie", cible))
-            elif m == "<<<":
+            elif op == "<<<":
                 entrees.append(("texte", cible))    # bash <<< "code" : le texte est un script
-            elif m == "<":
+            elif op == "<":
                 entrees.append(("fichier", cible))  # bash < script.sh
-            elif m == "<<":
+            elif op == "<<":
                 entrees.append(("document", document(cible)))
-            if cur and re.fullmatch(r"\d+", cur[-1]):
-                cur.pop()                           # le « 2 » de « 2> » n'est pas un argument
+            # Jusqu'à la relecture xhigh, le dernier mot était retiré s'il était un
+            # nombre (pensé pour « 2> ») : « cut -f 1 < .env » perdait son 1.
             i += 1                                  # la cible n'est pas un mot de la commande
         else:
             cur.append(m)
@@ -795,7 +801,8 @@ def lecture_masquee(nom, programme, options, motifs=None):
         # grep '^DRY_RUN=' .env : un réglage nommé, qui n'a rien d'un secret.
         # Pas avec -A/-B/-C (lignes voisines), -v (tout le reste), -z, -f
         # fichier de motifs ; et CHAQUE motif doit être un réglage.
-        if set(lettres) & CONTEXTE_GREP or "f" in lettres or any(o.split("=", 1)[0] in CONTEXTE_GREP_LONG for o in options):
+        contexte = CONTEXTE_GREP - ({"z"} if nom in ("rg", "ag") else set())   # rg -z : --search-zip, pas --null-data
+        if set(lettres) & contexte or "f" in lettres or any(o.split("=", 1)[0] in CONTEXTE_GREP_LONG for o in options):
             return False
         if "o" in courtes and all(re.fullmatch(r"\^(\[\^=\]|\[[A-Za-z0-9_-]+\]|\\w)[+*]=?", m)
                                   or not re.search(r"[.\[\]*+?{}\\]", m) for m in motifs):
@@ -1002,7 +1009,12 @@ def entrees_lues(nom, args):
             sauter = True                           # -out key.pem : une sortie, pas une entrée
         elif a in ENTREES_RESEAU or a.split("=", 1)[0] in ENTREES_RESEAU:
             v = a.split("=", 1)[1] if a.startswith("--") and "=" in a else suivant
-            res += [v.lstrip("@"), v.split("=@", 1)[-1], v.split("=<", 1)[-1]] if "@" in v or "<" in v or a in ("-T", "--upload-file") else []
+            # -T f, --upload-file[=]f, --post-file[=]f, --body-file[=]f : la valeur
+            # EST le fichier envoyé (relecture xhigh : seul « -T » l'était).
+            if a.split("=", 1)[0] in ("-T", "--upload-file", "--post-file", "--body-file"):
+                res.append(v)
+            else:
+                res += [v.lstrip("@"), v.split("=@", 1)[-1], v.split("=<", 1)[-1]] if "@" in v or "<" in v else []
         elif a.startswith("-"):
             continue
         elif re.match(r"(?i)file://", a):
@@ -1526,10 +1538,15 @@ def git_affiche_un_secret(sous, args, dossier, detection):
         return False                                # git log sans -p : des titres, pas de contenu
     apres = args[args.index("--") + 1:] if "--" in args else []
     avant = args[:args.index("--")] if "--" in args else args
-    if sous == "grep" and not any(o in ("-e", "-f", "--regexp") or o.startswith(("-e", "-f")) for o in options):
-        premier = next((k for k, a in enumerate(avant) if not a.startswith("-")), None)
-        if premier is not None:
-            avant = avant[:premier] + avant[premier + 1:]   # git grep MOTIF [rev] [-- chemins]
+    motif_git = None
+    if sous == "grep":
+        if "-e" in avant and avant.index("-e") + 1 < len(avant):
+            motif_git = avant[avant.index("-e") + 1]
+        elif not any(o in ("-f", "--regexp") or o.startswith(("-e", "-f")) for o in options):
+            premier = next((k for k, a in enumerate(avant) if not a.startswith("-")), None)
+            if premier is not None:
+                motif_git = avant[premier]
+                avant = avant[:premier] + avant[premier + 1:]   # git grep MOTIF [rev] [-- chemins]
     chemins = apres + [a.split(":", 1)[1] for a in avant if ":" in a and not a.startswith("-")]
     chemins += [a for a in avant if not a.startswith("-") and ":" not in a
                 and (sous in ("diff", "grep") or (dossier and os.path.exists(os.path.join(dossier, a))))]
@@ -1561,7 +1578,16 @@ def git_affiche_un_secret(sous, args, dossier, detection):
     except subprocess.TimeoutExpired:
         return True                                 # on ne sait pas ce que la commande montrerait
     noms = r.stdout.decode("utf-8", "replace").replace("\n", "\0").split("\0")
-    return any(detection.est_fichier_de_secrets(f) for f in noms if f)
+    secrets = [f for f in noms if f and detection.est_fichier_de_secrets(f)]
+    if not secrets:
+        return False
+    if sous == "grep" and motif_git is not None:
+        # Comme grep -r : le motif est jugé sur le contenu des fichiers de secrets
+        # que git grep lirait. Jusqu'à la relecture xhigh, un tests/fixtures/dummy.key
+        # suivi faisait refuser tout git grep du dépôt, quel que soit le motif.
+        opts = [re.sub(r"^-([ABC])(\d+)$", r"-\1=\2", o) for o in options]
+        return motif_trouve("grep", [os.path.join(dossier, f) for f in secrets], [motif_git], opts, detection)
+    return True
 
 
 def suivre_dossier(nom, mots, dossier, pile):
@@ -1885,7 +1911,9 @@ def depots_pousses(texte, depart):
         impose = os.path.join(depart or "", os.path.expanduser(m.group(1).strip("'\"")))
     elif re.search(r"\bGIT_DIR=(\S+)", texte):
         impose = dossier_de_git_dir(re.search(r"\bGIT_DIR=(\S+)", texte).group(1).strip("'\""), depart)
-    commit_avant = False
+    # None, "index" (git commit sans -a : seul l'index part) ou "disque" (commit
+    # -a, ou avec des chemins : le disque des fichiers suivis).
+    commit_avant = None
     # Ce que « git add » ajoute sur la ligne : "tout" (-A, ., :/, xargs, $(…)) ou
     # la liste des chemins nommés ; None sans git add.
     ajoute = None
@@ -1904,7 +1932,14 @@ def depots_pousses(texte, depart):
             # lit les commits : ce qu'il emportera est sur le disque. pull et
             # stash ne créent rien depuis le disque : ils n'y sont plus (passe 3).
             if sous in ("commit", "merge", "cherry-pick", "revert", "am", "rebase"):
-                commit_avant = True
+                # Un commit sans -a n'emporte que l'INDEX ; avec -a, ou des chemins,
+                # le disque des fichiers suivis (relecture xhigh : le disque était
+                # toujours lu — refus à tort d'une édition non indexée, et un index
+                # cassé partait dès que le disque était réparé).
+                if sous == "commit" and commit_emporte_le_disque(args):
+                    commit_avant = "disque"
+                elif commit_avant is None:
+                    commit_avant = "index"
             if sous in ("add", "stage") and ajoute != "tout":
                 chemins = [a for a in args if not a.startswith("-") or a == "-"]
                 base = d or dossier
@@ -1932,13 +1967,42 @@ def depots_pousses(texte, depart):
                 # un brouillon non suivi bloquait « commit -am && push »).
                 disque = []
                 if commit_avant:
-                    disque = ["--disque"]
+                    disque = ["--disque" if commit_avant == "disque" else "--index"]
                     if ajoute == "tout":
                         disque.append("--disque-tout")
                     elif ajoute:
                         disque += ["--ajout=" + shlex.quote(c) for c in ajoute]
                 res.append((d, references_poussees(args) + disque))
     return [(d, r) for d, r in res if d]
+
+
+def commit_emporte_le_disque(args):
+    """git commit -a, -am, --all, ou avec des chemins : ce qui part est l'état du
+    disque des fichiers suivis. Sans : l'index. Les valeurs de -m, -F, -C, -c,
+    -t ne sont pas des chemins."""
+    positionnels, avec_a, k = [], False, 0
+    while k < len(args):
+        a = args[k]
+        if a == "--":
+            positionnels += args[k + 1:]
+            break
+        if a.startswith("--"):
+            avec_a = avec_a or a == "--all"
+            if a in ("--message", "--file", "--template", "--author", "--date", "--reuse-message", "--reedit-message",
+                     "--fixup", "--squash", "--cleanup", "--trailer"):
+                k += 1                              # la valeur suit
+        elif a.startswith("-") and len(a) > 1:
+            for p, lettre in enumerate(a[1:]):
+                if lettre == "a":
+                    avec_a = True
+                if lettre in "mFCct":
+                    if p == len(a) - 2:
+                        k += 1                      # la valeur est le mot suivant
+                    break
+        else:
+            positionnels.append(a)
+        k += 1
+    return avec_a or bool(positionnels)
 
 
 def references_poussees(args):
@@ -1978,16 +2042,19 @@ def ajout_secret(texte, depart):
         exclusions = [c for c in chemins if c.startswith((":!", ":^", ":(exclude)"))]
         if any(detection.est_fichier_de_secrets(c) for c in chemins if c not in exclusions):
             return "SECRET"                         # git add .env, git add -f .env
-        tout = any(o in ("-A", "--all", "-u", "--update") or o.startswith("--pathspec-from-file")
-                   or (not o.startswith("--") and set(o[1:]) & set("Au")) for o in options)
+        tout = any(o in ("-A", "--all") or o.startswith("--pathspec-from-file")
+                   or (not o.startswith("--") and "A" in o[1:]) for o in options)
+        # -u / --update : seulement les fichiers SUIVIS modifiés — un .env non suivi
+        # n'en fait pas partie (relecture xhigh : il faisait refuser « git add -u »).
+        suivis_seuls = not tout and any(o in ("-u", "--update") or (not o.startswith("--") and "u" in o[1:]) for o in options)
         force = any(o in ("-f", "--force") or (not o.startswith("--") and "f" in o[1:]) for o in options)
-        if not chemins and not tout:
+        if not chemins and not tout and not suivis_seuls:
             continue
         if not dossier or not os.path.isdir(dossier):
             dossier = depart if depart and os.path.isdir(depart) else None
         if not dossier:
             continue
-        cmd = ["git", *GIT_SUR, "-C", dossier, "ls-files", "-z", "-o", "-m"]
+        cmd = ["git", *GIT_SUR, "-C", dossier, "ls-files", "-z", "-m"] + ([] if suivis_seuls else ["-o"])
         if not force:
             cmd.append("--exclude-standard")
         cmd += ["--"] + ((chemins if len(exclusions) < len(chemins) else [":/"] + chemins) or [":/"])
@@ -2109,7 +2176,9 @@ def commit_de_cloture(texte, depart):
                 # -m "$(cat f)" : celle du fichier.
                 m = re.search(r"\bcat\s+([^\s)<>|;&]+)\s*\)", premier)
                 lu = lire_message(os.path.join(ici, os.path.expanduser(m.group(1)))) if m else None
-                candidats += [lu] if lu is not None else list(docs)
+                # Le texte du -m lui-même est jugé aussi : « -m "$(printf %s
+                # "cloture(phase 3)…")" » n'a ni cat ni document (relecture xhigh).
+                candidats += ([lu] if lu is not None else list(docs)) + [premier]
             else:
                 candidats.append(premier)
         for f in fichiers:
