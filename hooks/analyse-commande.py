@@ -524,7 +524,7 @@ LANCEURS_DE_PROJET = {"uv", "poetry", "pipenv", "pdm", "rye", "hatch"}
 
 
 def sans_enveloppe(mots):
-    """Retire VAR=x, sudo, env, nohup, screen, uv run, if, !… en tête : le vrai
+    """Retire VAR=x, sudo, env, nohup, screen, le « run » de uv, if, !… en tête : le vrai
     programme suit."""
     i = 0
     while i < len(mots):
@@ -533,7 +533,7 @@ def sans_enveloppe(mots):
         if re.fullmatch(r"[A-Za-z_]\w*=.*", m) or m in MOTS_CLES:
             i += 1
         elif nom in LANCEURS_DE_PROJET and i + 1 < len(mots) and mots[i + 1] == "run":
-            i += 2                                  # uv run …, poetry run …
+            i += 2                                  # le « run » de uv ou de poetry
             while i < len(mots) and mots[i].startswith("-"):
                 i += 2 if mots[i] in ("--with", "--python", "-p", "--env-file", "--project", "--directory") else 1
         elif nom in ENVELOPPES:

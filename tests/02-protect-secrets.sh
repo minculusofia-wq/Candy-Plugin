@@ -22,6 +22,8 @@ MOT_DE_PASSE="password"
 MNEMO="MNEMONIC"
 HEX64="0x$(python3 -c 'print("ab12cd34"*8)')"
 PHRASE_RECUP="$(printf 's%sd' 'ee') phrase"
+FIN_CLE="9Fj2LmQ8xT4vB7nR1cW0"
+FAUSSE_CLE="$(printf 'sk-%s-' 'proj')$FIN_CLE"
 DOUZE_MOTS="ridge quantum lantern velvet harbor mosaic pilgrim ember thistle cobalt murmur zenith"
 
 ecriture() { verifie "$1" "$2" "$(code_hook "$HOOK" "$(entree_ecriture /tmp/exemple.py "$3")")"; }
@@ -44,18 +46,18 @@ ecriture "un emplacement à remplir en majuscules" 0 "$CLE_API: \"REMPLACER_PAR_
 
 section "Secrets — ce qui doit BLOQUER (une vraie valeur)"
 ecriture "une clé privée écrite en dur"          2 "$CLE_PRIVEE = \"$HEX64\""
-ecriture "une clé d'API écrite en dur"           2 "$CLE_API = \"sk-proj-9Fj2LmQ8xT4vB7nR1cW0\""
+ecriture "une clé d'API écrite en dur"           2 "$CLE_API = \"$FAUSSE_CLE\""
 ecriture "le même secret au format .env"         2 "$CLE_PRIVEE=$HEX64"
 ecriture "une phrase de récupération de douze mots" 2 "$MNEMO = \"$DOUZE_MOTS\""
 verifie "la raison du blocage arrive à Claude (sur stderr)" \
-        1 "$(raison_hook "$HOOK" "$(entree_ecriture /tmp/exemple.py "$CLE_API = \"sk-proj-9Fj2LmQ8xT4vB7nR1cW0\"")")"
-RAISON_SECRET=$(entree_ecriture /tmp/exemple.py "$CLE_API = \"sk-proj-9Fj2LmQ8xT4vB7nR1cW0\"" | bash "$HOOK" 2>&1 >/dev/null)
+        1 "$(raison_hook "$HOOK" "$(entree_ecriture /tmp/exemple.py "$CLE_API = \"$FAUSSE_CLE\"")")"
+RAISON_SECRET=$(entree_ecriture /tmp/exemple.py "$CLE_API = \"$FAUSSE_CLE\"" | bash "$HOOK" 2>&1 >/dev/null)
 verifie "la raison ne recopie pas la valeur du secret" \
-        0 "$(printf '%s' "$RAISON_SECRET" | grep -c '9Fj2LmQ8xT4vB7nR1cW0')"
+        0 "$(printf '%s' "$RAISON_SECRET" | grep -c "$FIN_CLE")"
 # Un caractère invalide dans le chemin faisait planter le hook en code 1 — et
 # un code 1 laisse passer l'écriture (trouvé par la relecture de sécurité).
 ENTREE_INVALIDE=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"file_path":"/tmp/\ud800.py","content":sys.argv[1]}}))' \
-    "$CLE_API = \"sk-proj-9Fj2LmQ8xT4vB7nR1cW0\"")
+    "$CLE_API = \"$FAUSSE_CLE\"")
 verifie "un caractère invalide dans le chemin ne fait pas passer le secret" \
         2 "$(code_hook "$HOOK" "$ENTREE_INVALIDE")"
 
