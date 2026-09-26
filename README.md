@@ -242,9 +242,10 @@ See [tests/README.md](tests/README.md).
   (`tar -czf backup.tgz .env`), read back later. Two limits that are not
   displays: the git commands the hooks run (`ls-files`, `check-ignore`,
   `status`) obey the repo's configuration, git hooks included — it is not
-  cloned, but a repo already on disk carries it; and the phase gate quotes the
-  names of uncommitted files (`git status`), so a file name from the repo
-  reaches Claude's context.
+  cloned, but a repo already on disk carries it, and an archive that ships its
+  `.git` folder ships its `info/exclude` too: a phase advice stored there is
+  read; and the phase gate quotes the names of uncommitted files
+  (`git status`), so a file name from the repo reaches Claude's context.
 
 ## Deliberately not included
 

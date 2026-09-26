@@ -246,9 +246,10 @@ documents, et les pannes qu'il doit signaler au lieu de se taire. Voir
   ensuite. Deux limites qui ne sont pas des affichages : les commandes git que
   les hooks lancent (`ls-files`, `check-ignore`, `status`) obéissent à la
   configuration du dépôt, hooks de git compris — elle ne se clone pas, mais un
-  dépôt déjà présent la porte ; et la porte d'entrée cite les noms des fichiers
-  non commités (`git status`), donc un nom de fichier du dépôt arrive dans le
-  contexte de Claude.
+  dépôt déjà présent la porte, et une archive qui livre son dossier `.git`
+  livre aussi son `info/exclude` : un conseil de phase rangé dedans est lu ;
+  et la porte d'entrée cite les noms des fichiers non commités (`git status`),
+  donc un nom de fichier du dépôt arrive dans le contexte de Claude.
 
 ## Ce qui n'est pas là, volontairement
 
