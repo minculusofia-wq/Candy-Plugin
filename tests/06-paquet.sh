@@ -301,6 +301,11 @@ verifie "aucune commande ne lance un contrôle sur \"\$PWD\" :$(grep -nE '(verif
         0 "$(grep -cE '(verifier-projet|session-end-md-audit|jeu-de-documents)\.sh"? "\$PWD"' commands/*.md | awk -F: '{s+=$2} END {print s+0}')"
 verifie "/verifier lance aussi le contrôle du jeu de documents" \
         1 "$(grep -c 'hooks/jeu-de-documents.sh' commands/verifier.md)"
+# /fin-phase écrit dans .git/info/exclude : sans --path-format=absolute,
+# --git-path rend un chemin relatif au dossier de -C, que le shell ne partage
+# pas — le témoin et le conseil restaient non exclus (passe 3).
+verifie "/fin-phase écrit info/exclude par un chemin absolu" \
+        0 "$(grep -c 'rev-parse --git-path info/exclude' commands/fin-phase.md)"
 
 section "Paquet — les images des README existent"
 ABSENTES=$(python3 - <<'PY'

@@ -113,7 +113,7 @@ printf '### Phase 1 — Base 🟢\n### Phase 2 — Suite\n' > "$L/ROADMAP.md"
 for f in CLAUDE SPEC JOURNAL README; do echo "# $f" > "$L/$f.md"; done
 python3 -c 'print("\n".join("[lien %d](absent-%d.md)" % (i, i) for i in range(60)))' >> "$L/README.md"
 python3 -c 'print("conseil " * 2500)' > "$L/.claude-phase-suivante"
-echo ".claude-phase-suivante" > "$L/.gitignore"         # hors de git, comme l'écrit /fin-phase
+echo ".claude-phase-suivante" >> "$L/.git/info/exclude"  # hors de git, là où /fin-phase l'exclut
 mkdir -p "$L/backend"; echo x > "$L/backend/app.py"
 commiter "$L" init; echo "x = 2" > "$L/backend/app.py"
 S=$(porte "$L")
@@ -155,6 +155,19 @@ printf '### Phase 1 — Base\n' > "$Z/ROADMAP.md"
 for f in CLAUDE SPEC JOURNAL README; do echo "# $f" > "$Z/$f.md"; done
 printf 'TEXTE-VENU-DU-ZIP\n' > "$Z/.claude-phase-suivante"
 verifie "projet sans .git : le conseil n'est pas lu" 0 "$(a "$(porte "$Z")" "TEXTE-VENU-DU-ZIP")"
+# Passe 3 : une archive livrée AVEC son .git et un .gitignore qui exclut le
+# conseil le faisait lire — check-ignore ne disait pas d'où venait l'exclusion.
+# Seul .git/info/exclude compte : c'est là que /fin-phase l'écrit, et un
+# .gitignore, lui, voyage avec le dépôt.
+G=$(projet conseil-gitignore)
+printf '### Phase 1 — Base\n' > "$G/ROADMAP.md"
+for f in CLAUDE SPEC JOURNAL README; do echo "# $f" > "$G/$f.md"; done
+echo ".claude-phase-suivante" > "$G/.gitignore"
+commiter "$G" init
+printf 'TEXTE-VENU-DU-GITIGNORE\n' > "$G/.claude-phase-suivante"
+S=$(porte "$G")
+verifie "conseil exclu par le .gitignore du dépôt (livré avec lui) : non lu" 0 "$(a "$S" "TEXTE-VENU-DU-GITIGNORE")"
+verifie "  et la porte dit pourquoi" 1 "$(a "$S" "non lu")"
 verifie "le hook ne cite plus un contrôle qui n'existe pas dans le plugin" \
         0 "$(grep -c 'etat-des-phases' "$OUVERTURE")"
 

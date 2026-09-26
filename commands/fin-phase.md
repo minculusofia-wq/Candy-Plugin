@@ -176,7 +176,7 @@ D'abord écrire le témoin que le hook de clôture attend, avec le verdict dedan
 
 ```bash
 RACINE=$(git rev-parse --show-toplevel)
-EXCLU=$(git rev-parse --git-path info/exclude)
+EXCLU=$(git rev-parse --path-format=absolute --git-path info/exclude)
 grep -qx '.claude-phase-debug-done' "$EXCLU" 2>/dev/null || echo '.claude-phase-debug-done' >> "$EXCLU"
 printf '%s\n' "<VERDICT> — <points en attente, un par ligne>" > "$RACINE/.claude-phase-debug-done"
 ```
@@ -327,15 +327,20 @@ FIN
 Puis l'exclure de git, comme le témoin :
 
 ```bash
-EXCLU=$(git -C "${CLAUDE_PROJECT_DIR}" rev-parse --git-path info/exclude)
+EXCLU=$(git -C "${CLAUDE_PROJECT_DIR}" rev-parse --path-format=absolute --git-path info/exclude)
 grep -qxF '.claude-phase-suivante' "$EXCLU" 2>/dev/null || echo '.claude-phase-suivante' >> "$EXCLU"
 ```
+
+`--path-format=absolute` (git 2.31 ou plus) : sans lui, `--git-path` rend un
+chemin relatif au dossier de `-C`, que le shell ne partage pas — le `>>`
+écrivait alors à côté, et le conseil restait non exclu, donc non lu.
 
 Le fichier est **remplacé** à chaque fin de phase, jamais complété : un conseil
 périmé est pire que pas de conseil. Il reste hors de git — il décrit un réglage
 de session, pas un état du projet — et `ouverture-de-phase.sh` ne lit qu'un
-conseil que git ignore : un conseil suivi, ou en lien, pourrait venir d'un
-dépôt cloné.
+conseil exclu par `.git/info/exclude`, jamais par un `.gitignore` : un conseil
+suivi, en lien, ou exclu par un `.gitignore` — qui voyage avec le dépôt —
+pourrait venir d'un dépôt cloné ou d'une archive.
 
 **Et dire aussi si la phase qui s'ouvre méritera une relecture adversariale à sa
 sortie.** C'est un autre bouton, pas un sixième cran : l'effort règle la

@@ -195,14 +195,20 @@ CONSEIL=""
 for c in "$PROJET/.claude-phase-suivante" "$ORIGINE/.claude-phase-suivante"; do
     [[ -e "$c" || -L "$c" ]] && { CONSEIL="$c"; break; }
 done
-# /fin-phase l'ecrit hors de git et l'y exclut. Il n'est donc lu que s'il est
-# un fichier ordinaire (pas un lien) que git ignore : un conseil suivi, sous une
-# autre casse, en lien vers un fichier hors du depot (une cle), ou dans un
-# projet sans .git (archive) peut venir d'ailleurs, et son texte arriverait a
-# Claude comme une consigne (relecture de securite de la 0.3.5, deux passes).
-if [[ -n "$CONSEIL" ]] && { [[ -L "$CONSEIL" || ! -f "$CONSEIL" ]] || ! g -C "$(dirname "$CONSEIL")" check-ignore -q -- "$(basename "$CONSEIL")" 2>/dev/null; }; then
-    echo "⚠️ Conseil de phase (.claude-phase-suivante) non lu : il n'est pas exclu de git, ou n'est pas un fichier ordinaire."
-    echo "   /fin-phase l'ecrit et l'exclut de git ; un autre peut venir d'un depot clone. Le relire soi-meme."
+# /fin-phase l'ecrit hors de git et l'exclut par .git/info/exclude. Il n'est
+# donc lu que s'il est un fichier ordinaire (pas un lien) exclu par CE fichier :
+# un conseil suivi, sous une autre casse, en lien vers un fichier hors du depot
+# (une cle), dans un projet sans .git (archive), ou exclu par un .gitignore —
+# qui voyage avec le depot — peut venir d'ailleurs, et son texte arriverait a
+# Claude comme une consigne (relecture de securite de la 0.3.5, trois passes).
+conseil_exclu_localement() {  # 0 si git exclut $1 par .git/info/exclude, ce que seul /fin-phase ecrit ici
+    local source
+    source=$(g -C "$(dirname "$1")" check-ignore -v -- "$(basename "$1")" 2>/dev/null | head -1 | cut -d: -f1)
+    [[ "$source" == *info/exclude ]]
+}
+if [[ -n "$CONSEIL" ]] && { [[ -L "$CONSEIL" || ! -f "$CONSEIL" ]] || ! conseil_exclu_localement "$CONSEIL"; }; then
+    echo "⚠️ Conseil de phase (.claude-phase-suivante) non lu : il n'est pas exclu par .git/info/exclude (un .gitignore ne compte pas), ou n'est pas un fichier ordinaire."
+    echo "   /fin-phase l'ecrit et l'exclut la ; un autre peut venir d'un depot clone ou d'une archive. Le relire soi-meme."
     echo
     CONSEIL=""
 fi
