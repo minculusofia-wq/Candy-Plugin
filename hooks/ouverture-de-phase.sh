@@ -192,6 +192,16 @@ CONSEIL=""
 for c in "$PROJET/.claude-phase-suivante" "$ORIGINE/.claude-phase-suivante"; do
     [[ -f "$c" ]] && { CONSEIL="$c"; break; }
 done
+# /fin-phase le garde hors de git. Un conseil SUIVI vient donc d'ailleurs — un
+# depot clone peut le fournir — et son texte arriverait a Claude comme une
+# consigne : il n'est pas lu (relecture de securite de la 0.3.5).
+if [[ -n "$CONSEIL" ]] && git ls-files --error-unmatch -- "$CONSEIL" >/dev/null 2>&1; then
+    echo "⚠️ Le conseil de phase (.claude-phase-suivante) est suivi par git : non lu."
+    echo "   /fin-phase l'ecrit hors de git ; un conseil suivi peut venir d'un depot clone."
+    echo "   Le retirer de git (git rm --cached) et le relire soi-meme avant de s'en servir."
+    echo
+    CONSEIL=""
+fi
 if [[ -n "$CONSEIL" ]]; then
     echo "--- Reglage conseille pour cette phase (ecrit a la cloture de la precedente) ---"
     python3 -I -c 'import sys

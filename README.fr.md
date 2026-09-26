@@ -228,8 +228,12 @@ documents, et les pannes qu'il doit signaler au lieu de se taire. Voir
   ses variantes, ni clé (`.pem`, `.key`, `~/.ssh`), ni wallet. L'outil Read, la
   recherche Grep et une commande comme `cat .env` sont refusés. Ce qui ne montre
   que les noms reste permis : `grep -c`, `cut -d= -f1`, et la lecture d'un
-  réglage non secret (`grep '^DRY_RUN=' .env`). Si vous voulez que Claude voie
-  une valeur, copiez-la vous-même dans la conversation.
+  réglage dont la valeur est un booléen, un nombre ou un mot court
+  (`grep '^DRY_RUN=' .env`). Si vous voulez que Claude voie une valeur,
+  copiez-la vous-même dans la conversation. C'est un filet contre les façons
+  courantes d'afficher un secret — lecteurs, interprètes, `xargs`, liens,
+  recherche récursive —, pas une barrière : un programme qui lit le fichier
+  sans le nommer (un script, une bibliothèque dotenv) passe.
 
 ## Ce qui n'est pas là, volontairement
 

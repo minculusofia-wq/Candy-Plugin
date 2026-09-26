@@ -66,7 +66,9 @@ if os.path.isdir(chemin):
     except ac.TropGrand:
         print('TROP_GRAND'); sys.exit(0)
     drapeaux = ['-i'] if t.get('-i') else []
-    if any(t.get(k) for k in ('-A', '-B', '-C', 'context')):
+    # multiline : un motif sur plusieurs lignes, que la lecture ligne a ligne
+    # ne verrait jamais ; juge comme des lignes voisines (relecture de la 0.3.5).
+    if any(t.get(k) for k in ('-A', '-B', '-C', 'context', 'multiline')):
         drapeaux.append('-C=1')
     if trouves and ac.motif_trouve('rg', trouves, [str(t.get('pattern') or '')], drapeaux, ds):
         print('SECRET'); sys.exit(0)

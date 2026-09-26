@@ -30,6 +30,7 @@ import os
 import re
 import shlex
 import sys
+from urllib.parse import unquote
 
 PROFONDEUR = 6
 INCONNU = "__texte_calcule__"          # commande dont le texte n'est connu qu'à l'exécution
@@ -156,6 +157,53 @@ def fin_de_substitution(t, k):
     raise ValueError("$( non fermé")
 
 
+ECHAPPEMENTS_C = {"a": b"\a", "b": b"\b", "e": b"\x1b", "E": b"\x1b", "f": b"\f", "n": b"\n", "r": b"\r",
+                  "t": b"\t", "v": b"\v", "\\": b"\\", "'": b"'", '"': b'"', "?": b"?"}
+
+
+def chaine_ansi_c(t, j):
+    """Le texte d'un $'…' qui commence en t[j] (après « $' ») décodé comme bash
+    (\\x2e, \\056, \\u00e9, \\cA, \\'…), et l'indice qui suit l'apostrophe
+    fermante. Jusqu'à la relecture de la 0.3.5, cat $'\\x2eenv' passait, et
+    $'a\\'b' faisait échouer tout le découpage."""
+    res, n = bytearray(), len(t)
+    while j < n:
+        c = t[j]
+        if c == "'":
+            return res.decode("utf-8", "replace"), j + 1
+        if c == "\\" and j + 1 < n:
+            d = t[j + 1]
+            m = None
+            if d in ECHAPPEMENTS_C:
+                res += ECHAPPEMENTS_C[d]
+                j += 2
+            elif d in "01234567":
+                m = re.match(r"[0-7]{1,3}", t[j + 1:])
+                res.append(int(m.group(0), 8) & 0xFF)
+                j += 1 + len(m.group(0))
+            elif d == "x" and re.match(r"[0-9A-Fa-f]", t[j + 2:j + 3]):
+                m = re.match(r"[0-9A-Fa-f]{1,2}", t[j + 2:])
+                res.append(int(m.group(0), 16))
+                j += 2 + len(m.group(0))
+            elif d in "uU" and re.match(r"[0-9A-Fa-f]", t[j + 2:j + 3]):
+                m = re.match(r"[0-9A-Fa-f]{1,%d}" % (4 if d == "u" else 8), t[j + 2:])
+                try:
+                    res += chr(int(m.group(0), 16)).encode("utf-8")
+                except (ValueError, OverflowError):
+                    pass
+                j += 2 + len(m.group(0))
+            elif d == "c" and j + 2 < n:
+                res.append(ord(t[j + 2]) & 0x1F)
+                j += 3
+            else:
+                res += ("\\" + d).encode("utf-8")
+                j += 2
+        else:
+            res += c.encode("utf-8", "replace")
+            j += 1
+    raise ValueError("$' non fermé")
+
+
 def lexer(texte):
     """Découpe comme bash : mots décodés (apostrophes, guillemets, barres
     obliques), ponctuation groupée comme shlex (&&, >>, 2>…), commentaires
@@ -240,6 +288,11 @@ def lexer(texte):
                     morceau.append(c)
                     i += 1
             cur = (cur or "") + "".join(morceau)
+        elif c == "$" and t.startswith("$'", i):
+            decode, i = chaine_ansi_c(t, i + 2)
+            cur = (cur or "") + decode
+        elif c == "$" and t.startswith('$"', i):
+            i += 1                                  # $"…" : une chaîne traduite, lue comme "…"
         elif c == "$" and cur is not None and t.startswith("$(", i) and not t.startswith("$((", i):
             # /proc/$(pgrep -f app)/environ : le mot reste entier, le corps
             # est relu.
@@ -335,6 +388,8 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None):
             res.append((cur, ecrit, entrees, sep))
         elif ecrit:
             res.append(([":"], True, [], sep))      # « > fichier » seul : il vide le fichier
+        elif any(g == "fichier" for g, _ in entrees):
+            res.append((["cat"], False, entrees, sep))  # « $(< f) » : bash lit le fichier, comme cat
 
     i = 0
     while i < len(mots):
@@ -366,6 +421,8 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None):
         tete = orig[:len(orig) - len(mots_cmd)]
         entrees = entrees + [("prefixe", w.split("=", 1)[0]) for w in tete
                              if re.fullmatch(r"[A-Za-z_]\w*=.*", w)]
+        if mots_cmd and any(os.path.basename(w) == "xargs" for w in tete):
+            entrees = entrees + [("xargs", "")]     # ses arguments viennent de la commande d'avant
         if not mots_cmd:
             if any(os.path.basename(w.lstrip("\\")) in ("sudo", "doas", "su") for w in tete):
                 mots_cmd = ["sudo"]                 # sudo -s, sudo -i : un shell root qui lit son entrée
@@ -528,6 +585,19 @@ LECTEURS = {"cat", "less", "more", "head", "tail", "bat", "nl", "tac", "od", "xx
             "grep", "egrep", "fgrep", "zgrep", "rg", "ag", "done", "vim", "vi", "view", "nano",
             "sdiff", "comm", "tee"}
 CHERCHEURS = {"grep", "egrep", "fgrep", "zgrep", "rg", "ag"}
+# D'autres programmes qui affichent ou envoient un fichier nommé en argument, y
+# compris en valeur d'option (dd if=f, openssl -in f, curl -d @f, curl file://f).
+# La liste ne sera jamais complète : elle couvre les formes courantes, et un
+# programme qui lit un fichier sans le nommer (un script, dotenv) passe.
+LECTEURS_EN_PLUS = {"dd", "tar", "bsdtar", "gtar", "zip", "gzip", "gunzip", "bzip2", "xz", "zstd", "lz4",
+                    "compress", "curl", "wget", "iconv", "look", "openssl", "sqlite3", "base32", "basenc",
+                    "uuencode", "gpg", "age", "split", "csplit", "cmp", "fmt", "vis", "ex", "ed", "nvim",
+                    "emacs", "micro", "pico", "textutil", "nc", "ncat", "netcat", "socat", "mail", "mailx",
+                    "sendmail", "http", "xh", "hexyl", "view", "unexpand", "join", "nl"}
+# Interprètes : le code qu'ils reçoivent (-c, -e, un document <<EOF) est lu,
+# et un nom de fichier de secrets écrit dans une chaîne compte comme une lecture.
+INTERPRETES_CODE = re.compile(r"(python[\d.]*|pypy[\d.]*|perl[\d.]*|ruby|irb|node|nodejs|deno|bun|php[\d.]*|"
+                              r"lua[\d.]*|luajit|Rscript|osascript|tclsh|julia)$")
 # Options suivies d'une valeur, par commande (la valeur n'est pas un fichier lu).
 A_VALEUR = {"grep": "efmABCdD", "egrep": "efmABCdD", "fgrep": "efmABCdD", "zgrep": "efmABCdD",
             "rg": "efmABCgtT", "ag": "fmABCG", "sed": "ef", "awk": "Ffv", "gawk": "Ffv",
@@ -538,8 +608,13 @@ PROGRAMME_D_ABORD = CHERCHEURS | {"sed", "awk", "gawk", "jq", "yq", "tr"}
 # ntfy, topic, webhook, rpc, dsn : un sujet de notification se lit comme un mot
 # de passe (quiconque le connaît lit et envoie les alertes), une URL de RPC ou
 # un DSN portent souvent leur clé.
+# Relecture de la 0.3.5 : url, api, database, session… manquaient (DATABASE_URL,
+# ALCHEMY_API, ETH_WSS_URL passaient pour des réglages).
 NOM_SECRET = re.compile(r"key|secret|token|pass|pwd|cred|auth|mnemonic|seed|priv|wallet|signer"
-                        r"|ntfy|topic|webhook|rpc|dsn", re.I)
+                        r"|ntfy|topic|webhook|rpc|dsn|url|uri|api|database|(^|_)db(_|$)|conn|wss|blind|salt"
+                        r"|cookie|session|jwt|bearer|account|keypair|(^|_)[ps]k(_|$)", re.I)
+# Valeur d'un réglage qui peut s'afficher : booléen, nombre, mot court.
+INOFFENSIF = re.compile(r"(?i)true|false|yes|no|on|off|none|null|-?\d{1,12}(\.\d+)?|[a-z][a-z_-]{0,11}")
 REGLAGE = re.compile(r"\^(?:\(([A-Za-z_][A-Za-z0-9_|]*)\)|([A-Za-z_][A-Za-z0-9_]*))=(\.\*)?\$?")
 CONTEXTE_GREP = set("ABCvz")
 CONTEXTE_GREP_LONG = ("--context", "--after-context", "--before-context", "--invert-match", "--null-data",
@@ -620,7 +695,7 @@ def lecture_masquee(nom, programme, options, motifs=None):
             r = REGLAGE.fullmatch(m)
             if not r or any(NOM_SECRET.search(n) for n in (r.group(1) or r.group(2)).split("|")):
                 return False
-        return True
+        return "reglage"                            # permis si la VALEUR lue l'est (reglages_inoffensifs)
     if nom == "cut":
         return "-d==" in options and "-f=1" in options and "--complement" not in options
     if nom == "sed":
@@ -653,12 +728,115 @@ def accolades(motif):
     return [r for x in m.group(1).split(",") for r in accolades(motif[:m.start()] + x + motif[m.end():])]
 
 
+def reglages_inoffensifs(motifs, fichiers, dossier):
+    """grep '^DRY_RUN=' .env : permis si chaque valeur que la commande
+    afficherait est un booléen, un nombre ou un mot court. Jusqu'à la
+    relecture de la 0.3.5, seul le nom était jugé : grep '^DATABASE_URL=' .env
+    affichait le mot de passe de la base."""
+    noms = set()
+    for m in motifs:
+        r = REGLAGE.fullmatch(m)
+        if not r:
+            return False
+        noms.update(n.lower() for n in (r.group(1) or r.group(2)).split("|"))
+    chemins = []
+    for f in fichiers:
+        c = os.path.expanduser(f)
+        c = c if os.path.isabs(c) or not dossier else os.path.join(dossier, c)
+        try:
+            chemins += glob.glob(c) if JOKER.search(f) else [c]
+        except (re.error, OSError, ValueError):
+            return False
+    for c in chemins:
+        try:
+            with open(c, encoding="utf-8", errors="replace") as h:
+                lignes = h.read(2_000_000).splitlines()
+        except FileNotFoundError:
+            continue                                # rien à afficher
+        except OSError:
+            return False
+        for ligne in lignes:
+            m = re.match(r"\s*(?:export\s+)?([A-Za-z_]\w*)\s*=\s*(.*)$", ligne)
+            if m and m.group(1).lower() in noms:
+                v = re.sub(r"\s+#.*$", "", m.group(2)).strip().strip("'\"")
+                if v and not INOFFENSIF.fullmatch(v):
+                    return False
+    return True
+
+
+def chaines_du_code(code):
+    """Les chaînes entre guillemets d'un code (python -c, node -e, awk…) : un
+    nom de fichier y est toujours écrit ainsi."""
+    return [m.group(2) for m in re.finditer(r"""(["'])((?:(?!\1).)+)\1""", code or "")]
+
+
+def chemins_du_mot(w):
+    """Les chemins qu'un argument peut désigner : lui-même, la valeur d'une
+    option (if=f, --file=f), @f (curl -d @f), file:///chemin."""
+    res = [w]
+    if "=" in w:
+        res.append(w.split("=", 1)[1])
+    if w.startswith("@"):
+        res.append(w[1:])
+    m = re.match(r"(?i)file://(?:localhost)?(/.*)", w)
+    if m:
+        res.append(unquote(m.group(1)))
+    return [x for x in res if x]
+
+
+def noms_passes_a_xargs(cmds, k, dossier, distant, detection):
+    """« … | xargs cat » : xargs donne à cat les noms qu'écrit la commande
+    d'avant. Les fichiers de secrets qu'elle peut écrire, ou [] :
+    find sans -name → ceux du dossier parcouru ; find -name '.env*', echo .env,
+    grep -rl → ceux qu'ils désignent. Jusqu'à la relecture de la 0.3.5, xargs
+    était une simple enveloppe et cat arrivait sans argument."""
+    if k == 0 or cmds[k - 1][3] not in ("|", "|&"):
+        return []
+    mots = cmds[k - 1][0]
+    nom = os.path.basename(mots[0].lstrip("\\"))
+    if nom in ("find", "fd", "fdfind"):
+        motifs = [mots[i + 1] for i in range(len(mots) - 1)
+                  if mots[i] in ("-name", "-iname", "-path", "-ipath", "-g", "--glob")]
+        if motifs:
+            return [m for m in motifs if designe_un_secret(m.split("/")[-1], dossier, True, detection)]
+        racines = [a for a in mots[1:] if not a.startswith("-") and a not in ("!", "(", ")")][:1] or ["."]
+        return recherche_recursive("grep", racines, ["-r"], dossier, detection)
+    if nom == "ls":
+        options = "".join(a[1:] for a in mots[1:] if a.startswith("-") and not a.startswith("--"))
+        tous = bool(set(options) & set("aA"))
+        res = []
+        for d in [a for a in mots[1:] if not a.startswith("-")] or ["."]:
+            base = os.path.join(dossier or "", os.path.expanduser(d))
+            if not os.path.isdir(base):
+                if designe_un_secret(d, dossier, distant, detection):
+                    res.append(base)                # ls .env | xargs cat
+                continue
+            try:
+                noms = os.listdir(base)
+            except OSError:
+                noms = []
+            res += [os.path.join(base, x) for x in noms if (tous or not x.startswith("."))
+                    and detection.est_fichier_de_secrets(os.path.join(base, x))]
+        return res
+    if nom in CHERCHEURS:
+        fichiers, _, options = lire_arguments(nom, mots[1:])
+        courtes = "".join(o[1:] for o in options if not o.startswith("--") and "=" not in o)
+        if set(courtes) & set("lL") or "--files-with-matches" in options:
+            directs = [f for f in fichiers if designe_un_secret(f, dossier, distant, detection)]
+            return directs or ([] if distant else recherche_recursive(nom, fichiers, options, dossier, detection))
+    return [x for a in mots[1:] for x in chemins_du_mot(a) if designe_un_secret(x, dossier, distant, detection)]
+
+
 def designe_un_secret(arg, dossier, distant, detection):
     """L'argument désigne-t-il un fichier de secrets ? Un joker est développé
     comme bash dans le dossier de la commande ; à distance, où rien ne se
-    développe ici, son dernier morceau est jugé (.env*)."""
+    développe ici, son dernier morceau est jugé (.env*). Un lien vers un
+    fichier de secrets en est un (detection-secrets suit les liens)."""
     if detection.est_fichier_de_secrets(arg):
         return True
+    if not distant and dossier and not JOKER.search(arg) and not os.path.isabs(os.path.expanduser(arg)):
+        if detection.est_fichier_de_secrets(os.path.join(dossier, os.path.expanduser(arg))):
+            return True
     if not JOKER.search(arg):
         return False
     for motif in accolades(arg):
@@ -780,9 +958,8 @@ def recherche_recursive(nom, fichiers, options, dossier, detection):
                 if vus > LIMITE_PARCOURS:
                     # S'arrêter en rendant la liste partielle laissait passer
                     # « grep -r KEY » lancé depuis un dossier immense : on ne
-                    # sait pas, donc on le dit.
-                    if trouves:
-                        return trouves
+                    # sait pas, donc on le dit. Même si un fichier de secrets a
+                    # déjà été vu : un autre peut suivre (relecture de la 0.3.5).
                     raise TropGrand()
                 if (not caches and f.startswith(".")) or any(fnmatch.fnmatch(f, e) for e in exclus):
                     continue
@@ -815,12 +992,19 @@ def motif_trouve(nom, fichiers, motifs, options, detection):
     if set(courtes) & set("ABC") or any(re.fullmatch(r"-[ABC]=.*", o) for o in options) \
             or any(o.split("=", 1)[0] in ("--context", "--after-context", "--before-context") for o in options):
         return True
+    # -f : les motifs sont dans un fichier, qu'on ne lit pas ici.
+    if any(o.startswith(("-f=", "--file")) for o in options):
+        return True
     if "F" in courtes or nom == "fgrep" or "--fixed-strings" in options:
         rx = [re.escape(m) for m in motifs]
     elif "E" in courtes or "P" in courtes or nom in ("egrep", "rg", "ag") or "--extended-regexp" in options:
         rx = list(motifs)
     else:
         rx = [bre_en_python(m) for m in motifs]
+    if not ("F" in courtes or nom == "fgrep" or "--fixed-strings" in options):
+        rx = [classes_posix(r) for r in rx]
+        if None in rx:
+            return True                             # une classe inconnue : on ne sait pas ce qu'elle trouve
     drapeaux = re.I if ("i" in courtes or "--ignore-case" in options) else 0
     if "w" in courtes:
         rx = [rf"\b(?:{r})\b" for r in rx]
@@ -839,6 +1023,28 @@ def motif_trouve(nom, fichiers, motifs, options, detection):
     return False
 
 
+CLASSES_POSIX = {"alpha": "a-zA-Z", "digit": "0-9", "alnum": "a-zA-Z0-9", "upper": "A-Z", "lower": "a-z",
+                 "space": r"\s", "blank": r" \t", "punct": r"!-/:-@\[-`{-~", "print": r"\x20-\x7e",
+                 "graph": r"\x21-\x7e", "xdigit": "0-9A-Fa-f", "cntrl": r"\x00-\x1f\x7f", "word": r"\w"}
+
+
+def classes_posix(rx):
+    """[[:print:]], \\< \\>, [[:<:]] de grep → Python, qui ne les connaît pas :
+    jusqu'à la relecture de la 0.3.5, grep -r '[[:print:]]' trouvait tout et
+    le hook, rien. None si une classe est inconnue."""
+    rx = rx.replace("[[:<:]]", r"\b").replace("[[:>:]]", r"\b")
+    inconnues = []
+
+    def classe(m):
+        v = CLASSES_POSIX.get(m.group(1))
+        if v is None:
+            inconnues.append(m.group(1))
+        return v or ""
+    rx = re.sub(r"\[:(\w+):\]", classe, rx)
+    rx = rx.replace(r"\<", r"\b").replace(r"\>", r"\b")
+    return None if inconnues else rx
+
+
 def bre_en_python(motif):
     """Motif grep de base (BRE) → Python : \\( \\) \\| \\{ \\} \\+ \\? sont des
     opérateurs, ( ) | { } + ? seuls sont littéraux."""
@@ -855,7 +1061,7 @@ def bre_en_python(motif):
     return "".join(sortie)
 
 
-def sortie_masquee(cmds, k, texte):
+def sortie_masquee(cmds, k, texte, sources=None, dossier=None):
     """La sortie du lecteur cmds[k] part-elle dans un tube qui ne garde que
     les noms ou un compte (cat .env | cut -d= -f1, … | grep -c, … | wc -l) ?
     « export $(grep -v '^#' .env | xargs) » aussi : la sortie devient des
@@ -874,7 +1080,10 @@ def sortie_masquee(cmds, k, texte):
         if nom in LECTEURS:
             motifs = []
             _, programme, options = lire_arguments(nom, mots[1:], motifs)
-            if lecture_masquee(nom, programme, options, motifs):
+            masque = lecture_masquee(nom, programme, options, motifs)
+            if masque == "reglage":
+                return bool(sources) and reglages_inoffensifs(motifs, sources, dossier)
+            if masque:
                 return True
         if nom not in FILTRES:
             return False
@@ -976,7 +1185,8 @@ def verdict_secret(texte, detection=None, prof=0, depart=None, distant=False):
         if nom in ("source", ".") and len(mots) > 1 and designe_un_secret(mots[1], dossier, distant, detection):
             charge = True
             continue
-        if nom in ("cp", "mv", "install", "ditto", "scp", "rsync") and copie_d_un_secret(nom, mots[1:], dossier, distant, detection):
+        if nom in ("cp", "mv", "install", "ditto", "scp", "rsync", "ln") and \
+                copie_d_un_secret(nom, mots[1:], dossier, distant, detection):
             return "SECRET"
         affiche = False
         if nom in ("echo", "printf"):
@@ -985,8 +1195,9 @@ def verdict_secret(texte, detection=None, prof=0, depart=None, distant=False):
             noms = [a for a in mots[1:] if not a.startswith("-")]
             affiche = any(NOM_SECRET.search(x) and not NON_SECRET_VAR.search(x) for x in noms) or (charge and not noms)
         elif charge and ((nom in ("env", "set") and len(mots) == 1)
-                         or (nom in ("export", "declare", "typeset") and any(o in ("-p", "-x") for o in mots[1:]))):
-            affiche = True
+                         or (nom in ("export", "declare", "typeset", "readonly")
+                             and (len(mots) == 1 or any(o in ("-p", "-x") for o in mots[1:])))):
+            affiche = True                          # declare, export seuls : tout l'environnement
         if affiche:
             if sortie_masquee(cmds, k, texte):
                 continue
@@ -1015,17 +1226,50 @@ def verdict_secret(texte, detection=None, prof=0, depart=None, distant=False):
             continue
         if nom == "systemctl" and "show" in mots and any("Environment" in a for a in mots):
             return "SECRET"
+        code = INTERPRETES_CODE.match(nom) is not None
+        # « … | xargs cat » : les noms viennent de la commande d'avant.
+        venus = []
+        if any(g == "xargs" for g, _ in entrees) and (nom in LECTEURS or nom in LECTEURS_EN_PLUS or code):
+            venus = noms_passes_a_xargs(cmds, k, dossier, distant, detection)
+        if code or nom in LECTEURS_EN_PLUS:
+            # Interprètes (python -c, node -e, perl, un document <<EOF) et autres
+            # lecteurs (dd if=f, curl -d @f, openssl -in f, tar, iconv…).
+            candidats = [x for a in mots[1:] if not (code and a.startswith("-")) for x in chemins_du_mot(a)]
+            if code:
+                candidats += [x for a in mots[1:] for x in chaines_du_code(a)]
+                candidats += [x for g, v in entrees if g in ("texte", "document") for x in chaines_du_code(v)]
+            else:
+                candidats += [x for a in mots[1:] if re.search(r"\s", a) for x in a.split()]
+            if venus or any(designe_un_secret(x, dossier, distant, detection) for x in candidats + lus):
+                if sortie_masquee(cmds, k, texte):
+                    continue
+                return "SECRET"
+            continue
         if nom not in LECTEURS:
             continue
         motifs = []
         fichiers, programme, options = lire_arguments(nom, mots[1:], motifs)
         if nom == "tee":
             fichiers = []                           # tee écrit ses arguments ; seul « < f » est lu
-        if not any(designe_un_secret(f, dossier, distant, detection) for f in fichiers + lus):
+        # awk 'BEGIN{getline l < ".env"}', sed 'r .env' : un fichier nommé dans le programme.
+        if programme and nom in ("awk", "gawk"):
+            fichiers = fichiers + chaines_du_code(programme)
+        elif programme and nom in ("sed", "gsed"):
+            fichiers = fichiers + re.findall(r"(?:^|[;{}\n/!$\d])\s*[rR]\s*([^\s;}]+)", programme)
+        secrets = [f for f in fichiers + lus if designe_un_secret(f, dossier, distant, detection)]
+        if venus:
+            secrets += venus if nom not in CHERCHEURS else [v for v in venus if os.path.isfile(v)]
+            if nom in CHERCHEURS and secrets and not motif_trouve(nom, secrets, motifs, options, detection):
+                continue
+        if not secrets:
             caches = [] if distant else recherche_recursive(nom, fichiers, options, dossier, detection)
             if not caches or not motif_trouve(nom, caches, motifs, options, detection):
                 continue
-        if lecture_masquee(nom, programme, options, motifs) or sortie_masquee(cmds, k, texte):
+            secrets = caches
+        masque = lecture_masquee(nom, programme, options, motifs)
+        if masque == "reglage":
+            masque = reglages_inoffensifs(motifs, secrets, dossier)
+        if masque or sortie_masquee(cmds, k, texte, secrets, dossier):
             continue
         return "SECRET"
     return "OK"
@@ -1127,10 +1371,17 @@ def ajouts_git(texte, depart):
             sous, args = sous_commande(mots, i, d or dossier or depart)
             if sous in ("add", "stage"):
                 res.append((d, args))
+            elif sous == "update-index" and "--add" in args:
+                autres = [a for a in args if a != "--add"]
+                res.append((d, autres + (["--all"] if "--stdin" in autres or "--index-info" in autres else [])))
     # « … | xargs git add » : xargs est une enveloppe, git add arrive sans chemin
     # visible ; il est jugé comme « git add -A ».
     if re.search(r"\bxargs\b[^|;&]*\bgit\b[^|;&]*\b(add|stage)\b", texte):
         res = [(d, a if any(not x.startswith("-") for x in a) else a + ["--all"]) for d, a in res]
+    # git add $(…), git add "$f", git add `…` : le chemin n'est connu qu'à
+    # l'exécution ; jugé comme « git add -A » (relecture de la 0.3.5).
+    if re.search(r"\bgit\b[^|;&\n]*\b(add|stage|update-index)\b[^|;&\n]*[$`]", texte):
+        res = [(d, [x for x in a if "$" not in x and "`" not in x] + ["--all"]) for d, a in res]
     return res
 
 
@@ -1357,6 +1608,9 @@ def commit_de_cloture(texte, depart):
 # bash non plus ne l'exécuterait, il s'arrête sur une erreur de syntaxe. On la
 # lit alors prudemment, par motifs. Avant, l'erreur sortait en code 3 et le
 # garde-fou refusait avec un faux motif (« Python introuvable »).
+# Une recherche récursive ou des noms passés par xargs, dans une ligne
+# illisible : elle peut montrer un .env sans le nommer.
+RECHERCHE_BRUTE = re.compile(r"\b[efz]?grep\b[^|;&\n]*\s-\w*[rR]|\b(rg|ag)\b|\bxargs\b|\$\(\s*<")
 NOM_DE_SECRET_BRUT = re.compile(r"\.env\b|\.pem\b|\.key\b|/environ\b|id_(rsa|ed25519|ecdsa|dsa)\b|wallet|keystore|"
                                 r"mnemonic|\.claude\.json|\.git-credentials|\.netrc", re.I)
 
@@ -1374,7 +1628,8 @@ def lire_entree():
 
 def protection(t, texte, depart):
     detection = _detection()
-    for ou, cle in (("commande", "command"), ("fichier", "content"), ("edition", "new_string")):
+    for ou, cle in (("commande", "command"), ("fichier", "content"), ("edition", "new_string"),
+                    ("edition", "new_source")):
         v = t.get(cle)
         if isinstance(v, str) and detection.valeur_secrete(v):
             return f"VALEUR\t{ou}"
@@ -1386,7 +1641,7 @@ def protection(t, texte, depart):
     except TropGrand:
         return "TROP_GRAND"
     except ValueError:
-        if NOM_DE_SECRET_BRUT.search(texte):
+        if NOM_DE_SECRET_BRUT.search(texte) or RECHERCHE_BRUTE.search(texte):
             return "LECTURE"
     try:
         ajout = ajout_secret(texte, depart)

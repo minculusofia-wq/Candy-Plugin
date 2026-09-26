@@ -44,9 +44,23 @@ SSH_PERMIS = {"config", "authorized_keys", "known_hosts", "known_hosts.old", "en
 def est_fichier_de_secrets(chemin):
     """Comparé comme macOS (APFS) compare les noms : chemin normalisé, forme
     NFKC, casse repliée (« .ENV », « wallet.jſon »). Les modèles sans valeur
-    (.env.example, *.template) et les clés publiques (.pub) restent libres."""
+    (.env.example, *.template) et les clés publiques (.pub) restent libres.
+    Un lien vers un fichier de secrets en est un : jusqu'à la relecture de la
+    0.3.5, Read, Write et Grep passaient par un lien nommé « notes »."""
     if not chemin or not isinstance(chemin, str):
         return False
+    if par_le_nom(chemin):
+        return True
+    try:
+        if os.path.islink(chemin) or os.path.exists(chemin):
+            reel = os.path.realpath(chemin)
+            return reel != os.path.abspath(chemin) and par_le_nom(reel)
+    except (OSError, ValueError):
+        pass
+    return False
+
+
+def par_le_nom(chemin):
     p = os.path.normpath(unicodedata.normalize("NFKC", chemin).casefold())
     parties = p.split(os.sep)
     b = parties[-1]
@@ -75,15 +89,20 @@ def est_fichier_de_secrets(chemin):
 # Un nom qui annonce un secret…
 SENSIBLE = re.compile(r"(priv(ate)?[_-]?key|secret|api[_-]?key|access[_-]?token|auth[_-]?token|"
                       r"refresh[_-]?token|(^|[_-])token$|bearer|mnemonic|seed[_-]?phrase|"
-                      r"pass[_-]?phrase|password|passwd|wallet[_-]?key|signing[_-]?key|ntfy[_-]?topic)", re.I)
+                      r"pass[_-]?phrase|password|passwd|wallet[_-]?key|signing[_-]?key|ntfy[_-]?topic|"
+                      r"keypair|(^|[_-])[ps]k$)", re.I)
 # … sauf s'il désigne autre chose que la valeur (CLIENT_SECRET_FILE, API_KEY_HEADER).
 PAS_UNE_VALEUR = re.compile(r"[_-](name|file|path|dir|id|ids|arn|url|uri|env|var|header|field|type|"
                             r"len|length|hash|prefix|suffix|count|enabled|set|present|ok|regex|pattern)$", re.I)
 
-CITE = re.compile(r"(?P<n>[A-Za-z_][\w.-]*)[\"']?\s*(?::=|=>|[:=])\s*(?P<q>[\"'])(?P<v>(?:(?!(?P=q)).){0,4000}?)(?P=q)")
+# (?<![\w.-]) : le nom commence au début d'un mot. Sans cela, chaque caractère
+# d'un long mot (bytecode hexadécimal) relançait la recherche jusqu'au bout de
+# la fenêtre : 600 Ko prenaient 25 s, et un hook qui dépasse son délai laisse
+# passer l'action (relecture de la 0.3.5).
+CITE = re.compile(r"(?<![\w.-])(?P<n>[A-Za-z_][\w.-]*)[\"']?\s*(?::=|=>|[:=])\s*(?P<q>[\"'])(?P<v>(?:(?!(?P=q)).){0,4000}?)(?P=q)")
 # La valeur nue s'arrête aussi sur un guillemet : echo "API_SECRET=…" >> .env,
 # docker run -e "…", - "…" d'un docker-compose.
-NUE = re.compile(r"(?P<n>[A-Za-z_][\w.-]*)[\"']?\s*[:=]\s*(?P<v>[^\s\"'#;,&|)}\]]+)(?=\s|$|[#;,&|)}\]\"'])")
+NUE = re.compile(r"(?<![\w.-])(?P<n>[A-Za-z_][\w.-]*)[\"']?\s*[:=]\s*(?P<v>[^\s\"'#;,&|)}\]]+)(?=\s|$|[#;,&|)}\]\"'])")
 
 GABARIT = re.compile(r"""
       \$\{[^}]*\}? | \$\([^)]*\) | \{\{[^}]*\}\} | \$[A-Za-z_]\w*
@@ -128,7 +147,7 @@ def ressemble_a_un_secret(v, entre_guillemets):
 
 HEX64 = re.compile(r"(?<![0-9A-Za-z])0x[0-9a-fA-F]{64}(?![0-9a-fA-F])")
 HEX64_NU = re.compile(r"(?<![0-9A-Za-z])[0-9a-fA-F]{64}(?![0-9A-Za-z])")
-NOM_AVANT = re.compile(r"(?P<n>--?[\w-]+|[A-Za-z_][\w.-]*)[\"']?\s*(?:=>|:=|[:=(,\[]|\s)\s*[\"']?\s*$")
+NOM_AVANT = re.compile(r"(?<![\w.-])(?P<n>--?[\w-]+|[A-Za-z_][\w.-]*)[\"']?\s*(?:=>|:=|[:=(,\[]|\s)\s*[\"']?\s*$")
 NOM_DE_HASH = re.compile(r"(hash|_id|id|digest|root|salt|sig|signature|nonce|(^|[_-])tx|expected|attendu)$", re.I)
 CLE_DANS_LE_NOM = re.compile(r"key|priv|(^|[_-])pk($|[_-])|^pk|secret|signer|wallet|mnemonic|seed|"
                              r"account|credential", re.I)
@@ -136,6 +155,7 @@ CONTEXTE_HASH = re.compile(r"hash|\btx|txn|transaction|digest|sha|block|root|sal
                            r"market|topic|event|sig|nonce|merkle|parent|collection|position|asset|order|"
                            r"receipt|\.log\b|logs?/|polygonscan|etherscan|explorer", re.I)
 PEM = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
+CONVERSION = re.compile(r"(?i)fromhex|unhexlify|hexbytes|decode_hex|to_bytes|bytes")
 
 
 def cle_0x(ligne, contexte=""):
@@ -164,6 +184,10 @@ def cle_0x(ligne, contexte=""):
             continue
         avant = NOM_AVANT.search(ligne[:m.start()])
         nom = (avant.group("n").split(".")[-1] if avant else "")
+        if CONVERSION.fullmatch(nom):
+            # from_key(bytes.fromhex("…")) : le nom de clé est avant la conversion.
+            cle = CLE_DANS_LE_NOM.search(ligne[:m.start()])
+            nom = cle.group(0) if cle else ""
         if nom and CLE_DANS_LE_NOM.search(nom) and not NOM_DE_HASH.search(nom):
             return nom
     return None
@@ -174,6 +198,15 @@ JETON_URL = re.compile(r"api\.telegram\.org/bot\d+:[\w-]{30,}"
                        r"|discord(?:app)?\.com/api/webhooks/\d+/[\w-]{40,}"
                        r"|(?:alchemy\.com|infura\.io|quiknode\.pro|quicknode\.com)\S*/v[23]/[\w-]{24,}"
                        r"|\bBearer\s+(?!\$|\{|<)[\w.~+/=-]{20,}", re.I)
+# Jetons reconnaissables à leur préfixe, quel que soit le nom qui les porte.
+JETON_PREFIXE = re.compile(r"(?<![\w-])(gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}|glpat-[\w-]{20,}"
+                           r"|xox[abprs]-[\w-]{10,}|sk-ant-[\w-]{20,}|sk-(?:proj-)?[A-Za-z0-9_-]{32,}"
+                           r"|AKIA[0-9A-Z]{16}|AIza[\w-]{35}|npm_[A-Za-z0-9]{36})(?![\w-])")
+# Mot de passe écrit dans une URL : schéma://utilisateur:motdepasse@hôte.
+URL_MDP = re.compile(r"(?i)\b[a-z][a-z0-9+.-]*://[^\s:/@'\"]+:(?P<p>[^\s@/'\"]+)@")
+MDP_FACTICES = {"password", "passwd", "pass", "pwd", "secret", "motdepasse", "mot_de_passe", "changeme", "admin",
+                "root", "user", "postgres", "mysql", "guest"}
+FAUX_EXPRES = re.compile(r"(?i)fake|test|mauvais|faux|wrong|invalid|bad|dummy|example|x{3,}")
 # Phrase de récupération sans guillemets : le nom suivi de 11 mots ou plus.
 PHRASE = re.compile(r"(?i)(mnemonic|seed[_-]?phrase|recovery[_-]?phrase)[\"']?\s*[:=]\s*[\"']?"
                     r"([a-z]+(?:\s+[a-z]+){10,})")
@@ -187,8 +220,15 @@ def valeur_secrete(texte):
         return "clé PEM"
     for m in JETON_URL.finditer(texte):
         jeton = m.group(0).split()[-1]
-        if not re.search(r"(?i)fake|test|mauvais|faux|wrong|invalid|bad|dummy|example|x{3,}", jeton):
+        if not FAUX_EXPRES.search(jeton):
             return "jeton dans une URL"             # un jeton exprès faux d'un essai reste libre
+    for m in JETON_PREFIXE.finditer(texte):
+        if not FAUX_EXPRES.search(m.group(0)):
+            return "jeton"
+    for m in URL_MDP.finditer(texte):
+        mdp = m.group("p")
+        if not (GABARIT.search(mdp) or FACTICE.match(mdp) or mdp.lower() in MDP_FACTICES):
+            return "mot de passe dans une URL"
     m = PHRASE.search(texte)
     if m and not FACTICE.match(m.group(2)):
         return m.group(1)
@@ -222,9 +262,10 @@ def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     d, ti = entree()
     if mode == "fichier":
-        print("SECRET" if est_fichier_de_secrets(ti.get("file_path") or "") else "OK")
+        print("SECRET" if est_fichier_de_secrets(ti.get("file_path") or ti.get("notebook_path") or "") else "OK")
     elif mode == "valeur":
-        for ou, cle in (("commande", "command"), ("fichier", "content"), ("edition", "new_string")):
+        for ou, cle in (("commande", "command"), ("fichier", "content"), ("edition", "new_string"),
+                        ("edition", "new_source")):
             nom = valeur_secrete(ti.get(cle) or "")
             if nom:
                 print(f"{ou}\t{nom[:40]}")

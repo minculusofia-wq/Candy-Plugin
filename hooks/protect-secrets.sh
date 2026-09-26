@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# protect-secrets.sh (PreToolUse : Bash, Monitor, Write, Edit)
+# protect-secrets.sh (PreToolUse : Bash, Monitor, Write, Edit, NotebookEdit)
 #
 # Refuse trois choses :
 #   1. une VALEUR secrete dans une commande, un fichier ecrit ou une edition :

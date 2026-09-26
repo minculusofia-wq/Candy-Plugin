@@ -225,8 +225,12 @@ See [tests/README.md](tests/README.md).
   its variants, not a key (`.pem`, `.key`, `~/.ssh`), not a wallet. The Read
   tool, a Grep search and a command such as `cat .env` are refused. What only
   shows names is still allowed: `grep -c`, `cut -d= -f1`, and reading a
-  non-secret setting (`grep '^DRY_RUN=' .env`). If you want Claude to see a
-  value, paste it into the conversation yourself.
+  setting whose value is a boolean, a number or a short word
+  (`grep '^DRY_RUN=' .env`). If you want Claude to see a value, paste it into
+  the conversation yourself. It is a net against the usual ways of printing a
+  secret — readers, interpreters, `xargs`, links, recursive search — not a
+  wall: a program that reads the file without naming it (a script, a dotenv
+  library) gets through.
 
 ## Deliberately not included
 
