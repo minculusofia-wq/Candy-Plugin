@@ -69,8 +69,8 @@ INPUT=$(cat)
 if [[ "${1:-}" == "apres" ]]; then
     SORTIE=$(printf '%s' "$INPUT" | python3 -I "$H/analyse-commande.py" cloture 2>/dev/null) || exit 0
     [[ "$SORTIE" == OUI$'\t'* ]] || exit 0
-    RACINE=$(git -C "${SORTIE#OUI$'\t'}" -c core.fsmonitor=false rev-parse --show-toplevel 2>/dev/null) || exit 0
-    FAIT=$(git -C "$RACINE" -c core.fsmonitor=false log -1 --format='%ct%n%s' 2>/dev/null | python3 -I -c '
+    RACINE=$(git -C "${SORTIE#OUI$'\t'}" -c core.fsmonitor=false -c log.showSignature=false -c gpg.program=false rev-parse --show-toplevel 2>/dev/null) || exit 0
+    FAIT=$(git -C "$RACINE" -c core.fsmonitor=false -c log.showSignature=false -c gpg.program=false log -1 --format='%ct%n%s' 2>/dev/null | python3 -I -c '
 import importlib.util, sys, time
 l = sys.stdin.read().split("\n", 1)
 spec = importlib.util.spec_from_file_location("a", sys.argv[1]); a = importlib.util.module_from_spec(spec); spec.loader.exec_module(a)
@@ -79,17 +79,17 @@ print("oui" if ok else "non")' "$H/analyse-commande.py" 2>/dev/null) || exit 0
     # Un commit est-il vraiment apparu depuis la verification ? « git commit …;
     # echo fin » reussit meme si le commit echoue : sans nouveau commit, le
     # temoin reste.
-    REPERE=$(git -C "$RACINE" -c core.fsmonitor=false rev-parse --git-path claude-cloture-avant 2>/dev/null) || REPERE=""
+    REPERE=$(git -C "$RACINE" -c core.fsmonitor=false -c log.showSignature=false -c gpg.program=false rev-parse --git-path claude-cloture-avant 2>/dev/null) || REPERE=""
     [[ -n "$REPERE" && "$REPERE" != /* ]] && REPERE="$RACINE/$REPERE"
     if [[ -n "$REPERE" && -f "$REPERE" ]]; then
         AVANT=$(cat "$REPERE" 2>/dev/null) || AVANT=""
-        MAINTENANT=$(git -C "$RACINE" -c core.fsmonitor=false rev-parse -q --verify HEAD 2>/dev/null) || MAINTENANT=""
+        MAINTENANT=$(git -C "$RACINE" -c core.fsmonitor=false -c log.showSignature=false -c gpg.program=false rev-parse -q --verify HEAD 2>/dev/null) || MAINTENANT=""
         [[ "$AVANT" == "$MAINTENANT" ]] && FAIT="non"
         [[ "$FAIT" == "oui" ]] && rm -f "$REPERE" 2>/dev/null
     fi
     T="$RACINE/.claude-phase-debug-done"
     if [[ "$FAIT" == "oui" && -f "$T" && ! -L "$T" ]]; then
-        SUIVI=$(git -C "$RACINE" -c core.fsmonitor=false ls-files -- ':(icase).claude-phase-debug-done' 2>/dev/null) || SUIVI="erreur"
+        SUIVI=$(git -C "$RACINE" -c core.fsmonitor=false -c log.showSignature=false -c gpg.program=false ls-files -- ':(icase).claude-phase-debug-done' 2>/dev/null) || SUIVI="erreur"
         [[ -z "$SUIVI" ]] && { rm -f "$T" 2>/dev/null || true; }
     fi
     exit 0
@@ -111,7 +111,7 @@ fi
 # refusait une cloture des que la session n'etait pas ouverte a la racine.
 # Repli sur le dossier du projet si ce n'est pas un depot.
 DOSSIER="${SORTIE#OUI$'\t'}"
-PROJECT_DIR=$(git -C "$DOSSIER" -c core.fsmonitor=false rev-parse --show-toplevel 2>/dev/null) \
+PROJECT_DIR=$(git -C "$DOSSIER" -c core.fsmonitor=false -c log.showSignature=false -c gpg.program=false rev-parse --show-toplevel 2>/dev/null) \
     || PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 TEMOIN="${PROJECT_DIR}/.claude-phase-debug-done"
 
@@ -127,7 +127,7 @@ if [[ -e "$TEMOIN" || -L "$TEMOIN" ]]; then
     # Sans les variables qui changent la lecture des chemins : avec
     # GIT_LITERAL_PATHSPECS, « :(icase) » etait pris au pied de la lettre.
     SUIVI=$(env -u GIT_LITERAL_PATHSPECS -u GIT_GLOB_PATHSPECS -u GIT_NOGLOB_PATHSPECS -u GIT_ICASE_PATHSPECS \
-        git -C "$PROJECT_DIR" -c core.fsmonitor=false ls-files -- ':(icase).claude-phase-debug-done' 2>/dev/null) || SUIVI="erreur"
+        git -C "$PROJECT_DIR" -c core.fsmonitor=false -c log.showSignature=false -c gpg.program=false ls-files -- ':(icase).claude-phase-debug-done' 2>/dev/null) || SUIVI="erreur"
     ETAT=$(python3 -I -c '
 import os, stat, sys, time
 try:
@@ -149,10 +149,10 @@ else:
         if [[ "$ETAT" == "valide" ]]; then
             # Le commit courant est note (dans .git, jamais suivi) : le mode
             # « apres » n'effacera le temoin que si un NOUVEAU commit est apparu.
-            REPERE=$(git -C "$PROJECT_DIR" -c core.fsmonitor=false rev-parse --git-path claude-cloture-avant 2>/dev/null) || REPERE=""
+            REPERE=$(git -C "$PROJECT_DIR" -c core.fsmonitor=false -c log.showSignature=false -c gpg.program=false rev-parse --git-path claude-cloture-avant 2>/dev/null) || REPERE=""
             if [[ -n "$REPERE" ]]; then
                 [[ "$REPERE" = /* ]] || REPERE="$PROJECT_DIR/$REPERE"
-                git -C "$PROJECT_DIR" -c core.fsmonitor=false rev-parse -q --verify HEAD > "$REPERE" 2>/dev/null || : > "$REPERE" 2>/dev/null || true
+                git -C "$PROJECT_DIR" -c core.fsmonitor=false -c log.showSignature=false -c gpg.program=false rev-parse -q --verify HEAD > "$REPERE" 2>/dev/null || : > "$REPERE" 2>/dev/null || true
             fi
             exit 0
         fi

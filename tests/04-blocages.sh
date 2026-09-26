@@ -263,6 +263,24 @@ suivi "$BAC/propre"
 verifie "un code valide laisse passer le push" \
         0 "$(pousse "$BAC/propre")"
 
+# Un commit fait sur la MÊME ligne que le push n'existe pas encore quand le hook
+# lit les commits : « git commit -am fix && git push » partait avec un .py cassé
+# (régression de la 0.3.5, trouvée par sa relecture). Le disque est alors
+# contrôlé aussi, comme en 0.3.4.
+mkdir -p "$BAC/memeligne"
+printf 'def ok():\n    return 1\n' > "$BAC/memeligne/a.py"
+suivi "$BAC/memeligne"
+printf 'def casse(:\n' > "$BAC/memeligne/a.py"
+verifie "git commit -am … && git push, .py cassé : REFUSE" 2 "$(pousse "$BAC/memeligne" "git commit -am fix && $PUSH_CMD")"
+verifie "git add -A && git commit … && git push : REFUSE" \
+        2 "$(pousse "$BAC/memeligne" "git add -A && git commit -m fix && $PUSH_CMD")"
+printf 'def ok():\n    return 2\n' > "$BAC/memeligne/a.py"
+printf 'def casse(:\n' > "$BAC/memeligne/nouveau.py"
+verifie "un nouveau .py cassé, ajouté puis commité sur la ligne : REFUSE" \
+        2 "$(pousse "$BAC/memeligne" "git add -A && git commit -m fix && $PUSH_CMD")"
+rm -f "$BAC/memeligne/nouveau.py"
+verifie "même ligne, code valide : le push passe" 0 "$(pousse "$BAC/memeligne" "git commit -am fix && $PUSH_CMD")"
+
 # Ce qui ne part pas au push ne le bloque pas : un environnement non suivi
 # (code tiers, parfois en Python 2) faisait refuser le push et durer 12 s.
 mkdir -p "$BAC/nonsuivi/env/lib"

@@ -89,7 +89,7 @@ case "$CHEMIN" in
         RELATIF="${CHEMIN#"$HOME/Desktop/"}"
         RACINE="$HOME/Desktop/${RELATIF%%/*}" ;;
     *)
-        RACINE=$(git -C "$CHEMIN" rev-parse --show-toplevel 2>/dev/null) || RACINE="$CHEMIN" ;;
+        RACINE=$(git -C "$CHEMIN" -c core.fsmonitor=false -c log.showSignature=false rev-parse --show-toplevel 2>/dev/null) || RACINE="$CHEMIN" ;;
 esac
 
 # --- 4. Une app --------------------------------------------------------------

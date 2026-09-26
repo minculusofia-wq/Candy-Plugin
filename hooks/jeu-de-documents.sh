@@ -160,7 +160,7 @@ def est_un_projet(projet, raison):
         return False
     if os.path.isfile(os.path.join(projet, "CLAUDE.md")):
         return True
-    r = subprocess.run(["git", "-C", projet, "rev-parse", "--show-toplevel"],
+    r = subprocess.run(["git", "-c", "core.fsmonitor=false", "-c", "log.showSignature=false", "-c", "gpg.program=false", "-C", projet, "rev-parse", "--show-toplevel"],
                        capture_output=True, text=True)
     return r.returncode == 0
 
@@ -234,7 +234,7 @@ def skills_du_projet(projet):
 def cle_audit(projet, tous_md):
     """Ce dont depend l'audit : l'historique git, l'etat du depot, les .md."""
     def git(*a):
-        r = subprocess.run(["git", "-C", projet, *a], capture_output=True, text=True)
+        r = subprocess.run(["git", "-c", "core.fsmonitor=false", "-c", "log.showSignature=false", "-c", "gpg.program=false", "-C", projet, *a], capture_output=True, text=True)
         return r.stdout
     h = hashlib.sha256()
     h.update(git("rev-parse", "HEAD").encode())
@@ -316,7 +316,7 @@ def racine_du_projet(dossier):
     """Une session ouverte dans backend/ ou docs/ examine le projet entier : sans
     ca, un bot complet ouvert dans backend/ sortait « CLAUDE, STRATEGY,
     JOURNAL, DEPLOY manquants »."""
-    r = subprocess.run(["git", "-C", dossier, "rev-parse", "--show-toplevel"],
+    r = subprocess.run(["git", "-c", "core.fsmonitor=false", "-c", "log.showSignature=false", "-c", "gpg.program=false", "-C", dossier, "rev-parse", "--show-toplevel"],
                        capture_output=True, text=True)
     return r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else dossier
 

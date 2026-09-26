@@ -196,6 +196,32 @@ FIN_PY_I
 )
 verifie "tout appel à python3 dans les hooks porte -I :${SANS_I:+ }$SANS_I" "" "$SANS_I"
 
+# git lit la configuration du dépôt : un surveillant de fichiers
+# (core.fsmonitor) ou une vérification de signature (log.showSignature +
+# gpg.program) y lancent un programme, avant tout accord de l'utilisateur.
+# Tout appel à git d'un hook les coupe, ou passe par une fonction qui le fait
+# (seconde relecture de sécurité de la 0.3.5 : git show et git log les
+# lançaient, et l'ouverture de session n'avait jamais coupé core.fsmonitor).
+SCRIPT_GIT=$(mktemp)
+cat > "$SCRIPT_GIT" <<'FIN_GIT'
+import glob, re
+n = []
+appel_sh = re.compile(r"(^|[;&|(`]|\$\(|\s)git\s+(-C|rev-parse|status|log|show|ls-files|diff|rev-list|check-ignore|for-each-ref|cat-file|ls-tree|config|grep|blame)\b")
+for f in sorted(glob.glob("hooks/*.sh")) + sorted(glob.glob("hooks/*.py")):
+    for i, ligne in enumerate(open(f, encoding="utf-8"), 1):
+        l = ligne.strip()
+        if l.startswith("#") or l.startswith(("echo ", "avert ", "alerte ", "ok ")):
+            continue
+        if (f.endswith(".sh") and appel_sh.search(ligne)) or re.search(r"""\[\s*["']git["']\s*,""", ligne):
+            sur = ("core.fsmonitor=false" in ligne and "log.showSignature=false" in ligne) or "GIT_SUR" in ligne
+            if not sur:
+                n.append(f"{f}:{i}")
+print(" ".join(n))
+FIN_GIT
+GIT_NU=$(python3 -I "$SCRIPT_GIT")
+rm -f "$SCRIPT_GIT"
+verifie "tout appel à git d'un hook coupe fsmonitor et showSignature :${GIT_NU:+ }$GIT_NU" "" "$GIT_NU"
+
 PIEGE=$(mktemp -d)
 trap 'rm -rf "$PIEGE"' EXIT
 for m in json py_compile re glob datetime unicodedata; do

@@ -694,10 +694,10 @@ ALERTES=$((ALERTES + $?))
 echo
 echo "[5/7] Historique : le setup est-il annulable ?"
 AV=$ALERTES
-if git -C "$CLAUDE" rev-parse --git-dir >/dev/null 2>&1; then
-    SALE=$(git -C "$CLAUDE" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+if git -C "$CLAUDE" -c core.fsmonitor=false -c log.showSignature=false rev-parse --git-dir >/dev/null 2>&1; then
+    SALE=$(git -C "$CLAUDE" -c core.fsmonitor=false -c log.showSignature=false status --porcelain 2>/dev/null | wc -l | tr -d ' ')
     [ "$SALE" != 0 ] && avert "$SALE fichier(s) non commité(s) dans le setup"
-    DERNIER=$(git -C "$CLAUDE" log -1 --format=%ct 2>/dev/null)
+    DERNIER=$(git -C "$CLAUDE" -c core.fsmonitor=false -c log.showSignature=false log -1 --format=%ct 2>/dev/null)
     LIMITE=$(date -v-30d +%s 2>/dev/null || date -d "30 days ago" +%s)
     if [ -n "$DERNIER" ] && [ "$DERNIER" -lt "$LIMITE" ]; then
         avert "aucun commit depuis plus de 30 jours"

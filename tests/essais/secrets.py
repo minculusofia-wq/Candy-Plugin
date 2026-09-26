@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 _spec = importlib.util.spec_from_file_location(
     "commun", os.path.join(os.path.dirname(os.path.abspath(__file__)), "commun.py"))
@@ -111,7 +112,6 @@ for libelle, texte in [
 ]:
     code, _, _ = lancer("protect-secrets.sh", "Write", {"file_path": "/p/config.py", "content": texte})
     attendre(f"permis : {libelle}", 0, code)
-import time
 debut = time.time()
 code, _, _ = lancer("protect-secrets.sh", "Write", {"file_path": "/p/contrat.json", "content": "0x" + "ab12" * 150000})
 attendre("600 Ko d'hexadécimal (bytecode) : analysé en moins de 5 s", 1, int(time.time() - debut < 5), f"{time.time() - debut:.1f} s")
@@ -292,6 +292,7 @@ try:
     fautif = subprocess.run(g + ["rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
     env3 = {"CLAUDE_PROJECT_DIR": depot3}
     for cmd in ["git show HEAD:.env", "git log -p -- .env", "git log --all -p", "git diff --no-index .env.example .env",
+                "git blame .env", "git annotate .env",
                 f"git show {fautif}", "git grep X", f"git -C {depot3} show {fautif}"]:
         code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=depot3, env=env3)
         attendre(f"git refusé : {cmd.replace(depot3, '…')!r}", 2, code)
@@ -401,6 +402,112 @@ try:
                         {"notebook_path": os.path.join(d7, "n.ipynb"), "new_source": j(AK, ' = "', B64, '"')}, cwd=d7)
     attendre("NotebookEdit : une valeur secrète dans la cellule est refusée", 2, code)
 
+    section("Secrets — relecture de sécurité de la 0.3.5, passe 2 : ce qui passait encore")
+    d8 = os.path.join(base, "d8")
+    os.makedirs(os.path.join(d8, "src", "wallet"))
+    os.makedirs(os.path.join(d8, "src", "keystore"))
+    subprocess.run(["git", "init", "-q", d8], check=True)
+    open(os.path.join(d8, ".env"), "w").write(j("DRY_RUN=true\nAPI", "_KEY=", B64, "\n"))
+    open(os.path.join(d8, ".env.example"), "w").write("API_KEY=\n")
+    for f in ("app.py", "cert.pem", "src/wallet/mnemonic.py", "src/keystore/index.ts"):
+        open(os.path.join(d8, f), "w").write("x = 1\n")
+    refuses_8 = [
+        # ssh avec un script en document, conteneurs
+        "ssh srv <<'EOF'\ncat /srv/app/.env\nEOF", "ssh srv bash -s <<'EOF'\ncat /srv/app/.env\nEOF",
+        "ssh srv 'bash -s' <<'EOF'\ncd /srv/app\ngrep KEY .env\nEOF",
+        "docker exec app cat /app/.env", "docker compose exec app cat .env", "docker-compose exec app cat .env",
+        "kubectl exec pod -- cat /app/.env", "ssh srv 'docker exec app cat /srv/app/.env'",
+        "docker exec app printenv", "docker exec -it app sh -c 'cat .env'", "podman exec app cat /app/.env",
+        # find -exec et find | xargs sans -name, ou avec un joker
+        "find . -type f -exec cat {} +", "find . -maxdepth 1 -type f -exec head -5 {} \;",
+        "find . -name '*env*' -exec cat {} \;", "find . -name '*env*' | xargs cat",
+        # environnement filtré sur un nom de secret
+        "env | grep -i key", "printenv | grep KEY", "set | grep KEY", "export -p | grep -i token",
+        # formes « masquées » qui ne le sont pas
+        "cut -d= -f1 -f2 .env", "cut -d= -f1,2 .env", "sed -e p -e 's/=.*//' .env",
+        # sur un serveur : réglage jugé sur son nom, jokers
+        "ssh srv \"grep '^GITHUB_PAT=' /srv/app/.env\"", "ssh srv 'cat /srv/app/.e*'", "ssh srv 'cat /srv/app/.[e]nv'",
+        # lecteurs manquants
+        "batcat .env", "pygmentize .env", "envsubst < .env", "mawk '{print}' .env", "nawk '{print}' .env",
+        "busybox cat .env", "most .env", "colordiff .env .env.example",
+        "awk -v f=.env 'BEGIN{while((getline l < f)>0) print l}'",
+        "mapfile -t L < .env; printf '%s\\n' \"${L[@]}\"", "exec 3< .env; cat <&3", j("print -r -- $", "API_KEY"),
+        # ligne illisible pour ce lecteur, qui nomme un fichier d'identifiants
+        'X="$(# c\'est un commentaire\ncat ~/.aws/credentials)"; echo "$X"',
+    ]
+    permis_8 = [
+        'for url in https://a.invalid https://b.invalid; do echo "$url"; done', 'echo "Base : $BASE_URL"',
+        "echo $NEXT_PUBLIC_API_URL", 'echo "$SSH_CONNECTION"', "printf 'DATABASE_URL=%s\\n' \"$DATABASE_URL\" >> .env",
+        "for key in a b c; do echo $key; done", j('echo "API', '_KEY=$API', '_KEY" > .env.prod'),
+        "python -m uvicorn main:app --env-file .env", "node --env-file .env server.js",
+        "node -r dotenv/config app.js dotenv_config_path=.env", "python3 -m pytest tests/test_mnemonic.py",
+        """python3 -c "import os; print(os.path.exists('.env'))\"""",
+        "tar --exclude=.env -czf app.tgz .", "tar --exclude .env -czf app.tgz .", "zip -r app.zip . -x '.env'",
+        "openssl x509 -in cert.pem -noout -enddate",
+        "ssh srv 'openssl x509 -in /etc/letsencrypt/live/exemple.org/fullchain.pem -noout -dates'",
+        "curl --cacert cert.pem https://exemple.invalid", "rsync -avz --exclude .env ./ srv:/srv/app",
+        "rsync -avz --exclude=.env ./ srv:/srv/app", "env $(grep -v '^#' .env | xargs) node server.js",
+        "cat src/wallet/mnemonic.py", "cat src/keystore/index.ts", "env", "printenv PATH", "env | grep -c KEY",
+        "find . -name '*.py' -exec cat {} +", "find src -name '*.ts' | xargs cat",
+        "psql postgresql://app:devpass@localhost/app -c 'select 1'",
+        "redis-cli -u redis://default:localpw@localhost:6379 ping",
+    ]
+    for cmd in refuses_8:
+        code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d8)
+        attendre(f"Bash refusé : {cmd!r}", 2, code)
+    for cmd in permis_8:
+        code, _, err = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d8)
+        attendre(f"Bash permis : {cmd!r}", 0, code, err.strip()[:80])
+    for f in ("src/wallet/mnemonic.py", "src/keystore/index.ts"):
+        code, _, _ = lancer("pre-edit-guard.sh", "Read", {"file_path": os.path.join(d8, f)}, cwd=d8)
+        attendre(f"Read permis : {f}", 0, code)
+    for chemin in ("/Users/x/.config/solana/id.json", "/p/keypair.json", "/p/deployer-keypair.json", "/p/wallet.dat",
+                   "/p/.streamlit/secrets.toml", "/p/secrets.json", "/p/config/secrets.yml", "/Users/x/.npmrc",
+                   "/Users/x/.kube/config", "/Users/x/.config/gcloud/application_default_credentials.json",
+                   "/Users/x/.foundry/keystores/deployer"):
+        code, _, _ = lancer("pre-edit-guard.sh", "Read", {"file_path": chemin})
+        attendre(f"Read refusé : {chemin}", 2, code)
+    OCTETS = ",".join(str((i * 37 + 11) % 256) for i in range(64))
+    for libelle, texte, attendu in [
+        ("clé Solana en tableau d'octets", j("const kp = Keypair.fromSecretKey(Uint8Array.from([", OCTETS, "]));"), 2),
+        ("mot de passe de développement court dans une URL", "DATABASE_URL=postgresql://app:devpass@db:5432/app", 0),
+        ("l'exemple SQLAlchemy", "create_engine('postgresql://scott:tiger@localhost/test')", 0),
+    ]:
+        code, _, _ = lancer("protect-secrets.sh", "Write", {"file_path": "/p/app.ts", "content": texte})
+        attendre(f"Write : {libelle}", attendu, code)
+    debut = time.time()
+    code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": "grep -rnE '=(([0-9a-f]|[0-9a-f])*!|.)' ."}, cwd=d8)
+    attendre("motif à retours en arrière explosifs : refusé, et vite", "2 1", f"{code} {int(time.time() - debut < 10)}")
+
+    section("Secrets — git ne lance aucun programme configuré par le dépôt")
+    d9 = os.path.join(base, "d9")
+    os.makedirs(d9)
+    subprocess.run(["git", "init", "-q", d9], check=True)
+    g9 = ["git", "-C", d9, "-c", "user.email=a@b", "-c", "user.name=a"]
+    open(os.path.join(d9, "app.py"), "w").write("x = 1\n")
+    subprocess.run(g9 + ["add", "app.py"], check=True)
+    subprocess.run(g9 + ["commit", "-qm", "un"], check=True)
+    arbre = subprocess.run(g9 + ["rev-parse", "HEAD^{tree}"], capture_output=True, text=True).stdout.strip()
+    parent = subprocess.run(g9 + ["rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    objet = (f"tree {arbre}\nparent {parent}\nauthor a <a@b> 1700000000 +0000\ncommitter a <a@b> 1700000000 +0000\n"
+             "gpgsig -----BEGIN PGP SIGNATURE-----\n \n iQEzBAABCAAdFiEE\n -----END PGP SIGNATURE-----\n\nsigne\n")
+    sha = subprocess.run(g9 + ["hash-object", "-t", "commit", "-w", "--stdin"], input=objet, capture_output=True,
+                         text=True).stdout.strip()
+    subprocess.run(g9 + ["update-ref", "HEAD", sha], check=True)
+    temoins = {}
+    for cle in ("gpg.program", "core.fsmonitor"):
+        t = os.path.join(base, "temoin-" + cle)
+        prog = os.path.join(base, "prog-" + cle + ".sh")
+        open(prog, "w").write(f"#!/bin/sh\ntouch '{t}'\nexit 1\n")
+        os.chmod(prog, 0o755)
+        subprocess.run(["git", "-C", d9, "config", cle, prog], check=True)
+        temoins[cle] = t
+    subprocess.run(["git", "-C", d9, "config", "log.showSignature", "true"], check=True)
+    for cmd in ["git show HEAD", "git log -p -1", "git show HEAD:app.py", "git add -A", "git diff HEAD~1"]:
+        lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d9, env={"CLAUDE_PROJECT_DIR": d9})
+    for cle, t in temoins.items():
+        attendre(f"le {cle} du dépôt n'est jamais lancé", 0, int(os.path.exists(t)))
+
     section("Secrets — un dossier trop grand pour être vérifié le dit")
     grand = os.path.join(base, "grand")
     for k in range(21):
@@ -411,13 +518,24 @@ try:
     # .env peut suivre (relecture de la 0.3.5).
     open(os.path.join(grand, ".env"), "w").write("X=1\n")
     open(os.path.join(grand, "d20", ".env"), "w").write(j("API", "_KEY=", B64, "\n"))
-    code, _, err = lancer("protect-secrets.sh", "Bash", {"command": "grep -rn KEY ."}, cwd=grand)
-    attendre("grep -r sur plus de 20 000 fichiers : refusé", 2, code)
+    petit = {"CANDY_LIMITE_PARCOURS": "5000"}
+    code, _, err = lancer("protect-secrets.sh", "Bash", {"command": "grep -rn KEY ."}, cwd=grand, env=petit)
+    attendre("grep -r au-delà de la limite : refusé", 2, code)
     attendre("  avec son propre motif, qui propose de limiter la recherche", 1, int("trop grand" in err))
-    code, _, _ = lancer("pre-edit-guard.sh", "Grep", {"pattern": "KEY", "path": grand, "output_mode": "content"}, cwd=grand)
-    attendre("outil Grep sur plus de 20 000 fichiers : refusé", 2, code)
-    code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": "grep -rn KEY d0/"}, cwd=grand)
+    code, _, _ = lancer("pre-edit-guard.sh", "Grep", {"pattern": "KEY", "path": grand, "output_mode": "content"},
+                        cwd=grand, env=petit)
+    attendre("outil Grep au-delà de la limite : refusé", 2, code)
+    code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": "grep -rn KEY d0/"}, cwd=grand, env=petit)
     attendre("le même grep limité à un sous-dossier : permis", 0, code)
+    # 21 000 fichiers sans limite abaissée : un projet ordinaire n'est plus refusé
+    # (relecture de la 0.3.5 : rg, --include et l'outil Grep l'étaient dès 20 000).
+    code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": "grep -rn KEY ."}, cwd=grand)
+    attendre("grep -r sur 21 000 fichiers : jugé sur le fond (le .env porte KEY : refusé)", 2, code)
+    code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": "grep -rn 'fn main' --include='*.rs' ."}, cwd=grand)
+    attendre("grep -r --include='*.rs' sur 21 000 fichiers : permis", 0, code)
+    code, _, _ = lancer("pre-edit-guard.sh", "Grep", {"pattern": "fn main", "path": grand, "output_mode": "content"},
+                        cwd=grand)
+    attendre("outil Grep sur 21 000 fichiers, motif absent des .env : permis", 0, code)
 finally:
     shutil.rmtree(base, ignore_errors=True)
 

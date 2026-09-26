@@ -124,7 +124,7 @@ if [[ "$GREP" == "TROP_GRAND" ]]; then
     echo "BLOCKED" >&2
     echo "" >&2
     echo "Recherche refusee : le dossier est trop grand pour verifier qu'aucun fichier de secrets" >&2
-    echo "(.env, cle, wallet) ne serait affiche. La limiter a un sous-dossier, ou a un glob (*.py)." >&2
+    echo "(.env, cle, wallet) ne serait affiche. La lancer sur un sous-dossier (src/, backend/…)." >&2
     exit 2
 fi
 [[ "$GREP" == "SECRET" ]] && refuser_lecture

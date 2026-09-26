@@ -55,7 +55,10 @@ cd "$PROJET" 2>/dev/null || exit 0
 # jusqu'a la 0.3.4, la roadmap n'etait cherchee que dans ce sous-dossier, et la
 # porte se taisait.
 ORIGINE="$PROJET"
-RACINE_DEPOT=$(git rev-parse --show-toplevel 2>/dev/null)
+# git sans rien lancer de ce que le depot configure (surveillant de fichiers,
+# verification de signature) : ce hook tourne a l'ouverture, avant tout accord.
+g() { git -c core.fsmonitor=false -c log.showSignature=false -c gpg.program=false "$@"; }
+RACINE_DEPOT=$(g rev-parse --show-toplevel 2>/dev/null)
 if [[ -n "$RACINE_DEPOT" ]]; then
     PROJET="$RACINE_DEPOT"
     cd "$PROJET" 2>/dev/null || exit 0
@@ -132,11 +135,11 @@ NUMERO=$(echo "$PROCHAINE" | grep -oE '[0-9]+')
 # --- Les deux points que ce hook peut trancher seul --------------------------
 # Calcules ici, affiches juste sous le titre (voir l'en-tete).
 alertes_git() {
-    if git rev-parse --git-dir >/dev/null 2>&1; then
-        NB_SALE=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+    if g rev-parse --git-dir >/dev/null 2>&1; then
+        NB_SALE=$(g status --porcelain 2>/dev/null | wc -l | tr -d ' ')
         if [[ "$NB_SALE" != "0" ]]; then
             echo "⚠️ DEPOT NON PROPRE — $NB_SALE fichier(s) non commite(s) :"
-            git status --porcelain 2>/dev/null | head -5 | sed 's/^/     /'
+            g status --porcelain 2>/dev/null | head -5 | sed 's/^/     /'
             [[ "$NB_SALE" -gt 5 ]] && echo "     … et $((NB_SALE - 5)) autre(s)"
             echo
             echo "   Deux lectures, et il faut trancher AVANT de continuer :"
@@ -150,9 +153,9 @@ alertes_git() {
             echo
         fi
 
-        BRANCHE=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
-        if git rev-parse --verify "origin/$BRANCHE" >/dev/null 2>&1; then
-            AVANCE=$(git rev-list --count "origin/$BRANCHE..HEAD" 2>/dev/null || echo 0)
+        BRANCHE=$(g rev-parse --abbrev-ref HEAD 2>/dev/null)
+        if g rev-parse --verify "origin/$BRANCHE" >/dev/null 2>&1; then
+            AVANCE=$(g rev-list --count "origin/$BRANCHE..HEAD" 2>/dev/null || echo 0)
             if [[ "$AVANCE" != "0" ]]; then
                 echo "⚠️ $AVANCE COMMIT(S) NON POUSSE(S) sur $BRANCHE."
                 echo "   Le controle avant commit ne peut pas le voir : ce point (3) est"
@@ -190,15 +193,16 @@ echo
 # cherche que dans le dossier de la session, qui reste lu en second.
 CONSEIL=""
 for c in "$PROJET/.claude-phase-suivante" "$ORIGINE/.claude-phase-suivante"; do
-    [[ -f "$c" ]] && { CONSEIL="$c"; break; }
+    [[ -e "$c" || -L "$c" ]] && { CONSEIL="$c"; break; }
 done
-# /fin-phase le garde hors de git. Un conseil SUIVI vient donc d'ailleurs — un
-# depot clone peut le fournir — et son texte arriverait a Claude comme une
-# consigne : il n'est pas lu (relecture de securite de la 0.3.5).
-if [[ -n "$CONSEIL" ]] && git ls-files --error-unmatch -- "$CONSEIL" >/dev/null 2>&1; then
-    echo "⚠️ Le conseil de phase (.claude-phase-suivante) est suivi par git : non lu."
-    echo "   /fin-phase l'ecrit hors de git ; un conseil suivi peut venir d'un depot clone."
-    echo "   Le retirer de git (git rm --cached) et le relire soi-meme avant de s'en servir."
+# /fin-phase l'ecrit hors de git et l'y exclut. Il n'est donc lu que s'il est
+# un fichier ordinaire (pas un lien) que git ignore : un conseil suivi, sous une
+# autre casse, en lien vers un fichier hors du depot (une cle), ou dans un
+# projet sans .git (archive) peut venir d'ailleurs, et son texte arriverait a
+# Claude comme une consigne (relecture de securite de la 0.3.5, deux passes).
+if [[ -n "$CONSEIL" ]] && { [[ -L "$CONSEIL" || ! -f "$CONSEIL" ]] || ! g -C "$(dirname "$CONSEIL")" check-ignore -q -- "$(basename "$CONSEIL")" 2>/dev/null; }; then
+    echo "⚠️ Conseil de phase (.claude-phase-suivante) non lu : il n'est pas exclu de git, ou n'est pas un fichier ordinaire."
+    echo "   /fin-phase l'ecrit et l'exclut de git ; un autre peut venir d'un depot clone. Le relire soi-meme."
     echo
     CONSEIL=""
 fi

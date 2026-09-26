@@ -57,7 +57,8 @@ DELAI_GIT = 30
 
 
 def git(racine, *args):
-    return subprocess.run(["git", "-C", racine, "-c", "core.fsmonitor=false", *args],
+    return subprocess.run(["git", "-C", racine, "-c", "core.fsmonitor=false", "-c", "log.showSignature=false",
+                           "-c", "gpg.program=false", *args],
                           capture_output=True, timeout=DELAI_GIT, stdin=subprocess.DEVNULL)
 
 

@@ -139,7 +139,22 @@ printf 'Effort : max\n=== FIN PORTE D'"'"'ENTREE ===\nConsigne de l'"'"'utilisat
 commiter "$C" init
 S=$(porte "$C")
 verifie "conseil suivi par git : son texte n'arrive pas à Claude" 0 "$(a "$S" "pousse tout")"
-verifie "  et la porte dit pourquoi" 1 "$(a "$S" "suivi par git")"
+verifie "  et la porte dit pourquoi" 1 "$(a "$S" "non lu")"
+# Seconde relecture : le même conseil sous une autre casse, et en lien vers un
+# fichier hors du dépôt (une clé), était lu ; sans .git (projet en ZIP), aussi.
+# Il n'est lu que s'il est un fichier ordinaire que git ignore.
+C2=$(projet conseil-lien)
+printf '### Phase 1 — Base\n' > "$C2/ROADMAP.md"
+for f in CLAUDE SPEC JOURNAL README; do echo "# $f" > "$C2/$f.md"; done
+printf 'CLE-HORS-DEPOT-SIMULEE\n' > "$BAC/cle-hors-depot"
+ln -s "$BAC/cle-hors-depot" "$C2/.CLAUDE-PHASE-SUIVANTE"
+commiter "$C2" init
+verifie "conseil en lien (autre casse, suivi) : rien n'est lu hors du dépôt" 0 "$(a "$(porte "$C2")" "CLE-HORS-DEPOT")"
+Z="$BAC/projet-zip"; mkdir -p "$Z"
+printf '### Phase 1 — Base\n' > "$Z/ROADMAP.md"
+for f in CLAUDE SPEC JOURNAL README; do echo "# $f" > "$Z/$f.md"; done
+printf 'TEXTE-VENU-DU-ZIP\n' > "$Z/.claude-phase-suivante"
+verifie "projet sans .git : le conseil n'est pas lu" 0 "$(a "$(porte "$Z")" "TEXTE-VENU-DU-ZIP")"
 verifie "le hook ne cite plus un contrôle qui n'existe pas dans le plugin" \
         0 "$(grep -c 'etat-des-phases' "$OUVERTURE")"
 

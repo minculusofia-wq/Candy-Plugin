@@ -24,6 +24,7 @@
 # Toute panne (entrée illisible, exception) sort en code 3 : le garde-fou
 # appelant refuse alors la commande au lieu de la laisser passer.
 
+import fnmatch
 import glob
 import json
 import os
@@ -33,9 +34,13 @@ import sys
 from urllib.parse import unquote
 
 PROFONDEUR = 6
+# Réglages que git applique à chaque appel d'un hook : un dépôt (une archive qui
+# contient son .git) peut configurer un programme que git lancerait — surveillant
+# de fichiers, vérification de signature (relecture de sécurité de la 0.3.5).
+GIT_SUR = ["-c", "core.fsmonitor=false", "-c", "log.showSignature=false", "-c", "gpg.program=false"]
 INCONNU = "__texte_calcule__"          # commande dont le texte n'est connu qu'à l'exécution
 ENVELOPPES = {"sudo", "env", "nohup", "time", "exec", "command", "builtin", "caffeinate",
-              "timeout", "nice", "xargs", "stdbuf", "doas", "watch", "screen", "setsid", "disown"}
+              "timeout", "nice", "xargs", "stdbuf", "doas", "watch", "screen", "setsid", "disown", "busybox"}
 MOTS_CLES = {"!", "if", "then", "do", "else", "elif", "while", "until", "function"}
 INTERPRETES = {"bash", "sh", "zsh", "dash", "ksh"}
 OPTIONS_ENVELOPPES = {"sudo": "ugphCDrtU", "doas": "uC", "timeout": "sk", "nice": "n",
@@ -134,6 +139,10 @@ def fin_de_substitution(t, k):
         c = t[i]
         if c == "\\":
             i += 2
+            continue
+        if c == "#" and (i == k or t[i - 1] in " \t\n;(|&"):
+            j = t.find("\n", i)                     # un commentaire : « c'est » n'ouvre rien
+            i = n if j < 0 else j
             continue
         if c == "'":
             j = t.find("'", i + 1)
@@ -401,6 +410,7 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None):
             cible = mots[i + 1] if i + 1 < len(mots) else ""
             if ">" in m and not (cible == "/dev/null" or re.fullmatch(r"&?\d+|&?-", cible)):
                 ecrit = True                        # > f, >> f, &> f, 2> f : un fichier est écrit
+                entrees.append(("sortie", cible))
             elif m == "<<<":
                 entrees.append(("texte", cible))    # bash <<< "code" : le texte est un script
             elif m == "<":
@@ -430,6 +440,8 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None):
                 mots_cmd = ["xargs"]                # « … | xargs » seul : repère pour les tubes
             elif suite and tete and os.path.basename(tete[0].lstrip("\\")) == "env":
                 mots_cmd = ["env"]                  # « env » seul affiche l'environnement
+            elif any(g == "fichier" for g, _ in entrees):
+                mots_cmd = ["cat"]                  # exec 3< .env : le fichier est ouvert pour être lu
             else:
                 continue
         nom = os.path.basename(mots_cmd[0].lstrip("\\"))
@@ -467,20 +479,18 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None):
                 if reste:
                     sortie.extend(commandes_et_entrees(" ".join(reste), prof + 1, suite))
         elif nom == "find":
-            # {} vaut chaque fichier trouvé : on le remplace par le nom cherché
-            # (find . -name .env -exec cat {} \; affiche le .env).
-            cherche = ""
-            for k in range(1, len(mots_cmd) - 1):
-                if mots_cmd[k] in ("-name", "-iname", "-path", "-ipath"):
-                    cherche = mots_cmd[k + 1]
+            # {} vaut chaque fichier trouvé : il est remplacé par un repère qui
+            # porte les dossiers et les motifs de find, jugé en parcourant le
+            # dossier comme lui (fichiers cachés compris). Jusqu'à la relecture
+            # de la 0.3.5, sans -name, {} était retiré et cat jugé sans argument.
+            cherche = repere_find(mots_cmd)
             k = 1
             while k < len(mots_cmd):
                 if mots_cmd[k] in ("-exec", "-execdir", "-ok", "-okdir"):
                     fin = k + 1
                     while fin < len(mots_cmd) and mots_cmd[fin] not in ("+", ";"):
                         fin += 1
-                    code = " ".join(shlex.quote(cherche if w == "{}" else w)
-                                    for w in mots_cmd[k + 1:fin] if w != "{}" or cherche)
+                    code = " ".join(shlex.quote(cherche if w == "{}" else w) for w in mots_cmd[k + 1:fin])
                     sortie.extend(commandes_et_entrees(code, prof + 1, suite))
                     k = fin
                 k += 1
@@ -490,6 +500,19 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None):
     for corps in subs:
         sortie.extend(commandes_et_entrees(corps, prof + 1, suite, transmis))
     return sortie
+
+TROUVES_PAR_FIND = "\x00find\x00"
+
+
+def repere_find(mots):
+    """Le repère qui remplace {} : les dossiers parcourus et les motifs -name."""
+    racines, i = [], 1
+    while i < len(mots) and not mots[i].startswith(("-", "(", "!")):
+        racines.append(mots[i])
+        i += 1
+    motifs = [mots[j + 1] for j in range(len(mots) - 1) if mots[j] in ("-name", "-iname", "-path", "-ipath")]
+    return TROUVES_PAR_FIND + json.dumps([racines or ["."], motifs])
+
 
 LANCEURS_DE_PROJET = {"uv", "poetry", "pipenv", "pdm", "rye", "hatch"}
 
@@ -583,28 +606,37 @@ LECTEURS = {"cat", "less", "more", "head", "tail", "bat", "nl", "tac", "od", "xx
             "strings", "base64", "zcat", "zless", "zmore", "diff", "tr", "column", "paste", "jq",
             "yq", "sort", "uniq", "fold", "rev", "pr", "expand", "awk", "gawk", "sed", "cut",
             "grep", "egrep", "fgrep", "zgrep", "rg", "ag", "done", "vim", "vi", "view", "nano",
-            "sdiff", "comm", "tee"}
+            "sdiff", "comm", "tee", "batcat", "pygmentize", "most", "colordiff", "mawk", "nawk", "envsubst",
+            "mapfile", "readarray"}
+AWK = {"awk", "gawk", "mawk", "nawk"}
 CHERCHEURS = {"grep", "egrep", "fgrep", "zgrep", "rg", "ag"}
 # D'autres programmes qui affichent ou envoient un fichier nommé en argument, y
 # compris en valeur d'option (dd if=f, openssl -in f, curl -d @f, curl file://f).
 # La liste ne sera jamais complète : elle couvre les formes courantes, et un
 # programme qui lit un fichier sans le nommer (un script, dotenv) passe.
+# Chacun n'est lu que par ses vraies entrées (entrees_lues) : un tar --exclude=.env
+# ou un curl --cacert cert.pem ne lisent pas le fichier qu'ils nomment.
 LECTEURS_EN_PLUS = {"dd", "tar", "bsdtar", "gtar", "zip", "gzip", "gunzip", "bzip2", "xz", "zstd", "lz4",
                     "compress", "curl", "wget", "iconv", "look", "openssl", "sqlite3", "base32", "basenc",
                     "uuencode", "gpg", "age", "split", "csplit", "cmp", "fmt", "vis", "ex", "ed", "nvim",
                     "emacs", "micro", "pico", "textutil", "nc", "ncat", "netcat", "socat", "mail", "mailx",
                     "sendmail", "http", "xh", "hexyl", "view", "unexpand", "join", "nl"}
+EXCLUSIONS = {"--exclude", "-x", "-X", "--exclude-from", "--include", "--filter", "-f", "--files-from",
+              "--exclude-vcs-ignores"}
+ENTREES_RESEAU = {"-d", "--data", "--data-binary", "--data-raw", "--data-ascii", "--data-urlencode", "-F", "--form",
+                  "-T", "--upload-file", "--post-file", "--body-file"}
+OPENSSL_SANS_CLE = {"x509", "verify", "s_client", "version", "ciphers", "crl", "req"}
 # Interprètes : le code qu'ils reçoivent (-c, -e, un document <<EOF) est lu,
 # et un nom de fichier de secrets écrit dans une chaîne compte comme une lecture.
 INTERPRETES_CODE = re.compile(r"(python[\d.]*|pypy[\d.]*|perl[\d.]*|ruby|irb|node|nodejs|deno|bun|php[\d.]*|"
                               r"lua[\d.]*|luajit|Rscript|osascript|tclsh|julia)$")
 # Options suivies d'une valeur, par commande (la valeur n'est pas un fichier lu).
 A_VALEUR = {"grep": "efmABCdD", "egrep": "efmABCdD", "fgrep": "efmABCdD", "zgrep": "efmABCdD",
-            "rg": "efmABCgtT", "ag": "fmABCG", "sed": "ef", "awk": "Ffv", "gawk": "Ffv",
+            "rg": "efmABCgtT", "ag": "fmABCG", "sed": "ef", "awk": "Ffv", "gawk": "Ffv", "mawk": "Ffv", "nawk": "Ffv",
             "cut": "dfcb", "head": "nc", "tail": "nc", "sort": "oktST", "column": "sct",
             "jq": "", "yq": "", "diff": "", "od": "AjNtw", "xxd": "cglos"}
 # Commandes dont le premier argument est un programme ou un motif, pas un fichier.
-PROGRAMME_D_ABORD = CHERCHEURS | {"sed", "awk", "gawk", "jq", "yq", "tr"}
+PROGRAMME_D_ABORD = CHERCHEURS | AWK | {"sed", "jq", "yq", "tr"}
 # ntfy, topic, webhook, rpc, dsn : un sujet de notification se lit comme un mot
 # de passe (quiconque le connaît lit et envoie les alertes), une URL de RPC ou
 # un DSN portent souvent leur clé.
@@ -612,7 +644,12 @@ PROGRAMME_D_ABORD = CHERCHEURS | {"sed", "awk", "gawk", "jq", "yq", "tr"}
 # ALCHEMY_API, ETH_WSS_URL passaient pour des réglages).
 NOM_SECRET = re.compile(r"key|secret|token|pass|pwd|cred|auth|mnemonic|seed|priv|wallet|signer"
                         r"|ntfy|topic|webhook|rpc|dsn|url|uri|api|database|(^|_)db(_|$)|conn|wss|blind|salt"
-                        r"|cookie|session|jwt|bearer|account|keypair|(^|_)[ps]k(_|$)", re.I)
+                        r"|cookie|session|jwt|bearer|account|keypair|(^|_)[ps]k(_|$)|(^|_)pat(_|$)", re.I)
+# Pour une variable affichée hors de tout .env chargé : la liste d'avant, plus
+# étroite. La large refusait « for url in … ; echo $url », $BASE_URL,
+# $SSH_CONNECTION (seconde relecture de la 0.3.5).
+NOM_SECRET_VAR = re.compile(r"key|secret|token|pass|pwd|cred|auth|mnemonic|seed|priv|wallet|signer"
+                            r"|ntfy|topic|webhook|rpc|dsn", re.I)
 # Valeur d'un réglage qui peut s'afficher : booléen, nombre, mot court.
 INOFFENSIF = re.compile(r"(?i)true|false|yes|no|on|off|none|null|-?\d{1,12}(\.\d+)?|[a-z][a-z_-]{0,11}")
 REGLAGE = re.compile(r"\^(?:\(([A-Za-z_][A-Za-z0-9_|]*)\)|([A-Za-z_][A-Za-z0-9_]*))=(\.\*)?\$?")
@@ -697,9 +734,11 @@ def lecture_masquee(nom, programme, options, motifs=None):
                 return False
         return "reglage"                            # permis si la VALEUR lue l'est (reglages_inoffensifs)
     if nom == "cut":
-        return "-d==" in options and "-f=1" in options and "--complement" not in options
+        champs = [o for o in options if o.startswith("-f=")]
+        return "-d==" in options and champs == ["-f=1"] * len(champs) and bool(champs) \
+            and "--complement" not in options
     if nom == "sed":
-        return bool(re.fullmatch(r"s(.)=\.\*\1\1[gp]*", (programme or "").strip()))
+        return all(re.fullmatch(r"s(.)=\.\*\1\1[gp]*", (m or "").strip()) for m in motifs)
     if nom in ("jq", "yq"):
         # ~/.claude.json : seulement les noms (| keys), un compte, un type, ou
         # les compteurs d'usage, qui ne portent aucun jeton.
@@ -709,15 +748,15 @@ def lecture_masquee(nom, programme, options, motifs=None):
         fin = re.split(r"\|", f)[-1].strip().rstrip(")?").strip()
         return fin in ("keys", "keys_unsorted", "length", "type") \
             or bool(re.fullmatch(r"\.(pluginUsage|skillUsage)\b[\w.\[\]\"| -]*", f))
-    if nom in ("awk", "gawk"):
+    if nom in AWK:
         return "-F==" in options and re.fullmatch(r"\{\s*print \$1\s*\}", (programme or "").strip()) is not None
     return False
 
 
 JOKER = re.compile(r"[*?\[{]")
 # Filtres qui laissent passer ce qu'ils lisent (cat .env | sort affiche tout).
-FILTRES = {"grep", "egrep", "fgrep", "sed", "sort", "uniq", "head", "tail", "tr", "awk", "gawk", "cut",
-           "column", "rev", "fold", "expand"}
+FILTRES = {"grep", "egrep", "fgrep", "sed", "sort", "uniq", "head", "tail", "tr", "cut",
+           "column", "rev", "fold", "expand"} | AWK
 
 
 def accolades(motif):
@@ -726,6 +765,16 @@ def accolades(motif):
     if not m:
         return [motif]
     return [r for x in m.group(1).split(",") for r in accolades(motif[:m.start()] + x + motif[m.end():])]
+
+
+def reglage_nom_prudent(motifs):
+    """Sur un serveur, la valeur ne se lit pas d'ici : le réglage n'est permis
+    que si aucun de ses noms n'évoque un secret (liste large)."""
+    for m in motifs:
+        r = REGLAGE.fullmatch(m)
+        if not r or any(NOM_SECRET.search(n) for n in (r.group(1) or r.group(2)).split("|")):
+            return False
+    return True
 
 
 def reglages_inoffensifs(motifs, fichiers, dossier):
@@ -764,10 +813,52 @@ def reglages_inoffensifs(motifs, fichiers, dossier):
     return True
 
 
+EXISTE = re.compile(r"(exists|isfile|is_file|lexists|access|getsize|isdir)\(\s*$")
+
+
 def chaines_du_code(code):
     """Les chaînes entre guillemets d'un code (python -c, node -e, awk…) : un
-    nom de fichier y est toujours écrit ainsi."""
-    return [m.group(2) for m in re.finditer(r"""(["'])((?:(?!\1).)+)\1""", code or "")]
+    nom de fichier y est toujours écrit ainsi. Un simple test d'existence
+    (os.path.exists('.env')) ne lit rien : il n'est pas rendu."""
+    code = code or ""
+    return [m.group(2) for m in re.finditer(r"""(["'])((?:(?!\1).)+)\1""", code)
+            if not EXISTE.search(code[max(0, m.start() - 30):m.start()])]
+
+
+def entrees_lues(nom, args):
+    """Les fichiers qu'un programme de LECTEURS_EN_PLUS lit vraiment : ses
+    arguments (fichiers), if=f (dd), -in f (openssl), @f et file:// (curl…),
+    jamais la valeur d'une option d'exclusion (tar --exclude=.env)."""
+    if nom == "openssl" and args and args[0] in OPENSSL_SANS_CLE:
+        return []
+    reseau = nom in ("curl", "wget", "http", "xh", "nc", "ncat", "netcat", "socat", "mail", "mailx", "sendmail")
+    res, sauter = [], False
+    for i, a in enumerate(args):
+        if sauter:
+            sauter = False
+            continue
+        if a in EXCLUSIONS or a.split("=", 1)[0] in EXCLUSIONS:
+            sauter = "=" not in a
+            continue
+        suivant = args[i + 1] if i + 1 < len(args) else ""
+        if nom == "openssl" and a in ("-in", "-inkey", "-key"):
+            res.append(suivant)
+        elif a in ENTREES_RESEAU or a.split("=", 1)[0] in ENTREES_RESEAU:
+            v = a.split("=", 1)[1] if a.startswith("--") and "=" in a else suivant
+            res += [v.lstrip("@"), v.split("=@", 1)[-1], v.split("=<", 1)[-1]] if "@" in v or "<" in v or a in ("-T", "--upload-file") else []
+        elif a.startswith("-"):
+            continue
+        elif re.match(r"(?i)file://", a):
+            res += chemins_du_mot(a)
+        elif reseau:
+            continue                                # une adresse, pas un fichier
+        elif nom == "dd":
+            res += [a[3:]] if a.startswith("if=") else []
+        elif nom == "sqlite3":
+            res += a.split()
+        else:
+            res.append(a)
+    return [x for x in res if x]
 
 
 def chemins_du_mot(w):
@@ -794,13 +885,12 @@ def noms_passes_a_xargs(cmds, k, dossier, distant, detection):
         return []
     mots = cmds[k - 1][0]
     nom = os.path.basename(mots[0].lstrip("\\"))
-    if nom in ("find", "fd", "fdfind"):
-        motifs = [mots[i + 1] for i in range(len(mots) - 1)
-                  if mots[i] in ("-name", "-iname", "-path", "-ipath", "-g", "--glob")]
-        if motifs:
-            return [m for m in motifs if designe_un_secret(m.split("/")[-1], dossier, True, detection)]
-        racines = [a for a in mots[1:] if not a.startswith("-") and a not in ("!", "(", ")")][:1] or ["."]
-        return recherche_recursive("grep", racines, ["-r"], dossier, detection)
+    if nom == "find":
+        return trouves_par_find(repere_find(mots), dossier, distant, detection)
+    if nom in ("fd", "fdfind"):
+        motifs = [mots[i + 1] for i in range(len(mots) - 1) if mots[i] in ("-g", "--glob", "-e", "--extension")]
+        racines = [a for a in mots[1:] if not a.startswith("-")][1:2] or ["."]
+        return trouves_par_find(TROUVES_PAR_FIND + json.dumps([racines, motifs]), dossier, distant, detection)
     if nom == "ls":
         options = "".join(a[1:] for a in mots[1:] if a.startswith("-") and not a.startswith("--"))
         tous = bool(set(options) & set("aA"))
@@ -832,6 +922,8 @@ def designe_un_secret(arg, dossier, distant, detection):
     comme bash dans le dossier de la commande ; à distance, où rien ne se
     développe ici, son dernier morceau est jugé (.env*). Un lien vers un
     fichier de secrets en est un (detection-secrets suit les liens)."""
+    if arg.startswith(TROUVES_PAR_FIND):
+        return bool(trouves_par_find(arg, dossier, distant, detection))
     if detection.est_fichier_de_secrets(arg):
         return True
     if not distant and dossier and not JOKER.search(arg) and not os.path.isabs(os.path.expanduser(arg)):
@@ -860,14 +952,43 @@ def designe_un_secret(arg, dossier, distant, detection):
         if dernier.startswith(".en") or dernier == "environ" or re.search(
                 r"\.env\b|\.(pem|key)$|wallet|keystore|mnemonic|id_(rsa|ed25519|ecdsa|dsa)", dernier):
             return True
+        if distant and any(fnmatch.fnmatch(e, dernier) for e in ECHANTILLONS_DISTANTS):
+            return True                             # .e*, .[e]nv sur un serveur
     return False
+
+
+ECHANTILLONS_DISTANTS = (".env", ".env.local", ".env.production", "id_rsa", "id_ed25519")
+
+
+def trouves_par_find(repere, dossier, distant, detection):
+    """Les fichiers de secrets que find trouverait : ses dossiers parcourus
+    comme lui (cachés compris), filtrés par ses motifs -name."""
+    try:
+        racines, motifs = json.loads(repere[len(TROUVES_PAR_FIND):])
+    except ValueError:
+        return ["?"]
+    motifs = [m.split("/")[-1] for m in motifs]
+    if distant:
+        if not motifs:
+            return ["?"]
+        return [m for m in motifs if designe_un_secret(m, None, True, detection)
+                or any(fnmatch.fnmatch(e, m) for e in ECHANTILLONS_DISTANTS)]
+    # find -name .env : le motif désigne lui-même un secret, présent ou non ici.
+    res = [m for m in motifs if designe_un_secret(m, None, True, detection)]
+    for chemin in parcourir(racines, dossier, caches=True):
+        nom = os.path.basename(chemin)
+        if motifs and not any(fnmatch.fnmatch(nom, m) for m in motifs):
+            continue
+        if detection.est_fichier_de_secrets(chemin):
+            res.append(chemin)
+    return res
 
 
 NON_SECRET_VAR = re.compile(r"(?i)_(sock|path|file|dir|home|id|url_path)$|^(pwd|oldpwd|ssh_agent_pid)$")
 VARIABLE = re.compile(r"\$(?:\{(#?)([A-Za-z_]\w*)([^}]*)\}|([A-Za-z_]\w*))")
 
 
-def variable_secrete(mot):
+def variable_secrete(mot, noms_secrets=None, locales=()):
     """« $PRIVATE_KEY », « ${API_KEY} », « ${API_KEY:-x} » affichent la valeur ;
     « ${API_KEY:+défini} » et « ${#API_KEY} », non."""
     avant = None
@@ -877,9 +998,46 @@ def variable_secrete(mot):
         if m.group(2) and (m.group(1) or m.group(3).startswith((":+", "+"))):
             continue
         nom = m.group(2) or m.group(4)
-        if NOM_SECRET.search(nom) and not NON_SECRET_VAR.search(nom):
+        if nom in locales:
+            continue                                # for key in a b c : une variable de la ligne
+        if (noms_secrets or NOM_SECRET_VAR).search(nom) and not NON_SECRET_VAR.search(nom):
             return True
     return False
+
+
+def commande_conteneur(nom, mots):
+    """La commande lancée DANS un conteneur : docker/podman exec, docker compose
+    exec/run, kubectl exec. None si ce n'en est pas une."""
+    args = mots[1:]
+    if nom in ("docker", "podman", "nerdctl"):
+        while args and args[0].startswith("-"):
+            args = args[2:] if args[0] in ("-H", "--host", "--context", "-c", "--config") else args[1:]
+        if args[:1] in (["compose"], ["container"]):
+            args = args[1:]
+            while args and args[0].startswith("-"):
+                args = args[2:] if args[0] in ("-f", "--file", "-p", "--project-name", "--env-file", "--profile") else args[1:]
+    elif nom == "docker-compose":
+        while args and args[0].startswith("-"):
+            args = args[2:] if args[0] in ("-f", "--file", "-p", "--project-name", "--env-file") else args[1:]
+    elif nom in ("kubectl", "oc"):
+        if "exec" not in args:
+            return None
+        reste = args[args.index("exec") + 1:]
+        if "--" in reste:
+            return " ".join(shlex.quote(w) for w in reste[reste.index("--") + 1:])
+        while reste and reste[0].startswith("-"):
+            reste = reste[2:] if reste[0] in ("-c", "--container", "-n", "--namespace") else reste[1:]
+        return " ".join(shlex.quote(w) for w in reste[1:])
+    else:
+        return None
+    if not args or args[0] not in ("exec", "run"):
+        return None
+    args = args[1:]
+    while args and args[0].startswith("-"):
+        valeur = args[0] in ("-e", "--env", "-u", "--user", "-w", "--workdir", "--env-file", "--detach-keys",
+                             "--index", "--name", "-v", "--volume", "--entrypoint", "-p", "--publish")
+        args = args[2:] if valeur else args[1:]
+    return " ".join(shlex.quote(w) for w in args[1:]) if len(args) > 1 else None
 
 
 def copie_d_un_secret(nom, args, dossier, distant, detection):
@@ -887,11 +1045,13 @@ def copie_d_un_secret(nom, args, dossier, distant, detection):
     sous un nom neutre se lirait ensuite sans garde.
     Une copie sous un nom de secret (.env.bak, backend/.env, sauvegarde/) reste
     permise."""
-    a_valeur = {"scp": "PioFSlcJ", "rsync": "e", "install": "mogt"}.get(nom, "")
+    a_valeur = {"scp": "PioFSlcJ", "rsync": "ef", "install": "mogt", "ln": "t"}.get(nom, "")
     pos, sauter = [], False
     for a in args:
         if sauter:
             sauter = False
+        elif a in EXCLUSIONS:
+            sauter = True                           # rsync --exclude .env : un motif, pas une source
         elif a.startswith("-") and len(a) > 1:
             sauter = not a.startswith("--") and a[-1] in a_valeur
         else:
@@ -918,14 +1078,45 @@ class TropGrand(Exception):
     """Le dossier est trop grand pour être parcouru à temps : on ne sait pas."""
 
 
-LIMITE_PARCOURS = 20000
+# Nombre de fichiers et durée au-delà desquels on renonce (« trop grand »).
+# Jusqu'à la seconde relecture de la 0.3.5 : 20 000 fichiers, comptés même
+# quand --include les écartait — rg, l'outil Grep et grep --include étaient
+# refusés dans tout projet avec un gros dossier de compilation.
+LIMITE_PARCOURS = int(os.environ.get("CANDY_LIMITE_PARCOURS") or 150000)
+DUREE_PARCOURS = 8.0
+
+
+def parcourir(racines, dossier, caches=True, exclus_dir=(), garder=None):
+    """Les fichiers sous ces dossiers, comme grep -r ou find les liraient.
+    TropGrand au-delà de la limite : jamais une liste partielle."""
+    import time
+    debut, vus = time.monotonic(), 0
+    for d in racines:
+        racine = os.path.join(dossier or "", os.path.expanduser(d))
+        if os.path.isfile(racine):
+            yield racine
+            continue
+        if not os.path.isdir(racine):
+            continue
+        for base, sous, noms in os.walk(racine):
+            sous[:] = [x for x in sous if x not in (".git", "node_modules", "__pycache__", "site-packages")
+                       and not x.startswith(("venv", ".venv")) and (caches or not x.startswith("."))
+                       and not any(fnmatch.fnmatch(x, e) for e in exclus_dir)]
+            if time.monotonic() - debut > DUREE_PARCOURS:
+                raise TropGrand()
+            for f in noms:
+                if (not caches and f.startswith(".")) or (garder and not garder(f)):
+                    continue
+                vus += 1
+                if vus > LIMITE_PARCOURS:
+                    raise TropGrand()
+                yield os.path.join(base, f)
 
 
 def recherche_recursive(nom, fichiers, options, dossier, detection):
     """grep -r (et rg --hidden) sur un dossier qui contient un fichier de
     secrets affiche ses lignes : grep -r lit les fichiers cachés et ignore
     .gitignore. On parcourt le dossier comme lui, --exclude compris."""
-    import fnmatch
     courtes = "".join(o[1:] for o in options if not o.startswith("--") and "=" not in o)
     if nom in ("grep", "egrep", "fgrep", "zgrep"):
         recursif = bool(set(courtes) & set("rR")) or any(
@@ -944,30 +1135,10 @@ def recherche_recursive(nom, fichiers, options, dossier, detection):
     # --include=*.md (grep), -g '*.md' (rg) : seuls ces fichiers sont lus.
     inclus = [o.split("=", 1)[1].strip("'\"") for o in options
               if o.startswith(("--include=", "--glob=", "-g=")) and not o.split("=", 1)[1].startswith("!")]
-    trouves, vus = [], 0
-    for d in (fichiers or ["."]):
-        racine = os.path.join(dossier or "", os.path.expanduser(d))
-        if not os.path.isdir(racine):
-            continue
-        for base, sous, noms in os.walk(racine):
-            sous[:] = [x for x in sous if x not in (".git", "node_modules", "__pycache__", "site-packages")
-                       and not x.startswith(("venv", ".venv")) and (caches or not x.startswith("."))
-                       and not any(fnmatch.fnmatch(x, e) for e in exclus_dir)]
-            for f in noms:
-                vus += 1
-                if vus > LIMITE_PARCOURS:
-                    # S'arrêter en rendant la liste partielle laissait passer
-                    # « grep -r KEY » lancé depuis un dossier immense : on ne
-                    # sait pas, donc on le dit. Même si un fichier de secrets a
-                    # déjà été vu : un autre peut suivre (relecture de la 0.3.5).
-                    raise TropGrand()
-                if (not caches and f.startswith(".")) or any(fnmatch.fnmatch(f, e) for e in exclus):
-                    continue
-                if inclus and not any(fnmatch.fnmatch(f, e) for e in inclus):
-                    continue
-                if detection.est_fichier_de_secrets(os.path.join(base, f)):
-                    trouves.append(os.path.join(base, f))
-    return trouves
+    def garder(f):
+        return not any(fnmatch.fnmatch(f, e) for e in exclus) and (not inclus or any(fnmatch.fnmatch(f, e) for e in inclus))
+    racines = [d for d in (fichiers or ["."]) if os.path.isdir(os.path.join(dossier or "", os.path.expanduser(d)))]
+    return [c for c in parcourir(racines, dossier, caches, exclus_dir, garder) if detection.est_fichier_de_secrets(c)]
 
 
 def ligne_secrete(ligne, fichier, detection):
@@ -1005,6 +1176,11 @@ def motif_trouve(nom, fichiers, motifs, options, detection):
         rx = [classes_posix(r) for r in rx]
         if None in rx:
             return True                             # une classe inconnue : on ne sait pas ce qu'elle trouve
+        # Un groupe répété qui contient lui-même une alternative ou une
+        # répétition peut faire tourner le moteur de Python des minutes, et un
+        # hook qui dépasse son délai laisse passer l'action : on ne le juge pas.
+        if any(re.search(r"\((?:[^()]|\([^()]*\))*[|*+?}](?:[^()]|\([^()]*\))*\)\s*[*+{]", r) for r in rx):
+            return True
     drapeaux = re.I if ("i" in courtes or "--ignore-case" in options) else 0
     if "w" in courtes:
         rx = [rf"\b(?:{r})\b" for r in rx]
@@ -1076,7 +1252,7 @@ def sortie_masquee(cmds, k, texte, sources=None, dossier=None):
         if nom == "wc":
             return True
         if nom == "xargs":
-            return len(mots) == 1 and bool(re.search(r"\bexport\s+[\"']?\$\([^()]*\|\s*xargs\s*\)", texte))
+            return len(mots) == 1 and bool(re.search(r"\b(export|env)\s+[\"']?\$\([^()]*\|\s*xargs\s*\)", texte))
         if nom in LECTEURS:
             motifs = []
             _, programme, options = lire_arguments(nom, mots[1:], motifs)
@@ -1100,6 +1276,8 @@ def git_affiche_un_secret(sous, args, dossier, detection):
     git show <sha> d'un commit qui touche .env… On demande à git
     les NOMS des fichiers concernés (--name-only), jamais leur contenu."""
     import subprocess
+    if sous in ("blame", "annotate"):
+        return any(designe_un_secret(a, dossier, False, detection) for a in args if not a.startswith("-"))
     if sous not in ("show", "log", "diff", "stash", "cat-file", "grep", "whatchanged"):
         return False
     if sous == "stash":
@@ -1146,7 +1324,7 @@ def git_affiche_un_secret(sous, args, dossier, detection):
             cmd.insert(1, "-n")
             cmd.insert(2, "5000")
     try:
-        r = subprocess.run(["git", "-c", "core.fsmonitor=false", "-C", dossier] + cmd,
+        r = subprocess.run(["git", *GIT_SUR, "-C", dossier] + cmd,
                            capture_output=True, env=env, timeout=10, stdin=subprocess.DEVNULL)
     except OSError:
         return False                                # pas de git : rien à afficher
@@ -1169,10 +1347,17 @@ def suivre_dossier(nom, mots, dossier, pile):
     return cible if os.path.isabs(cible) else (os.path.join(dossier, cible) if dossier else None)
 
 
-def verdict_secret(texte, detection=None, prof=0, depart=None, distant=False):
+DUMPS = {"env", "printenv", "set"}
+VERS_ECRAN = re.compile(r"/dev/(std(out|err)|tty|fd/\d+)$|&?\d+$|&?-$")
+
+
+def verdict_secret(texte, detection=None, prof=0, depart=None, distant=False, charge_initial=False):
+    """charge_initial : l'environnement porte des secrets d'emblée (dans un
+    conteneur, env et printenv seuls les affichent)."""
     detection = detection or _detection()
     cmds = commandes_et_entrees(texte, suite=True)
-    dossier, pile, charge = depart, [], False
+    dossier, pile, charge = depart, [], charge_initial
+    locales = set(re.findall(r"\bfor\s+([A-Za-z_]\w*)\s+in\b", texte))
     for k, (mots, _, entrees, _) in enumerate(cmds):
         lus = [v for g, v in entrees if g == "fichier"]
         nom = os.path.basename(mots[0].lstrip("\\"))
@@ -1189,15 +1374,30 @@ def verdict_secret(texte, detection=None, prof=0, depart=None, distant=False):
                 copie_d_un_secret(nom, mots[1:], dossier, distant, detection):
             return "SECRET"
         affiche = False
-        if nom in ("echo", "printf"):
-            affiche = any(variable_secrete(a) for a in mots[1:])
-        elif nom == "printenv":
+        # Écrit dans un fichier qui porte un nom de secret (>> .env) : rien ne
+        # s'affiche. Vers l'écran, un tube ou un fichier neutre : un affichage.
+        sorties = [v for g, v in entrees if g == "sortie"]
+        range_dans_un_secret = bool(sorties) and cmds[k][3] not in ("|", "|&") and all(
+            not VERS_ECRAN.search(v) and designe_un_secret(v, dossier, distant, detection) for v in sorties)
+        noms_secrets = NOM_SECRET if charge else NOM_SECRET_VAR
+        vidage = (nom in DUMPS and len(mots) == 1) or (
+            nom in ("export", "declare", "typeset", "readonly")
+            and (len(mots) == 1 or any(o in ("-p", "-x") for o in mots[1:])))
+        if nom in ("echo", "printf", "print"):
+            affiche = not range_dans_un_secret and any(variable_secrete(a, noms_secrets, locales) for a in mots[1:])
+        elif nom == "printenv" and len(mots) > 1:
             noms = [a for a in mots[1:] if not a.startswith("-")]
-            affiche = any(NOM_SECRET.search(x) and not NON_SECRET_VAR.search(x) for x in noms) or (charge and not noms)
-        elif charge and ((nom in ("env", "set") and len(mots) == 1)
-                         or (nom in ("export", "declare", "typeset", "readonly")
-                             and (len(mots) == 1 or any(o in ("-p", "-x") for o in mots[1:])))):
-            affiche = True                          # declare, export seuls : tout l'environnement
+            affiche = any(noms_secrets.search(x) and not NON_SECRET_VAR.search(x) for x in noms)
+        elif vidage and charge:
+            affiche = True                          # declare, export, env seuls : tout l'environnement
+        elif vidage and cmds[k][3] in ("|", "|&") and k + 1 < len(cmds):
+            # env | grep -i key : l'environnement filtré sur un nom de secret.
+            suite_nom = os.path.basename(cmds[k + 1][0][0].lstrip("\\"))
+            if suite_nom in CHERCHEURS:
+                motifs = []
+                _, programme, options = lire_arguments(suite_nom, cmds[k + 1][0][1:], motifs)
+                affiche = any(NOM_SECRET.search(m or "") for m in motifs) and \
+                    not lecture_masquee(suite_nom, programme, options, motifs)
         if affiche:
             if sortie_masquee(cmds, k, texte):
                 continue
@@ -1205,6 +1405,20 @@ def verdict_secret(texte, detection=None, prof=0, depart=None, distant=False):
         if nom == "ssh":
             distante = commande_distante(mots)
             if distante and prof < PROFONDEUR and verdict_secret(distante, detection, prof + 1, None, True) == "SECRET":
+                return "SECRET"
+            # ssh srv <<'EOF' … EOF, ssh srv bash -s <<EOF : le document est le
+            # script lancé sur le serveur.
+            if not distante or re.fullmatch(r"(sudo\s+(-\S+\s+)*)?(ba|z|k|da)?sh(\s+-\S+)*", distante.strip()):
+                for g, v in entrees:
+                    if g in ("document", "texte") and prof < PROFONDEUR and \
+                            verdict_secret(v, detection, prof + 1, None, True) == "SECRET":
+                        return "SECRET"
+            continue
+        interieur = commande_conteneur(nom, mots)
+        if interieur is not None:
+            # docker exec app cat .env, kubectl exec pod -- printenv : la
+            # commande tourne dans le conteneur, dont l'environnement porte les secrets.
+            if prof < PROFONDEUR and verdict_secret(interieur, detection, prof + 1, None, True, True) == "SECRET":
                 return "SECRET"
             continue
         if nom == "git" and not distant:
@@ -1232,14 +1446,19 @@ def verdict_secret(texte, detection=None, prof=0, depart=None, distant=False):
         if any(g == "xargs" for g, _ in entrees) and (nom in LECTEURS or nom in LECTEURS_EN_PLUS or code):
             venus = noms_passes_a_xargs(cmds, k, dossier, distant, detection)
         if code or nom in LECTEURS_EN_PLUS:
-            # Interprètes (python -c, node -e, perl, un document <<EOF) et autres
-            # lecteurs (dd if=f, curl -d @f, openssl -in f, tar, iconv…).
-            candidats = [x for a in mots[1:] if not (code and a.startswith("-")) for x in chemins_du_mot(a)]
+            # Interprètes : les chaînes de leur code (python -c, node -e, un
+            # document <<EOF) ; leurs arguments seulement pour perl/ruby -n/-p,
+            # qui lisent et impriment les fichiers donnés. Jusqu'à la seconde
+            # relecture, tout argument comptait : « node --env-file .env app.js »
+            # et « pytest tests/test_mnemonic.py » étaient refusés.
+            # Autres lecteurs : leurs vraies entrées (entrees_lues).
             if code:
-                candidats += [x for a in mots[1:] for x in chaines_du_code(a)]
+                candidats = [x for a in mots[1:] for x in chaines_du_code(a)]
                 candidats += [x for g, v in entrees if g in ("texte", "document") for x in chaines_du_code(v)]
+                if re.match(r"(perl|ruby)", nom) and any(re.fullmatch(r"-[A-Za-z]*[np][A-Za-z]*", a) for a in mots[1:]):
+                    candidats += [a for a in mots[1:] if not a.startswith("-")]
             else:
-                candidats += [x for a in mots[1:] if re.search(r"\s", a) for x in a.split()]
+                candidats = entrees_lues(nom, mots[1:])
             if venus or any(designe_un_secret(x, dossier, distant, detection) for x in candidats + lus):
                 if sortie_masquee(cmds, k, texte):
                     continue
@@ -1251,9 +1470,11 @@ def verdict_secret(texte, detection=None, prof=0, depart=None, distant=False):
         fichiers, programme, options = lire_arguments(nom, mots[1:], motifs)
         if nom == "tee":
             fichiers = []                           # tee écrit ses arguments ; seul « < f » est lu
-        # awk 'BEGIN{getline l < ".env"}', sed 'r .env' : un fichier nommé dans le programme.
-        if programme and nom in ("awk", "gawk"):
-            fichiers = fichiers + chaines_du_code(programme)
+        # awk 'BEGIN{getline l < ".env"}', awk -v f=.env, sed 'r .env' : un
+        # fichier nommé dans le programme ou dans une variable.
+        if nom in AWK:
+            fichiers = fichiers + chaines_du_code(programme or "") + [
+                x for o in options if o.startswith("-v=") for x in chemins_du_mot(o[3:])]
         elif programme and nom in ("sed", "gsed"):
             fichiers = fichiers + re.findall(r"(?:^|[;{}\n/!$\d])\s*[rR]\s*([^\s;}]+)", programme)
         secrets = [f for f in fichiers + lus if designe_un_secret(f, dossier, distant, detection)]
@@ -1268,7 +1489,7 @@ def verdict_secret(texte, detection=None, prof=0, depart=None, distant=False):
             secrets = caches
         masque = lecture_masquee(nom, programme, options, motifs)
         if masque == "reglage":
-            masque = reglages_inoffensifs(motifs, secrets, dossier)
+            masque = reglage_nom_prudent(motifs) if distant else reglages_inoffensifs(motifs, secrets, dossier)
         if masque or sortie_masquee(cmds, k, texte, secrets, dossier):
             continue
         return "SECRET"
@@ -1308,7 +1529,7 @@ def sous_commande(mots, i, dossier):
             return (mots_alias[0], mots_alias[1:] + reste) if mots_alias else (nom, reste)
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     try:
-        r = subprocess.run(["git", "-c", "core.fsmonitor=false"] + (["-C", dossier] if dossier and os.path.isdir(dossier) else [])
+        r = subprocess.run(["git", *GIT_SUR] + (["-C", dossier] if dossier and os.path.isdir(dossier) else [])
                            + ["config", "--get", f"alias.{nom}"], capture_output=True, env=env, timeout=5,
                            stdin=subprocess.DEVNULL)
     except (OSError, subprocess.TimeoutExpired):
@@ -1400,6 +1621,7 @@ def depots_pousses(texte, depart):
         impose = os.path.join(depart or "", os.path.expanduser(m.group(1).strip("'\"")))
     elif re.search(r"\bGIT_DIR=(\S+)", texte):
         impose = dossier_de_git_dir(re.search(r"\bGIT_DIR=(\S+)", texte).group(1).strip("'\""), depart)
+    commit_avant = False
     for mots, _, _ in commandes_et_entrees(texte):
         nom = os.path.basename(mots[0].lstrip("\\"))
         if nom in ("cd", "pushd", "popd"):
@@ -1407,6 +1629,8 @@ def depots_pousses(texte, depart):
         elif nom == "git":
             d, i = depot_vise(mots, dossier)
             sous, args = sous_commande(mots, i, d or dossier or depart)
+            if sous in ("commit", "merge", "cherry-pick", "revert", "am", "rebase", "pull", "stash"):
+                commit_avant = True
             if sous == "push":
                 if impose and d == dossier:
                     d = impose
@@ -1414,7 +1638,10 @@ def depots_pousses(texte, depart):
                 # variable : repli sur le dossier de départ, jamais un refus.
                 if not d or not os.path.isdir(d):
                     d = depart
-                res.append((d, references_poussees(args)))
+                # « git commit -am x && git push » : le commit n'existe pas encore
+                # quand le hook lit les commits ; le disque est contrôlé aussi
+                # (régression de la 0.3.5, trouvée par sa seconde relecture).
+                res.append((d, references_poussees(args) + (["--disque"] if commit_avant else [])))
     return [(d, r) for d, r in res if d]
 
 
@@ -1464,7 +1691,7 @@ def ajout_secret(texte, depart):
             dossier = depart if depart and os.path.isdir(depart) else None
         if not dossier:
             continue
-        cmd = ["git", "-c", "core.fsmonitor=false", "-C", dossier, "ls-files", "-z", "-o", "-m"]
+        cmd = ["git", *GIT_SUR, "-C", dossier, "ls-files", "-z", "-o", "-m"]
         if not force:
             cmd.append("--exclude-standard")
         cmd += ["--"] + ((chemins if len(exclusions) < len(chemins) else [":/"] + chemins) or [":/"])
@@ -1612,6 +1839,7 @@ def commit_de_cloture(texte, depart):
 # illisible : elle peut montrer un .env sans le nommer.
 RECHERCHE_BRUTE = re.compile(r"\b[efz]?grep\b[^|;&\n]*\s-\w*[rR]|\b(rg|ag)\b|\bxargs\b|\$\(\s*<")
 NOM_DE_SECRET_BRUT = re.compile(r"\.env\b|\.pem\b|\.key\b|/environ\b|id_(rsa|ed25519|ecdsa|dsa)\b|wallet|keystore|"
+                                r"credentials|\.envrc|\.pgpass|\.npmrc|secrets\.(toml|json|ya?ml)|keypair|"
                                 r"mnemonic|\.claude\.json|\.git-credentials|\.netrc", re.I)
 
 

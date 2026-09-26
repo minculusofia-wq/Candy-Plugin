@@ -40,7 +40,9 @@ echo "Projet : $PROJECT_DIR"
 echo ""
 
 # Verifier qu'on est dans un git repo
-if ! git -C "$PROJECT_DIR" rev-parse --git-dir > /dev/null 2>&1; then
+# git sans rien lancer de ce que le depot configure.
+g() { git -c core.fsmonitor=false -c log.showSignature=false -c gpg.program=false "$@"; }
+if ! g -C "$PROJECT_DIR" rev-parse --git-dir > /dev/null 2>&1; then
     echo -e "${YELLOW}Pas un repo git, audit limite.${NC}"
 fi
 
@@ -157,10 +159,10 @@ echo ""
 echo -e "${BOLD}[2/4] References a des fichiers/dossiers supprimes${NC}"
 DELETED_REFS=0
 # Detecter les fichiers/dossiers supprimes dans les 50 derniers commits
-if git -C "$PROJECT_DIR" rev-parse --git-dir > /dev/null 2>&1; then
+if g -C "$PROJECT_DIR" rev-parse --git-dir > /dev/null 2>&1; then
     # core.quotePath=false : sans lui, git ecrit « "docs/strat\303\251gie.md" »
     # entre guillemets, et un nom accentue n'etait jamais retrouve.
-    DELETED_PATHS=$(git -C "$PROJECT_DIR" -c core.quotePath=false log -50 --diff-filter=D --name-only --pretty=format: 2>/dev/null | \
+    DELETED_PATHS=$(g -C "$PROJECT_DIR" -c core.quotePath=false log -50 --diff-filter=D --name-only --pretty=format: 2>/dev/null | \
         grep -v '^$' | sort -u)
     if [[ -n "$DELETED_PATHS" ]]; then
         while IFS= read -r deleted; do
@@ -212,7 +214,7 @@ while IFS= read -r md_file; do
     if [[ "$date_in_file" < "$CUTOFF" ]]; then
         rel_md="${md_file#$PROJECT_DIR/}"
         # Verifier si le fichier a ete modifie dans les 14 derniers jours via git
-        last_commit=$(git -C "$PROJECT_DIR" log -1 --format=%cI -- "$md_file" 2>/dev/null | cut -d'T' -f1)
+        last_commit=$(g -C "$PROJECT_DIR" log -1 --format=%cI -- "$md_file" 2>/dev/null | cut -d'T' -f1)
         if [[ -n "$last_commit" && "$last_commit" > "$CUTOFF" ]]; then
             echo -e "  ${YELLOW}⚠${NC} $rel_md → date indiquee '$date_in_file' mais commit recent ($last_commit)"
             STALE_DATES=$((STALE_DATES + 1))

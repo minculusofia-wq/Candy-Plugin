@@ -62,7 +62,7 @@ RACINES=""
 POUSSES=""
 while IFS=$'\t' read -r D REFS; do
     [[ -n "$D" ]] || continue
-    R=$(git -C "$D" -c core.fsmonitor=false rev-parse --show-toplevel 2>/dev/null) || continue
+    R=$(git -C "$D" -c core.fsmonitor=false -c log.showSignature=false rev-parse --show-toplevel 2>/dev/null) || continue
     RACINES+="$R"$'\n'
     POUSSES+="$R"$'\t'"${REFS:-HEAD}"$'\n'
 done <<< "$DOSSIERS"
@@ -104,11 +104,13 @@ controler() {  # controler <racine du depot> <references> : 0 si tout compile, s
 ERREURS=$("$PY" -I -c '
 import os, subprocess, sys
 racine, refs = sys.argv[1], sys.argv[2].split()
+disque = "--disque" in refs
+refs = [r for r in refs if r != "--disque"] or ["HEAD"]
 IGNORES = {b"virtualenv", b".virtualenv", b"site-packages", b"__pycache__", b"node_modules"}
 def ignore(nom):
     return nom in IGNORES or nom.startswith((b"venv", b".venv"))
 env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-g = ["git", "-c", "core.fsmonitor=false", "-C", racine]
+g = ["git", "-c", "core.fsmonitor=false", "-c", "log.showSignature=false", "-c", "gpg.program=false", "-C", racine]
 def git(*args, entree=None):
     return subprocess.run(g + list(args), input=entree, capture_output=True, env=env, timeout=60)
 if refs == ["--all"]:
@@ -145,6 +147,31 @@ for ref in refs:
         contenu = donnees[fin + 1:fin + 1 + taille]
         pos = fin + 1 + taille + 1
         if taille > 2_000_000:
+            continue
+        try:
+            compile(contenu, chemin.decode("utf-8", "replace"), "exec", dont_inherit=True)
+        except (SyntaxError, ValueError, RecursionError, MemoryError):
+            casses += 1
+        except Exception:
+            pass
+# Un commit fait sur la même ligne avant le push : ce que ce commit emportera
+# est sur le disque (fichiers suivis et nouveaux non ignorés). Fichiers ordinaires
+# seulement, sans suivre de lien, et jamais un tube.
+if disque:
+    import stat
+    liste = git("ls-files", "-z", "--cached", "--others", "--exclude-standard").stdout.split(b"\0")
+    for chemin in dict.fromkeys(liste):
+        if not chemin.endswith(b".py") or any(ignore(x) for x in chemin.split(b"/")[:-1]):
+            continue
+        p = os.path.join(racine.encode(), chemin)
+        try:
+            st = os.lstat(p)
+            if not stat.S_ISREG(st.st_mode) or st.st_size > 2_000_000:
+                continue
+            fd = os.open(p, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with os.fdopen(fd, "rb") as f:
+                contenu = f.read()
+        except OSError:
             continue
         try:
             compile(contenu, chemin.decode("utf-8", "replace"), "exec", dont_inherit=True)

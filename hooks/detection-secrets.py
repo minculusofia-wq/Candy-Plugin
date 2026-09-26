@@ -34,7 +34,14 @@ MODELES = re.compile(r"[._-](example|sample|template|dist|tmpl|tpl|defaults?)$")
 # gh/hosts.yml et .docker/config.json portent ceux de git, de gh et de Docker.
 NOMS_EXACTS = {".env", ".envrc", "credentials", "credentials.json", "keystore.json", "wallet.json",
                "private_key.txt", "secret.key", ".netrc", ".pypirc", ".pgpass",
-               "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa", ".claude.json", ".git-credentials"}
+               "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa", ".claude.json", ".git-credentials",
+               # Seconde relecture de la 0.3.5 : wallets et fichiers d'identifiants courants.
+               "keypair.json", "wallet.dat", "secrets.toml", "secrets.json", "secrets.yml", "secrets.yaml",
+               ".npmrc", "application_default_credentials.json"}
+# Du code source n'est pas un fichier de secrets, même rangé sous wallet/ ou
+# nommé mnemonic.py : Read, cat et git add en étaient refusés.
+CODE_SOURCE = re.compile(r"\.(py|pyi|js|mjs|cjs|ts|tsx|jsx|go|rs|rb|java|kt|swift|c|h|cpp|hpp|cs|php|sh|md|"
+                         r"html|css|scss|vue|svelte|sql|ipynb|lock|txt\.tpl)$")
 # Copies horodatées d'un .env (sauvegardes/env-20260101-120000, env.local-…).
 COPIE_D_ENV = re.compile(r"env(\.[a-z]+)?-\d{8}-\d{6}(-\d+)?")
 EXTENSIONS = (".pem", ".key", ".p12", ".pfx", ".keystore", ".jks")
@@ -73,11 +80,19 @@ def par_le_nom(chemin):
     if (len(parties) >= 2 and parties[-2] == "gh" and b == "hosts.yml") or \
             (len(parties) >= 2 and parties[-2] == ".docker" and b == "config.json"):
         return True
-    if b.endswith(EXTENSIONS) or "mnemonic" in b:
+    if b.endswith(EXTENSIONS) or b.endswith("-keypair.json"):
+        return True
+    if CODE_SOURCE.search(b):
+        return False
+    if "mnemonic" in b or "seed-phrase" in b or "seed_phrase" in b:
         return True
     if ".ssh" in parties[:-1] and b not in SSH_PERMIS and not b.startswith("known_hosts"):
         return True                                 # clés privées ssh (id_*, ou nommées librement)
-    if "keystore" in parties[:-1]:
+    if "keystore" in parties[:-1] or "keystores" in parties[:-1]:
+        return True                                 # keystore/, ~/.foundry/keystores/
+    if len(parties) >= 3 and parties[-3:-1] == [".config", "solana"] and b.endswith(".json"):
+        return True                                 # ~/.config/solana/id.json : la clé en clair
+    if len(parties) >= 2 and parties[-2] == ".kube" and b == "config":
         return True
     if b == "environ" and len(parties) >= 3 and parties[-3] == "proc":
         return True                                 # /proc/<pid>/environ : l'environnement d'un processus
@@ -206,6 +221,18 @@ JETON_PREFIXE = re.compile(r"(?<![\w-])(gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-
 URL_MDP = re.compile(r"(?i)\b[a-z][a-z0-9+.-]*://[^\s:/@'\"]+:(?P<p>[^\s@/'\"]+)@")
 MDP_FACTICES = {"password", "passwd", "pass", "pwd", "secret", "motdepasse", "mot_de_passe", "changeme", "admin",
                 "root", "user", "postgres", "mysql", "guest"}
+# 64 octets écrits en tableau : la forme d'une clé Solana (Keypair.fromSecretKey).
+TABLEAU64 = re.compile(r"\[\s*(?:\d{1,3}\s*,\s*){63}\d{1,3}\s*,?\s*\]")
+CONTEXTE_CLE = re.compile(r"(?i)secret|keypair|priv|signer|wallet|from_?bytes|fromSeed")
+
+
+def mdp_solide(mdp):
+    """devpass, tiger, localpw (docker-compose de développement, exemples de
+    la doc) restent libres : 10 caractères et deux familles au moins."""
+    familles = sum(bool(re.search(r, mdp)) for r in (r"[a-z]", r"[A-Z]", r"\d", r"[^A-Za-z0-9]"))
+    return len(mdp) >= 16 or (len(mdp) >= 10 and familles >= 2)
+
+
 FAUX_EXPRES = re.compile(r"(?i)fake|test|mauvais|faux|wrong|invalid|bad|dummy|example|x{3,}")
 # Phrase de récupération sans guillemets : le nom suivi de 11 mots ou plus.
 PHRASE = re.compile(r"(?i)(mnemonic|seed[_-]?phrase|recovery[_-]?phrase)[\"']?\s*[:=]\s*[\"']?"
@@ -227,8 +254,12 @@ def valeur_secrete(texte):
             return "jeton"
     for m in URL_MDP.finditer(texte):
         mdp = m.group("p")
-        if not (GABARIT.search(mdp) or FACTICE.match(mdp) or mdp.lower() in MDP_FACTICES):
+        if not (GABARIT.search(mdp) or FACTICE.match(mdp) or mdp.lower() in MDP_FACTICES) and mdp_solide(mdp):
             return "mot de passe dans une URL"
+    for m in TABLEAU64.finditer(texte):
+        ligne = texte[texte.rfind("\n", 0, m.start()) + 1:m.start()]
+        if CONTEXTE_CLE.search(ligne) and all(int(x) < 256 for x in re.findall(r"\d+", m.group(0))):
+            return "clé en tableau d'octets"
     m = PHRASE.search(texte)
     if m and not FACTICE.match(m.group(2)):
         return m.group(1)

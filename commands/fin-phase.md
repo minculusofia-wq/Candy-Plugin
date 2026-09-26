@@ -324,9 +324,18 @@ Relecture adversariale à la sortie : <oui, parce que …> / <non>
 FIN
 ```
 
+Puis l'exclure de git, comme le témoin :
+
+```bash
+EXCLU=$(git -C "${CLAUDE_PROJECT_DIR}" rev-parse --git-path info/exclude)
+grep -qxF '.claude-phase-suivante' "$EXCLU" 2>/dev/null || echo '.claude-phase-suivante' >> "$EXCLU"
+```
+
 Le fichier est **remplacé** à chaque fin de phase, jamais complété : un conseil
-périmé est pire que pas de conseil. Le laisser hors de git (`.gitignore`) — il
-décrit un réglage de session, pas un état du projet.
+périmé est pire que pas de conseil. Il reste hors de git — il décrit un réglage
+de session, pas un état du projet — et `ouverture-de-phase.sh` ne lit qu'un
+conseil que git ignore : un conseil suivi, ou en lien, pourrait venir d'un
+dépôt cloné.
 
 **Et dire aussi si la phase qui s'ouvre méritera une relecture adversariale à sa
 sortie.** C'est un autre bouton, pas un sixième cran : l'effort règle la

@@ -78,7 +78,7 @@ case "$VERDICT" in
         echo "" >&2
         echo "Recherche refusee : le dossier parcouru est trop grand pour verifier qu'aucun fichier" >&2
         echo "de secrets (.env, cle, wallet) ne serait affiche." >&2
-        echo "La limiter a un sous-dossier, ou exclure les secrets : --exclude='.env*' --exclude='*.pem'." >&2
+        echo "La lancer sur un sous-dossier (src/, backend/…) : c'est la taille du dossier parcouru qui compte." >&2
         exit 2
         ;;
     AJOUT)
