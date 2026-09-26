@@ -165,22 +165,10 @@ else:
     fi
 fi
 
-cat >&2 <<'MESSAGE'
-=== CLOTURE DE PHASE SANS PASSAGE PAR /fin-phase ===
-
-Ce commit clot une phase (marqueur « cloture(phase N) » ou « LIVREE »), mais
-/fin-phase n'a pas tourne : aucun temoin valable (absent, de plus de 30
-minutes, ou suivi par git — il ne doit jamais etre commite).
-
-Clore une phase, c'est /fin-phase. La procedure complete est DANS la commande :
-ne pas l'improviser ici, ne pas la recopier.
-
-Si ce commit n'est pas une cloture (correction en cours de phase, fin de
-session), il ne porte pas ce marqueur : « fix(phase N): … » passe.
-
-Le 🟢 dans ROADMAP.md et l'etiquette `phase-N-done` ne se posent QU'EN VERT.
-
-=== FIN ===
-MESSAGE
+# Le message vit dans un fichier texte a cote : un here-doc dans un
+# script qui contient deja du Python entre apostrophes perd les outils qui
+# lisent le shell sans l'executer (validateur du repertoire de plugins).
+cat "$H/rule12-message-cloture.txt" >&2 2>/dev/null \
+    || echo "=== CLOTURE DE PHASE SANS PASSAGE PAR /fin-phase === (texte du message introuvable : $H/rule12-message-cloture.txt)" >&2
 
 exit 2
