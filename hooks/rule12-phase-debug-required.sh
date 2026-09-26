@@ -54,9 +54,9 @@ H="$(cd "${BASH_SOURCE[0]%/*}" 2>/dev/null && pwd)"
 INPUT=$(cat)
 
 # La commande est lue par analyse-commande.py (mode « cloture »), comme bash la
-# lit : « \ » + retour a la ligne, $( ), documents <<EOF, cd/pushd, git -C,
+# lit : « \ » + retour a la ligne, $( ), documents « here-doc », cd/pushd, git -C,
 # --git-dir. Seul le TITRE du message compte (1re ligne de -m, du fichier -F,
-# ou du document de « -m "$(cat <<'EOF' …)" ») : un git log --grep ou un corps
+# ou du here-doc passé à -m par $(cat …)) : un git log --grep ou un corps
 # de message qui cite une cloture passee ne bloque plus un commit ordinaire.
 # Sortie : « OUI<tab>dossier du commit » ou « NON ».
 # Mode « apres » (PostToolUse, la commande a reussi) : si c'etait un commit de
@@ -165,7 +165,7 @@ else:
     fi
 fi
 
-cat >&2 <<'EOF'
+cat >&2 <<'MESSAGE'
 === CLOTURE DE PHASE SANS PASSAGE PAR /fin-phase ===
 
 Ce commit clot une phase (marqueur « cloture(phase N) » ou « LIVREE »), mais
@@ -181,6 +181,6 @@ session), il ne porte pas ce marqueur : « fix(phase N): … » passe.
 Le 🟢 dans ROADMAP.md et l'etiquette `phase-N-done` ne se posent QU'EN VERT.
 
 === FIN ===
-EOF
+MESSAGE
 
 exit 2

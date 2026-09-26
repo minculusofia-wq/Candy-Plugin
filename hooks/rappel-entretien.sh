@@ -52,8 +52,7 @@ CLAUDE="$MAISON/.claude"
 PROJET=$(cd "${CLAUDE_PROJECT_DIR:-$PWD}" 2>/dev/null && pwd -P) || exit 0
 [ "$PROJET" = "$MAISON" ] || [ "$PROJET" = "$MAISON/.claude" ] || exit 0
 
-python3 -I - "$CLAUDE" "${RAPPEL_AUJOURDHUI:-}" "$ENTREE" <<'PY' \
-    || echo '{"systemMessage": "⚠️ rappel-entretien.sh a planté : rappel de /maintenance HORS SERVICE"}'
+python3 -I - "$CLAUDE" "${RAPPEL_AUJOURDHUI:-}" "$ENTREE" <<'PY'
 import datetime, json, os, re, sys
 
 claude, aujourdhui, entree = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -125,4 +124,6 @@ print(json.dumps({"systemMessage": f"🧰 Entretien du setup à faire ({texte}).
                   "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": pour_claude}},
                  ensure_ascii=True))
 PY
+STATUT=$?
+[ "$STATUT" = 0 ] || echo '{"systemMessage": "⚠️ rappel-entretien.sh a planté : rappel de /maintenance HORS SERVICE"}'
 exit 0
