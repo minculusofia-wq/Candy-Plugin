@@ -234,6 +234,21 @@ documents, et les pannes qu'il doit signaler au lieu de se taire. Voir
   courantes d'afficher un secret — lecteurs, interprètes, `xargs`, liens,
   recherche récursive —, pas une barrière : un programme qui lit le fichier
   sans le nommer (un script, une bibliothèque dotenv) passe.
+- **Les limites de ce filet, connues et laissées telles quelles.** Trois
+  relectures de sécurité l'ont montré : chaque forme ajoutée en ouvre une
+  autre et refuse du travail ordinaire, donc la liste ne grandit plus. Passent
+  aujourd'hui : une boucle `for f in .env …; do cat "$f"` ; `xargs` après
+  plusieurs tubes (`find … | sort | xargs cat`) ; `find -exec sh -c '…'` ;
+  `cat $(pwd)/.env` ; `read -r l < .env` ; `source .env` suivi d'un interprète
+  qui lit `os.environ` ; `git log -U0`, `--patch-with-stat`, `reflog -p`,
+  `format-patch --stdout` d'un `.env` commité ; `docker inspect` ; une archive
+  d'un `.env` sous un nom neutre (`tar -czf sauvegarde.tgz .env`), relue
+  ensuite. Deux limites qui ne sont pas des affichages : les commandes git que
+  les hooks lancent (`ls-files`, `check-ignore`, `status`) obéissent à la
+  configuration du dépôt, hooks de git compris — elle ne se clone pas, mais un
+  dépôt déjà présent la porte ; et la porte d'entrée cite les noms des fichiers
+  non commités (`git status`), donc un nom de fichier du dépôt arrive dans le
+  contexte de Claude.
 
 ## Ce qui n'est pas là, volontairement
 

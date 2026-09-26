@@ -231,6 +231,20 @@ See [tests/README.md](tests/README.md).
   secret — readers, interpreters, `xargs`, links, recursive search — not a
   wall: a program that reads the file without naming it (a script, a dotenv
   library) gets through.
+- **The net's limits, known and left as they are.** Three security reviews
+  showed it: every form added opens another one and refuses ordinary work, so
+  the list stops growing. These get through today: a loop `for f in .env …; do
+  cat "$f"`; `xargs` after several pipes (`find … | sort | xargs cat`);
+  `find -exec sh -c '…'`; `cat $(pwd)/.env`; `read -r l < .env`; `source .env`
+  followed by an interpreter reading `os.environ`; `git log -U0`,
+  `--patch-with-stat`, `reflog -p`, `format-patch --stdout` of a committed
+  `.env`; `docker inspect`; an archive of a `.env` under a neutral name
+  (`tar -czf backup.tgz .env`), read back later. Two limits that are not
+  displays: the git commands the hooks run (`ls-files`, `check-ignore`,
+  `status`) obey the repo's configuration, git hooks included — it is not
+  cloned, but a repo already on disk carries it; and the phase gate quotes the
+  names of uncommitted files (`git status`), so a file name from the repo
+  reaches Claude's context.
 
 ## Deliberately not included
 
