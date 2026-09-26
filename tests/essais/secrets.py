@@ -601,6 +601,96 @@ try:
         code, _, _ = lancer("pre-edit-guard.sh", "Grep", entree, cwd=home, env={"HOME": home})
         attendre(f"Grep {'refusé' if attendu == 2 else 'permis'} : {libelle}", attendu, code)
 
+    section("Secrets — passe 3, relecture : ce que les refus retirés avaient rouvert")
+    # La relecture de la passe 3 a trouvé, pour chaque refus retiré, une variante
+    # qui affichait un secret : un mot de passe faible pris pour un réglage
+    # inoffensif, un cd non suivi qui faisait juger le mauvais .env, une archive
+    # écrite vers /dev/stderr, sed -i avec « gw », grep -9 et -z, un nom de fichier
+    # collé au dossier courant, une valeur JSON à la ligne suivante, $HOME/.npmrc,
+    # bash -e via ssh (régression), pk/sk trop étroit, [^…] dans un glob.
+    d12 = os.path.join(base, "d12")
+    os.makedirs(os.path.join(d12, "backend"))
+    os.makedirs(os.path.join(d12, "config"))
+    os.makedirs(os.path.join(d12, "maison"))
+    open(os.path.join(d12, ".env"), "w").write(j("# config\nDRY_RUN=true\nMAX_API_CALLS=100\nDB_", "PASSWORD=huntertwo\nADMIN_",
+                                                "PASSWORD=48291375\nPASS", "PHRASE=abandon\nSEED_", "WORD=zebra-apple\nAPI", "_KEY=", B64, "\n"))
+    open(os.path.join(d12, "backend", ".env"), "w").write(j("DATABASE_URL=postgres://app:", B64, "@h/db\n"))
+    open(os.path.join(d12, "config", "wallet.json"), "w").write(j('{"', "private", '_key": "', B64, '"}\n'))
+    open(os.path.join(d12, "credentials.json"), "w").write(j('{\n  "client_', 'secret":\n    "', B64, B64, '"\n}\n'))
+    CORPS = "\n".join("".join(chr(65 + (i * 7 + k) % 26) for k in range(64)) for i in range(6))
+    open(os.path.join(d12, "server.pem"), "w").write(j("-----BEGIN RSA ", "PRIVATE KEY-----\n", CORPS, "\n-----END RSA ", "PRIVATE KEY-----\n"))
+    open(os.path.join(d12, "maison", ".npmrc"), "w").write(j("//registry.npmjs.org/:_auth", "Token=npm_", "aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY2zA4", "\n"))
+    open(os.path.join(d12, "app.py"), "w").write("def foo():\n    return 1\n")
+    open(os.path.join(d12, "README.md"), "w").write("# note\nwww\n")
+    E = "/srv/app/." + "env"
+    refuses_12 = [
+        # ssh : le document lu par un shell ou un interprète, sous d'autres formes
+        f"{S} srv bash -e <<'EOF'\ncat {E}\nEOF", f"{S} srv sh -e <<'EOF'\ncat {E}\nEOF", f"{S} srv sudo -u app bash -e <<'EOF'\ncat {E}\nEOF",
+        f"{S} srv bash -euo pipefail <<'EOF'\ncat {E}\nEOF", f"{S} srv bash -s prod <<'EOF'\ncat {E}\nEOF",
+        f"{S} srv bash /dev/stdin <<'EOF'\ncat {E}\nEOF", f"{S} srv sudo su - app <<'EOF'\ncat {E}\nEOF", f"{S} srv su - app <<'EOF'\ncat {E}\nEOF",
+        f"{S} srv 'cd /srv/app && bash -s' <<'EOF'\ncat {E}\nEOF", f"{S} srv docker exec -i app sh <<'EOF'\ncat {E}\nEOF",
+        f"{S} srv fish <<'EOF'\ncat {E}\nEOF", f"{S} srv python3 /dev/stdin <<'EOF'\nprint(open('{E}').read())\nEOF",
+        # un réglage dont le NOM dit mot de passe, clé, phrase, graine : refusé quelle que soit la valeur
+        "grep '^DB_PASSWORD=' .env", "grep '^ADMIN_PASSWORD=' .env", "grep '^PASSPHRASE=' .env", "grep '^SEED_WORD=' .env",
+        "grep -E '^(DB_PASSWORD|DRY_RUN)=' .env",
+        # dossier inconnu après un cd : la valeur ne se lit pas d'ici, le nom tranche
+        'cd "$B" && grep \'^DATABASE_URL=\' .env',
+        # archives vers l'écran
+        "tar -cf /dev/stderr .env", "tar -cf /dev/fd/2 .env 2>&1", "tar -c --file=/dev/stderr .env",
+        "zip -Z store - .env", "zip -0 -b /tmp - .env", "zip -t 2020-01-01 - .env",
+        # sed -i : tout ce qui n'est pas s///, d ou p sort du fichier
+        "sed -i '' 's/^//gw /dev/stdout' .env", "sed -i '' 's/^//pw /dev/stdout' .env", "sed -i '' '1,99w /dev/stdout' .env",
+        "sed -i '' '1r .env' README.md", "sed -i '' 'w notes.txt' .env",
+        # grep : -NOMBRE (contexte), -z (tout le fichier), le repère de find collé au dossier courant, la valeur JSON à la ligne d'après
+        "find . -type f -exec grep -9 '^# config' {} +", "find . -type f -exec grep -9 '^# config' {} \\;",
+        "find . -type f -exec grep -z config {} +", 'find "$APP" -name .env -exec grep -n ABSENT {} +',
+        "grep -rn -A1 client_secret .", "find . -name '*.json' -exec grep -A1 client_secret {} +",
+        "rg --hidden -U '# config[\\s\\S]*' .", "grep -rn -B6 '^-----END' .",
+    ]
+    permis_12 = [
+        f"{S} srv bash -e <<'EOF'\nls /srv/app\nEOF", f"{S} srv su - app <<'EOF'\nsystemctl status app\nEOF",
+        f"{S} srv 'cd /srv/app && bash -s' <<'EOF'\ngit pull\nEOF", f"{S} srv docker exec -i app sh <<'EOF'\nls /app\nEOF",
+        f"{S} srv python3 /dev/stdin <<'EOF'\nprint(1)\nEOF",
+        "grep '^DRY_RUN=' .env", "grep '^MAX_API_CALLS=' .env", "cd backend && grep '^DRY_RUN=' .env",
+        "tar -czf sauvegarde.tgz .env", "zip -Z store sauvegarde.zip .env", "zip -0 -b /tmp sauvegarde.zip .env",
+        "sed -i '' 's/^DRY_RUN=true/DRY_RUN=false/' .env", "sed -i '' 's#^DRY_RUN=true#DRY_RUN=false#g' .env", "sed -i '' '/^# config/d' .env",
+        "sed -i '' -e 's/^DRY_RUN=true/DRY_RUN=false/' -e 's/^MODE=a/MODE=b/' .env", "sed -i '' 's/w/x/' README.md",
+        "find . -type f -exec grep -9 'def foo' {} +", "grep -rn -A1 'def foo' .", "find . -name '*.json' -exec grep -c client_secret {} +",
+        "rg --hidden -U 'def foo[\\s\\S]*' app.py",
+    ]
+    for cmd in refuses_12:
+        code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d12)
+        attendre(f"Bash refusé : {cmd!r}", 2, code)
+    for cmd in permis_12:
+        code, _, err = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d12)
+        attendre(f"Bash permis : {cmd!r}", 0, code, err.strip()[:80])
+    maison = os.path.join(d12, "maison")
+    for cmd in ['cat "$HOME/.npmrc"', "cat $HOME/.npmrc", "cat ${HOME}/.npmrc", 'cd "$HOME" && cat .npmrc']:
+        code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d12, env={"HOME": maison})
+        attendre(f"Bash refusé (HOME porte un .npmrc à jeton) : {cmd!r}", 2, code)
+    MAPBOX = j("sk.", "eyJ1IjoiYW50aG9ueSIs", "ImEiOiJjbHh5ejEyMzQifQ", ".AbCdEfGhIjKlMnOpQrStUv")
+    JWT = j("eyJhbGciOiJIUzI1NiIs", "InR5cCI6IkpXVCJ9.eyJyb2xlIjoic2Vydmlj", "ZV9yb2xlIn0.Qm9ndXNTaWduYXR1cmVYWVo")
+    COURT = j("Xy7Pq2Lm9Nb4", "Vc8Za1Sd3Fg6")
+    for libelle, texte, attendu in [
+        ("MAPBOX_SK = \"sk.…\" (un point dans la clé)", j("MAPBOX_", 'SK = "', MAPBOX, '"'), 2),
+        ("SUPABASE_SK = \"<JWT>\"", j("SUPABASE_", 'SK = "', JWT, '"'), 2),
+        ("sk = \"<24 caractères>\"", j('sk = "', COURT, '"'), 2),
+        ("API_SK=<24 caractères> sans guillemets", j("API_", "SK=", COURT), 2),
+        ("pk = \"12345678\" (un identifiant court)", 'pk = "12345678"', 0),
+    ]:
+        code, _, _ = lancer("protect-secrets.sh", "Write", {"file_path": os.path.join(d12, "x.py"), "content": texte}, cwd=d12)
+        attendre(f"Write {'refusé' if attendu == 2 else 'permis'} : {libelle}", attendu, code)
+    for libelle, entree, attendu in [
+        ("glob [^_]*.json (négation de ripgrep)", {"pattern": "private", "path": d12, "glob": "[^_]*.json", "output_mode": "content"}, 2),
+        ("glob config/[^_]*.json", {"pattern": "private", "path": d12, "glob": "config/[^_]*.json", "output_mode": "content"}, 2),
+        ("-A 1 sur un nom dont la valeur JSON est à la ligne suivante", {"pattern": "client_secret", "path": d12, "output_mode": "content", "-A": 1}, 2),
+        ("-B 6 sur la fin d'une clé PEM (son corps s'affiche)", {"pattern": "^-----END", "path": d12, "output_mode": "content", "-B": 6}, 2),
+        ("glob [^_]*.md", {"pattern": "note", "path": d12, "glob": "[^_]*.md", "output_mode": "content"}, 0),
+        ("-A 1 sur du code", {"pattern": "def foo", "path": d12, "output_mode": "content", "-A": 1}, 0),
+    ]:
+        code, _, _ = lancer("pre-edit-guard.sh", "Grep", entree, cwd=d12)
+        attendre(f"Grep {'refusé' if attendu == 2 else 'permis'} : {libelle}", attendu, code)
+
     section("Secrets — git ne lance aucun programme configuré par le dépôt")
     d9 = os.path.join(base, "d9")
     os.makedirs(d9)

@@ -168,6 +168,17 @@ printf 'TEXTE-VENU-DU-GITIGNORE\n' > "$G/.claude-phase-suivante"
 S=$(porte "$G")
 verifie "conseil exclu par le .gitignore du dépôt (livré avec lui) : non lu" 0 "$(a "$S" "TEXTE-VENU-DU-GITIGNORE")"
 verifie "  et la porte dit pourquoi" 1 "$(a "$S" "non lu")"
+# Relecture de la passe 3 : un core.excludesFile qui pointe vers un fichier suivi
+# nommé « …/info/exclude » passait pour le vrai. Seul le info/exclude du dépôt
+# lui-même compte, comparé par son chemin complet.
+X=$(projet conseil-excludesfile)
+printf '### Phase 1 — Base\n' > "$X/ROADMAP.md"
+for f in CLAUDE SPEC JOURNAL README; do echo "# $f" > "$X/$f.md"; done
+mkdir -p "$X/outils/info"; echo ".claude-phase-suivante" > "$X/outils/info/exclude"
+git -C "$X" config core.excludesFile outils/info/exclude
+commiter "$X" init
+printf 'TEXTE-VENU-D-UN-EXCLUDESFILE\n' > "$X/.claude-phase-suivante"
+verifie "conseil exclu par un core.excludesFile nommé info/exclude : non lu" 0 "$(a "$(porte "$X")" "TEXTE-VENU-D-UN-EXCLUDESFILE")"
 verifie "le hook ne cite plus un contrôle qui n'existe pas dans le plugin" \
         0 "$(grep -c 'etat-des-phases' "$OUVERTURE")"
 

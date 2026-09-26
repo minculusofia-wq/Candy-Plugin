@@ -77,7 +77,7 @@ def npmrc_porte_un_jeton(chemin):
     """Un .npmrc du dossier personnel (par son nom), ou un .npmrc de projet qui
     porte une valeur d'authentification en clair (par son contenu)."""
     try:
-        chemin = os.path.expanduser(chemin)
+        chemin = os.path.expanduser(os.path.expandvars(chemin))      # ~/.npmrc, $HOME/.npmrc, ${HOME}/.npmrc
         if os.path.basename(os.path.normpath(unicodedata.normalize("NFKC", chemin).casefold())) != ".npmrc":
             return False
         parent = os.path.dirname(os.path.abspath(chemin))
@@ -135,10 +135,12 @@ PAS_UNE_VALEUR = re.compile(r"[_-](name|file|path|dir|id|ids|arn|url|uri|env|var
 # pk, sk : un identifiant Django (pk="<uuid>") ou une clé composite DynamoDB
 # ("pk": "USER#…", "sk": "PROFILE#…") portent ces noms sans rien de secret.
 # Sous ces deux noms courts seuls, la valeur doit avoir la matière d'une clé :
-# 32 caractères ou plus de base58, base64 ou hexadécimal, ni UUID ni « # »
-# (passe 3 : ces identifiants étaient refusés).
+# 20 caractères ou plus de base58, base64, hexadécimal ou JWT (avec ses
+# points), ni UUID ni « # » (passe 3 : ces identifiants étaient refusés ; sa
+# relecture : une clé Mapbox « sk.eyJ… », un JWT, une clé de 24 caractères
+# passaient sous une règle trop étroite).
 NOM_COURT_DE_CLE = re.compile(r"(?i)(?:.*[_-])?[ps]k$")
-MATIERE_DE_CLE = re.compile(r"[A-Za-z0-9+/=_-]{32,}")
+MATIERE_DE_CLE = re.compile(r"[A-Za-z0-9+/=_.-]{20,}")
 UUID = re.compile(r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 # (?<![\w.-]) : le nom commence au début d'un mot. Sans cela, chaque caractère

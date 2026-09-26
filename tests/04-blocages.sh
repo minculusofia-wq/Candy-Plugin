@@ -314,6 +314,20 @@ verifie "git commit -am && git push, fichier suivi cassé : REFUSÉ" \
 RAISON_DISQUE=$(entree_push "$BAC/brouillon" "git commit -am fix && $PUSH_CMD" | CLAUDE_PROJECT_DIR="$BAC/brouillon" bash "$PUSH" 2>&1 >/dev/null)
 verifie "  la raison parle du commit fait sur la ligne, pas « des commits pousses »" \
         0 "$(printf '%s' "$RAISON_DISQUE" | grep -c 'des commits pousses')"
+# Relecture de la passe 3 : un chemin donné à git add est relatif au dossier où
+# git add tourne (cd sub, git -C sub, session ouverte dans sub/), pas à la racine.
+mkdir -p "$BAC/sousdossier/sub"
+printf 'def ok():\n    return 1\n' > "$BAC/sousdossier/sub/vieux.py"
+suivi "$BAC/sousdossier"
+printf 'def casse(:\n' > "$BAC/sousdossier/sub/neuf.py"
+verifie "cd sub && git add neuf.py && commit && push, neuf.py cassé : REFUSÉ" \
+        2 "$(pousse "$BAC/sousdossier" "cd sub && git add neuf.py && git commit -m x && $PUSH_CMD")"
+verifie "git -C sub add neuf.py && commit && push : REFUSÉ" \
+        2 "$(pousse "$BAC/sousdossier" "git -C sub add neuf.py && git commit -m x && $PUSH_CMD")"
+verifie "session ouverte dans sub/, git add neuf.py && commit && push : REFUSÉ" \
+        2 "$(pousse "$BAC/sousdossier/sub" "git add neuf.py && git commit -m x && $PUSH_CMD")"
+verifie "cd sub && git add vieux.py (sain, suivi) && commit && push : le push passe" \
+        0 "$(pousse "$BAC/sousdossier" "cd sub && git add vieux.py && git commit -m x && $PUSH_CMD")"
 
 # Ce qui ne part pas au push ne le bloque pas : un environnement non suivi
 # (code tiers, parfois en Python 2) faisait refuser le push et durer 12 s.

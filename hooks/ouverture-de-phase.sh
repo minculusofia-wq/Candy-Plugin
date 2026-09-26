@@ -201,10 +201,18 @@ done
 # (une cle), dans un projet sans .git (archive), ou exclu par un .gitignore —
 # qui voyage avec le depot — peut venir d'ailleurs, et son texte arriverait a
 # Claude comme une consigne (relecture de securite de la 0.3.5, trois passes).
-conseil_exclu_localement() {  # 0 si git exclut $1 par .git/info/exclude, ce que seul /fin-phase ecrit ici
-    local source
-    source=$(g -C "$(dirname "$1")" check-ignore -v -- "$(basename "$1")" 2>/dev/null | head -1 | cut -d: -f1)
-    [[ "$source" == *info/exclude ]]
+conseil_exclu_localement() {  # 0 si git exclut $1 par le info/exclude DU depot, ce que seul /fin-phase ecrit ici
+    local dossier source attendu
+    dossier="$(dirname "$1")"
+    source=$(g -C "$dossier" check-ignore -v -- "$(basename "$1")" 2>/dev/null | head -1 | cut -d: -f1)
+    [[ -n "$source" ]] || return 1
+    # Le fichier compare par son chemin complet : un core.excludesFile nomme
+    # « …/info/exclude » et suivi par git passait pour le vrai (relecture de la passe 3).
+    attendu=$(g -C "$dossier" rev-parse --path-format=absolute --git-path info/exclude 2>/dev/null) \
+        || attendu="$(g -C "$dossier" rev-parse --absolute-git-dir 2>/dev/null)/info/exclude"
+    case "$source" in /*) ;; *) source="$dossier/$source" ;; esac
+    [[ -f "$source" && -f "$attendu" ]] || return 1
+    [[ "$(cd "$(dirname "$source")" && pwd -P)/$(basename "$source")" == "$(cd "$(dirname "$attendu")" && pwd -P)/$(basename "$attendu")" ]]
 }
 if [[ -n "$CONSEIL" ]] && { [[ -L "$CONSEIL" || ! -f "$CONSEIL" ]] || ! conseil_exclu_localement "$CONSEIL"; }; then
     echo "⚠️ Conseil de phase (.claude-phase-suivante) non lu : il n'est pas exclu par .git/info/exclude (un .gitignore ne compte pas), ou n'est pas un fichier ordinaire."
