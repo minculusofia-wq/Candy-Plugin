@@ -221,6 +221,12 @@ See [tests/README.md](tests/README.md).
   (`python3 -I`, checked by `tests/06-paquet.sh`). To know what changed during
   the turn, the plugin records the repo's state at each message, in its data
   folder (`~/.claude/plugins/data/`).
+- **What runs, reads or goes out, beyond that**: the plugin's own code sends nothing over
+  the network. `/verifier` also runs the project's own `make audit` target
+  when the Makefile has one — a dependency audit (`pip-audit`, `npm audit`)
+  goes over the network; the end-of-turn check leaves it out. `/maintenance`
+  reads your conversation transcripts (`~/.claude/projects/*.jsonl`) on your
+  machine to count reviews and review the setup; nothing leaves it.
 - **Also worth knowing**: Claude no longer reads a secrets file — not `.env` or
   its variants, not a key (`.pem`, `.key`, `~/.ssh`), not a wallet. The Read
   tool, a Grep search and a command such as `cat .env` are refused. What only

@@ -224,6 +224,13 @@ documents, et les pannes qu'il doit signaler au lieu de se taire. Voir
   projet (`python3 -I`, vérifié par `tests/06-paquet.sh`). Pour savoir ce qui a
   bougé pendant le tour, le plugin relève l'état du dépôt à chaque message, dans
   son dossier de données (`~/.claude/plugins/data/`).
+- **Ce qui tourne, se lit ou sort, en plus** : le code du plugin lui-même n'envoie rien
+  sur le réseau. `/verifier` lance aussi la cible `make audit` du projet
+  quand son Makefile en a une — un audit des dépendances (`pip-audit`,
+  `npm audit`) passe par le réseau ; le contrôle de fin de tour la saute.
+  `/maintenance` lit vos transcriptions de conversation
+  (`~/.claude/projects/*.jsonl`) sur votre machine pour compter les relectures
+  et relire le setup ; rien n'en sort.
 - **À savoir aussi** : Claude ne lit plus un fichier de secrets — ni `.env` et
   ses variantes, ni clé (`.pem`, `.key`, `~/.ssh`), ni wallet. L'outil Read, la
   recherche Grep et une commande comme `cat .env` sont refusés. Ce qui ne montre
