@@ -281,6 +281,40 @@ verifie "un nouveau .py cassé, ajouté puis commité sur la ligne : REFUSE" \
 rm -f "$BAC/memeligne/nouveau.py"
 verifie "même ligne, code valide : le push passe" 0 "$(pousse "$BAC/memeligne" "git commit -am fix && $PUSH_CMD")"
 
+# Passe 3 : ce disque-là, ce sont les fichiers SUIVIS (ce que « commit -am »
+# emporte), plus les fichiers non suivis que la ligne ajoute (git add -A, .,
+# un chemin). Un brouillon non suivi ne bloque plus « git commit -am && git
+# push » ; pull et stash ne créent pas de commit depuis le disque : il n'est
+# plus lu pour eux. Et la raison ne parle plus « des commits pousses » pour un
+# fichier qui n'est encore que sur le disque.
+mkdir -p "$BAC/brouillon/notes"
+printf 'def ok():\n    return 1\n' > "$BAC/brouillon/a.py"
+suivi "$BAC/brouillon"
+printf 'def casse(:\n' > "$BAC/brouillon/brouillon.py"
+printf 'def casse(:\n' > "$BAC/brouillon/notes/essai.py"
+printf 'def ok():\n    return 2\n' > "$BAC/brouillon/a.py"
+verifie "commit -am && push, un brouillon .py cassé NON suivi : le push passe" \
+        0 "$(pousse "$BAC/brouillon" "git commit -am fix && $PUSH_CMD")"
+verifie "git add -A && commit && push, le brouillon part : REFUSÉ" \
+        2 "$(pousse "$BAC/brouillon" "git add -A && git commit -m fix && $PUSH_CMD")"
+verifie "git add . && commit && push : REFUSÉ" \
+        2 "$(pousse "$BAC/brouillon" "git add . && git commit -m fix && $PUSH_CMD")"
+verifie "git add notes/ && commit && push, le dossier ajouté porte le .py cassé : REFUSÉ" \
+        2 "$(pousse "$BAC/brouillon" "git add notes/ && git commit -m fix && $PUSH_CMD")"
+verifie "git add a.py && commit && push, le brouillon reste hors du commit : le push passe" \
+        0 "$(pousse "$BAC/brouillon" "git add a.py && git commit -m fix && $PUSH_CMD")"
+verifie "git add brouillon.py && commit && push : REFUSÉ" \
+        2 "$(pousse "$BAC/brouillon" "git add brouillon.py && git commit -m fix && $PUSH_CMD")"
+printf 'def casse(:\n' > "$BAC/brouillon/a.py"
+verifie "git pull && git push, fichier suivi cassé sur le disque, pas commité : le push passe" \
+        0 "$(pousse "$BAC/brouillon" "git pull --rebase && $PUSH_CMD")"
+verifie "git stash && git push : le push passe" 0 "$(pousse "$BAC/brouillon" "git stash && $PUSH_CMD")"
+verifie "git commit -am && git push, fichier suivi cassé : REFUSÉ" \
+        2 "$(pousse "$BAC/brouillon" "git commit -am fix && $PUSH_CMD")"
+RAISON_DISQUE=$(entree_push "$BAC/brouillon" "git commit -am fix && $PUSH_CMD" | CLAUDE_PROJECT_DIR="$BAC/brouillon" bash "$PUSH" 2>&1 >/dev/null)
+verifie "  la raison parle du commit fait sur la ligne, pas « des commits pousses »" \
+        0 "$(printf '%s' "$RAISON_DISQUE" | grep -c 'des commits pousses')"
+
 # Ce qui ne part pas au push ne le bloque pas : un environnement non suivi
 # (code tiers, parfois en Python 2) faisait refuser le push et durer 12 s.
 mkdir -p "$BAC/nonsuivi/env/lib"

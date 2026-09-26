@@ -1788,6 +1788,12 @@ def depots_pousses(texte, depart):
     elif re.search(r"\bGIT_DIR=(\S+)", texte):
         impose = dossier_de_git_dir(re.search(r"\bGIT_DIR=(\S+)", texte).group(1).strip("'\""), depart)
     commit_avant = False
+    # Ce que « git add » ajoute sur la ligne : "tout" (-A, ., :/, xargs, $(…)) ou
+    # la liste des chemins nommés ; None sans git add.
+    ajoute = None
+    if re.search(r"\bxargs\b[^|;&]*\bgit\b[^|;&]*\b(add|stage)\b", texte) or \
+            re.search(r"\bgit\b[^|;&\n]*\b(add|stage|update-index)\b[^|;&\n]*[$`]", texte):
+        ajoute = "tout"
     for mots, _, _ in commandes_et_entrees(texte):
         nom = os.path.basename(mots[0].lstrip("\\"))
         if nom in ("cd", "pushd", "popd"):
@@ -1795,8 +1801,19 @@ def depots_pousses(texte, depart):
         elif nom == "git":
             d, i = depot_vise(mots, dossier)
             sous, args = sous_commande(mots, i, d or dossier or depart)
-            if sous in ("commit", "merge", "cherry-pick", "revert", "am", "rebase", "pull", "stash"):
+            # Un commit fait sur la ligne (commit, merge, cherry-pick, revert,
+            # am, rebase — --continue compris) n'existe pas encore quand le hook
+            # lit les commits : ce qu'il emportera est sur le disque. pull et
+            # stash ne créent rien depuis le disque : ils n'y sont plus (passe 3).
+            if sous in ("commit", "merge", "cherry-pick", "revert", "am", "rebase"):
                 commit_avant = True
+            if sous in ("add", "stage") and ajoute != "tout":
+                chemins = [a for a in args if not a.startswith("-") or a == "-"]
+                if any(a in ("-A", "--all", "--no-ignore-removal") for a in args) or \
+                        any(c in (".", "./", ":/", ":/.", "*") or c.endswith(("/.", "/*")) for c in chemins):
+                    ajoute = "tout"
+                elif chemins:
+                    ajoute = (ajoute or []) + chemins
             if sous == "push":
                 if impose and d == dossier:
                     d = impose
@@ -1806,8 +1823,17 @@ def depots_pousses(texte, depart):
                     d = depart
                 # « git commit -am x && git push » : le commit n'existe pas encore
                 # quand le hook lit les commits ; le disque est contrôlé aussi
-                # (régression de la 0.3.5, trouvée par sa seconde relecture).
-                res.append((d, references_poussees(args) + (["--disque"] if commit_avant else [])))
+                # (régression de la 0.3.5, trouvée par sa seconde relecture) —
+                # les fichiers SUIVIS, plus ce que la ligne ajoute (passe 3 :
+                # un brouillon non suivi bloquait « commit -am && push »).
+                disque = []
+                if commit_avant:
+                    disque = ["--disque"]
+                    if ajoute == "tout":
+                        disque.append("--disque-tout")
+                    elif ajoute:
+                        disque += ["--ajout=" + shlex.quote(c) for c in ajoute]
+                res.append((d, references_poussees(args) + disque))
     return [(d, r) for d, r in res if d]
 
 

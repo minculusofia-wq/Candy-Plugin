@@ -102,10 +102,12 @@ done <<< "$CANDIDATS"
 # au lieu de le laisser passer.
 controler() {  # controler <racine du depot> <references> : 0 si tout compile, sinon refuse (exit 2)
 ERREURS=$("$PY" -I -c '
-import os, subprocess, sys
-racine, refs = sys.argv[1], sys.argv[2].split()
+import os, shlex, subprocess, sys
+racine, refs = sys.argv[1], shlex.split(sys.argv[2])
 disque = "--disque" in refs
-refs = [r for r in refs if r != "--disque"] or ["HEAD"]
+tout = "--disque-tout" in refs
+ajouts = [r[len("--ajout="):] for r in refs if r.startswith("--ajout=")]
+refs = [r for r in refs if r == "--all" or not r.startswith("--")] or ["HEAD"]
 IGNORES = {b"virtualenv", b".virtualenv", b"site-packages", b"__pycache__", b"node_modules"}
 def ignore(nom):
     return nom in IGNORES or nom.startswith((b"venv", b".venv"))
@@ -155,11 +157,17 @@ for ref in refs:
         except Exception:
             pass
 # Un commit fait sur la même ligne avant le push : ce que ce commit emportera
-# est sur le disque (fichiers suivis et nouveaux non ignorés). Fichiers ordinaires
-# seulement, sans suivre de lien, et jamais un tube.
+# est sur le disque — les fichiers SUIVIS (git commit -am), plus les fichiers
+# non suivis que la ligne ajoute (git add -A ou . : tous ; git add chemin : ceux
+# du chemin). Fichiers ordinaires seulement, sans suivre de lien, jamais un tube.
+casses_disque = 0
 if disque:
     import stat
-    liste = git("ls-files", "-z", "--cached", "--others", "--exclude-standard").stdout.split(b"\0")
+    liste = git("ls-files", "-z", "--cached").stdout.split(b"\0")
+    if tout:
+        liste += git("ls-files", "-z", "--others", "--exclude-standard").stdout.split(b"\0")
+    elif ajouts:
+        liste += git("ls-files", "-z", "--others", "--exclude-standard", "--", *ajouts).stdout.split(b"\0")
     for chemin in dict.fromkeys(liste):
         if not chemin.endswith(b".py") or any(ignore(x) for x in chemin.split(b"/")[:-1]):
             continue
@@ -176,23 +184,35 @@ if disque:
         try:
             compile(contenu, chemin.decode("utf-8", "replace"), "exec", dont_inherit=True)
         except (SyntaxError, ValueError, RecursionError, MemoryError):
-            casses += 1
+            casses_disque += 1
         except Exception:
             pass
-print(casses)
+print(casses, casses_disque)
 ' "$1" "$2" 2>/dev/null) || ERREURS=""
 
 # Python qui plante sans rendre de compte (le 3.9 de macOS sort en 139 sur
 # certains fichiers) : le controle n'a pas eu lieu, le push ne passe pas.
-if [[ ! "$ERREURS" =~ ^[0-9]+$ ]]; then
+DEUX_NOMBRES='^[0-9]+ [0-9]+$'
+if [[ ! "$ERREURS" =~ $DEUX_NOMBRES ]]; then
     echo "Push refuse : le controle de syntaxe Python du projet n'a pas pu aller au bout." >&2
     echo "Le relancer : /verifier, ou python3 -I -m py_compile sur les fichiers .py du projet." >&2
     exit 2
 fi
+COMMITS=${ERREURS% *}
+DISQUE=${ERREURS#* }
 
-if (( ERREURS > 0 )); then
-    echo "Push refuse : $ERREURS fichier(s) Python des commits pousses ne compilent pas." >&2
+if (( COMMITS > 0 )); then
+    echo "Push refuse : $COMMITS fichier(s) Python des commits pousses ne compilent pas." >&2
     echo "Corriger, PUIS commiter la correction, puis pousser : le push envoie les commits, pas le disque." >&2
+    echo "Les voir : /verifier, ou python3 -I -m py_compile sur les fichiers .py du projet." >&2
+    exit 2
+fi
+# Le fichier casse n'est encore que sur le disque : c'est le commit fait sur la
+# meme ligne qui l'emporterait (passe 3 : la raison disait « des commits
+# pousses », ce qui etait faux).
+if (( DISQUE > 0 )); then
+    echo "Push refuse : $DISQUE fichier(s) Python qu'emporterait le commit fait sur cette ligne ne compilent pas." >&2
+    echo "Corriger AVANT de commiter et de pousser." >&2
     echo "Les voir : /verifier, ou python3 -I -m py_compile sur les fichiers .py du projet." >&2
     exit 2
 fi
