@@ -105,14 +105,18 @@ def par_le_nom(chemin):
         return True
     if b.endswith(EXTENSIONS) or b.endswith("-keypair.json"):
         return True
-    if CODE_SOURCE.search(b):
-        return False
-    if "mnemonic" in b or "seed-phrase" in b or "seed_phrase" in b:
-        return True
+    # Les dossiers dédiés aux clés d'abord : tout ce qui s'y trouve en est un
+    # morceau, quelle que soit l'extension. Jusqu'à la 0.4.1, ils étaient jugés
+    # après l'exception du code source : keystore/key.ts et ~/.ssh/backup.sh se
+    # lisaient et partaient par git add.
     if ".ssh" in parties[:-1] and b not in SSH_PERMIS and not b.startswith("known_hosts"):
         return True                                 # clés privées ssh (id_*, ou nommées librement)
     if "keystore" in parties[:-1] or "keystores" in parties[:-1]:
         return True                                 # keystore/, ~/.foundry/keystores/
+    if CODE_SOURCE.search(b):
+        return False
+    if "mnemonic" in b or "seed-phrase" in b or "seed_phrase" in b:
+        return True
     if len(parties) >= 3 and parties[-3:-1] == [".config", "solana"] and b.endswith(".json"):
         return True                                 # ~/.config/solana/id.json : la clé en clair
     if len(parties) >= 2 and parties[-2] == ".kube" and b == "config":

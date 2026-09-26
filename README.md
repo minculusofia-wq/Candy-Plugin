@@ -252,6 +252,34 @@ See [tests/README.md](tests/README.md).
   `.git` folder ships its `info/exclude` too: a phase advice stored there is
   read; and the phase gate quotes the names of uncommitted files
   (`git status`), so a file name from the repo reaches Claude's context.
+- **The wall the hooks are not: Claude Code's sandbox.** The hooks read the
+  text of a command, so a program that reads the file by itself gets through.
+  For a file that holds real keys, turn on Claude Code's
+  [sandbox](https://code.claude.com/docs/en/sandboxing) in the project: the
+  operating system (macOS, Linux, WSL2) then refuses the read to every command
+  Claude runs and to everything those commands start — `cat`, Python, a link,
+  a script alike. In the project's `.claude/settings.local.json`:
+
+  ```json
+  {
+    "sandbox": {
+      "enabled": true,
+      "allowUnsandboxedCommands": false,
+      "credentials": {
+        "files": [{ "path": "/absolute/path/to/project/.env", "mode": "deny" }],
+        "envVars": [{ "name": "PRIVATE_KEY", "mode": "deny" }]
+      }
+    }
+  }
+  ```
+
+  What it costs, per that page: sandboxed commands write only inside the
+  project and reach only the domains you allow (`sandbox.network.allowedDomains`,
+  plus `allowLocalBinding` for tests that open a local port); `docker` does
+  not work inside it and goes in `excludedCommands`; a `.env` read on a server
+  over ssh is not covered; and the protected file is refused to every
+  sandboxed command, the project's own scripts included. The hooks stay as the
+  second net.
 
 ## Deliberately not included
 

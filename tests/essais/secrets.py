@@ -447,8 +447,8 @@ try:
         "ssh srv 'openssl x509 -in /etc/letsencrypt/live/exemple.org/fullchain.pem -noout -dates'",
         "curl --cacert cert.pem https://exemple.invalid", "rsync -avz --exclude .env ./ srv:/srv/app",
         "rsync -avz --exclude=.env ./ srv:/srv/app", "env $(grep -v '^#' .env | xargs) node server.js",
-        "cat src/wallet/mnemonic.py", "cat src/keystore/index.ts", "env", "printenv PATH", "env | grep -c KEY",
-        "find . -name '*.py' -exec cat {} +", "find src -name '*.ts' | xargs cat",
+        "cat src/wallet/mnemonic.py", "env", "printenv PATH", "env | grep -c KEY",
+        "find . -name '*.py' -exec cat {} +", "find src/wallet -name '*.py' | xargs cat",
         "psql postgresql://app:devpass@localhost/app -c 'select 1'",
         "redis-cli -u redis://default:localpw@localhost:6379 ping",
     ]
@@ -458,7 +458,7 @@ try:
     for cmd in permis_8:
         code, _, err = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d8)
         attendre(f"Bash permis : {cmd!r}", 0, code, err.strip()[:80])
-    for f in ("src/wallet/mnemonic.py", "src/keystore/index.ts"):
+    for f in ("src/wallet/mnemonic.py",):
         code, _, _ = lancer("pre-edit-guard.sh", "Read", {"file_path": os.path.join(d8, f)}, cwd=d8)
         attendre(f"Read permis : {f}", 0, code)
     for chemin in ("/Users/x/.config/solana/id.json", "/p/keypair.json", "/p/deployer-keypair.json", "/p/wallet.dat",
@@ -781,6 +781,48 @@ try:
     code, _, _ = lancer("pre-edit-guard.sh", "Grep", {"pattern": "fn main", "path": grand, "output_mode": "content"},
                         cwd=grand)
     attendre("outil Grep sur 21 000 fichiers, motif absent des .env : permis", 0, code)
+
+    section("Secrets — 0.4.1 : dossiers de clés et lignes des fichiers de secrets")
+    # Trouvés par la relecture de sécurité du portage de la 0.4.0 dans un setup
+    # local, et présents dans la 0.4.0 publiée :
+    # - l'exception « du code source n'est pas un secret » passait avant les
+    #   dossiers dédiés aux clés : keystore/key.ts ou ~/.ssh/backup.sh se
+    #   lisaient et partaient par git add ;
+    # - grep -r ne jugeait, dans un fichier de secrets reconnu par son nom
+    #   (wallet.json, .pgpass, credentials…), que les lignes qui ressemblent à
+    #   une valeur : une phrase de récupération ou un mot de passe en clair passait.
+    d41 = os.path.join(base, "d41")
+    os.makedirs(os.path.join(d41, "keystore"))
+    os.makedirs(os.path.join(d41, ".ssh"))
+    os.makedirs(os.path.join(d41, "src", "keystore"))
+    subprocess.run(["git", "init", "-q", d41], check=True)
+    open(os.path.join(d41, "keystore", "key.ts"), "w").write(j('export const k = "', CLE, '"\n'))
+    open(os.path.join(d41, ".ssh", "backup.sh"), "w").write("x\n")
+    open(os.path.join(d41, "src", "keystore", "index.ts"), "w").write("export const x = 1\n")
+    # « find src -name '*.ts' | xargs cat » était permis en 0.4.0 : il affiche
+    # aussi src/keystore/index.ts, désormais protégé.
+    for cmd in ["cat keystore/key.ts", "cat .ssh/backup.sh", "cat src/keystore/index.ts", "git add keystore/key.ts",
+                "git add .ssh/backup.sh", "find . -name '*.ts' | xargs cat"]:
+        code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d41)
+        attendre(f"Bash refusé (fichier de code dans un dossier de clés) : {cmd!r}", 2, code)
+    for f in ("keystore/key.ts", ".ssh/backup.sh", "src/keystore/index.ts"):
+        code, _, _ = lancer("pre-edit-guard.sh", "Read", {"file_path": os.path.join(d41, f)}, cwd=d41)
+        attendre(f"Read refusé : {f}", 2, code)
+    d42 = os.path.join(base, "d42")
+    os.makedirs(os.path.join(d42, "src"))
+    open(os.path.join(d42, "wallet.json"), "w").write('{"data": "apple banana cherry dog"}\n')
+    open(os.path.join(d42, ".pgpass"), "w").write(j("myhost:5432:mydb:appuser:", "hunter", "deux\n"))
+    open(os.path.join(d42, "src", "app.py"), "w").write("x = 1  # TODO\n")
+    for cmd in ["grep -rn apple .", "grep -rn 5432 .", "rg --hidden 5432 ."]:
+        code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d42)
+        attendre(f"Bash refusé (ligne d'un fichier de secrets) : {cmd!r}", 2, code)
+    for cmd in ["grep -rn TODO .", "grep -rn 'x = 1' ."]:
+        code, _, err = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d42)
+        attendre(f"Bash permis (motif absent des fichiers de secrets) : {cmd!r}", 0, code, err.strip()[:80])
+    for motif, attendu in (("apple", 2), ("TODO", 0)):
+        code, _, _ = lancer("pre-edit-guard.sh", "Grep", {"pattern": motif, "path": d42, "output_mode": "content"},
+                            cwd=d42)
+        attendre(f"Grep {'refusé' if attendu else 'permis'} sur le dossier : {motif}", attendu, code)
 finally:
     shutil.rmtree(base, ignore_errors=True)
 

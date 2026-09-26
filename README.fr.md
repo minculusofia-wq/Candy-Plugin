@@ -257,6 +257,34 @@ documents, et les pannes qu'il doit signaler au lieu de se taire. Voir
   livre aussi son `info/exclude` : un conseil de phase rangé dedans est lu ;
   et la porte d'entrée cite les noms des fichiers non commités (`git status`),
   donc un nom de fichier du dépôt arrive dans le contexte de Claude.
+- **La barrière que les hooks ne sont pas : le bac à sable de Claude Code.**
+  Les hooks lisent le texte d'une commande : un programme qui lit le fichier
+  lui-même passe. Pour un fichier qui porte de vraies clés, activez le
+  [bac à sable](https://code.claude.com/docs/en/sandboxing) de Claude Code
+  dans le projet : le système (macOS, Linux, WSL2) refuse alors la lecture à
+  chaque commande que Claude lance et à tout ce qu'elle lance à son tour —
+  `cat`, Python, un lien, un script. Dans `.claude/settings.local.json` du projet :
+
+  ```json
+  {
+    "sandbox": {
+      "enabled": true,
+      "allowUnsandboxedCommands": false,
+      "credentials": {
+        "files": [{ "path": "/chemin/absolu/du/projet/.env", "mode": "deny" }],
+        "envVars": [{ "name": "PRIVATE_KEY", "mode": "deny" }]
+      }
+    }
+  }
+  ```
+
+  Ce qu'il coûte, d'après cette page : les commandes n'écrivent que dans le
+  projet et ne joignent que les domaines autorisés
+  (`sandbox.network.allowedDomains`, et `allowLocalBinding` pour les tests qui
+  ouvrent un port local) ; `docker` n'y fonctionne pas et va dans
+  `excludedCommands` ; un `.env` lu sur un serveur par ssh n'est pas couvert ;
+  et le fichier protégé est refusé à toute commande du bac à sable, scripts du
+  projet compris. Les hooks restent comme second filet.
 
 ## Ce qui n'est pas là, volontairement
 

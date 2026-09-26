@@ -1329,13 +1329,18 @@ def recherche_recursive(nom, fichiers, options, dossier, detection):
 
 
 def ligne_secrete(ligne, fichier, detection):
-    """Une ligne qui porte une valeur : dans un .env, toute affectation ; ailleurs
-    (~/.claude.json…), une valeur que detection-secrets reconnaît."""
+    """Une ligne qui porte une valeur, dans un fichier de secrets : dans un .env,
+    toute affectation ; dans ~/.claude.json, une valeur que detection-secrets
+    reconnaît ; ailleurs (clé, wallet, credentials…), toute ligne non vide."""
     b = os.path.basename(fichier).lower()
     if ".env" in b or b.startswith(("env-", "env.")) or b.endswith("env"):
         return bool(re.match(r"\s*(export\s+)?[A-Za-z_]\w*\s*=\s*\S", ligne))
-    if b.endswith(detection.EXTENSIONS) or b in ("id_rsa", "id_ed25519", "id_ecdsa", "id_dsa"):
-        return bool(ligne.strip())                  # une clé : chaque ligne de son corps en est un morceau
+    if b != ".claude.json":
+        # Une clé, un wallet.json, un .pgpass, des credentials : chaque ligne en
+        # est un morceau. Jusqu'à la 0.4.1, seule une ligne qui ressemblait à une
+        # valeur comptait : « grep -rn apple . » affichait la phrase de
+        # récupération d'un wallet.json.
+        return bool(ligne.strip())
     return bool(detection.valeur_secrete(ligne))
 
 
