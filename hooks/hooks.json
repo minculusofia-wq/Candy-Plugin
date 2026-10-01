@@ -7,6 +7,10 @@
           {
             "type": "command",
             "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/ouverture-de-phase.sh\"'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'cat | bash \"${CLAUDE_PLUGIN_ROOT}/hooks/rappel-reglages.sh\"'"
           }
         ]
       },

@@ -228,14 +228,12 @@ print(t[:3000].rstrip())
 if len(t) > 3000:
     print("[... conseil coupe a 3 000 caracteres : le lire en entier dans " + sys.argv[1] + "]")' "$CONSEIL"
     echo
-    echo "⚠️ DEUX reglages, pas trois : le mode (plan/edit/auto) et le curseur"
-    echo "   d'effort, dont ultracode est la DERNIERE position — pas un interrupteur"
-    echo "   a part. Les deux se fixent AVANT le premier message — c'est le plus"
-    echo "   simple — et jamais en suite d'etapes. Si le curseur de cette"
-    echo "   conversation ne correspond pas au conseil, le DIRE en une ligne avec la"
-    echo "   commande a taper (/effort <cran>) : sur Opus 5.5 et Fable 5.1, le"
-    echo "   changement garde le cache ; sur un autre modele, plus tard, il fait"
-    echo "   relire la conversation sans cache."
+    echo "Quatre reglages sont recommandes au debut d'une tache : mode, effort,"
+    echo "ultracode (interrupteur a part, independant du cran), advisor. Si le curseur"
+    echo "de cette conversation ne correspond pas au conseil, le DIRE en une ligne avec"
+    echo "la commande a taper (/effort <cran>) : sur Opus 5.5 et Fable 5.1, le"
+    echo "changement garde le cache ; sur un autre modele, plus tard, il fait relire"
+    echo "la conversation sans cache."
     echo
 fi
 

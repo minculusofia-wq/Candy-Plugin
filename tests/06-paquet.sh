@@ -289,7 +289,7 @@ verifie "aucune règle n'écrit de chemin \${CLAUDE_PLUGIN_ROOT} :$(grep -ln 'CL
 CITEES=$(grep -ohE '`/[a-z][a-z-]+`' rules/*.md 2>/dev/null | tr -d '`/' | sort -u)
 ABSENTES=""
 for c in $CITEES; do
-    case "$c" in effort|model|plugin|code-review|clear|compact|config|mcp|hooks) continue ;; esac
+    case "$c" in effort|advisor|model|plugin|code-review|clear|compact|config|mcp|hooks) continue ;; esac
     [ -f "commands/$c.md" ] || ABSENTES="$ABSENTES $c"
 done
 verifie "chaque commande citée par une règle existe :$ABSENTES" "" "$ABSENTES"

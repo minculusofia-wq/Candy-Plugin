@@ -252,50 +252,47 @@ la règle « choix du modèle » :
 | Écrans, navigation, réglages, tests, refactor — sans zone sensible | `high` |
 | Sécurité, chiffrement, clés, secrets, micro, position, argent réel | `xhigh` |
 | Un **arbitrage d'architecture** qui engage les phases suivantes, ou un bug déjà corrigé deux fois sans succès | `max` |
-| Phase sensible **et** large — chiffrement, micro, position, déclencheurs, alerte réelle | **ultracode** — le point violet, au bout du MÊME curseur, jamais en plus d'un cran |
+| Phase sensible **et** large — chiffrement, micro, position, déclencheurs, alerte réelle | le cran de la ligne qui convient **+ ultracode** — un interrupteur à part, qui s'ajoute au cran |
 
 Une phase d'app descend rarement sous `high`, et `max` ne se conseille **pas**
 parce qu'une phase est longue : une phase est longue, pas dure. En cas de doute
 sur la présence d'une zone sensible : ne pas descendre.
 
-**Ultracode est la position qui suit `max`, sur le même curseur — au modèle il envoie `xhigh`,
-et Claude Code y ajoute des workflows** : Claude découpe la phase et
-lance plusieurs agents en parallèle qui se contredisent avant de retenir quoi que
-ce soit. Le plus cher de loin. Ne pas le conseiller quand le goulot d'étranglement
-de la phase est l'appareil de l'utilisateur et non la couverture de Claude — une phase
-d'écrans n'en tire rien.
+**Ultracode est un interrupteur indépendant du cran** (Claude Code v2.1.284 ou
+plus récent ; doc model-config : « a Claude Code setting rather than a level »).
+Il ajoute des workflows à ce que Claude Code fait déjà, au cran où la session
+tourne : Claude découpe la phase et lance plusieurs agents en parallèle qui se
+contredisent avant de retenir quoi que ce soit. Le plus cher de loin. Ne pas le
+conseiller quand le goulot d'étranglement de la phase est l'appareil de
+l'utilisateur et non la couverture de Claude — une phase d'écrans n'en tire
+rien.
 
-### DEUX réglages — et ultracode est le BOUT du curseur d'effort
+### QUATRE réglages, tous nommés dans le conseil
 
-⚠️ **Cette section annonçait « trois curseurs » jusqu'au 2026-08-19, et c'était
-FAUX.** L'utilisateur l'a relevé en montrant sa capture de l'interface : le curseur
-d'effort porte **cinq points puis un point violet au bout**. Ultracode est la
-**sixième position de ce curseur**, pas un interrupteur à côté — on ne peut donc
-**pas** être en `xhigh` *et* en ultracode. Le conseil donné à la clôture de la
-phase 12 — « mode plan, effort `xhigh`, ultracode oui » — décrivait une
-combinaison **qui n'existe pas**, et l'utilisateur a dû poser la question une seconde
-fois en deux phases.
-
-**Deux réglages, à fixer tous deux AVANT le premier message** (`/effort` peut
-encore changer le curseur ensuite — sur Opus 5.5 et Fable 5.1, sans perdre le
-cache) **:**
+Le conseil de clôture nomme **quatre réglages, chacun justifié en une ligne** —
+se taire sur l'un des quatre est une faute, y compris pour dire « non » :
 
 | Réglage | Ses positions |
 |---|---|
 | **Le mode** | plan / edit / auto |
-| **Le curseur** | `low` · `medium` · `high` · `xhigh` · `max` · **ultracode** (violet) |
+| **Le curseur** | `low` · `medium` · `high` · `xhigh` · `max` |
+| **Ultracode** | interrupteur oui / non, indépendant du curseur (`Tab` dans le sélecteur `/effort`, ou `/effort ultracode` — le cran ne bouge pas ; c'est le drapeau `claude --effort ultracode` qui met aussi `xhigh`) |
+| **L'advisor** | non, ou un modèle conseiller (`/advisor fable`) — section « Advisor » de la règle « choix du modèle » |
 
-⚠️ **Ne jamais nommer un cran ET ultracode dans le même conseil.**
-
-⚠️ Les énumérer à la file les fait lire comme une **séquence dans le temps** —
-« je fais le plan en `xhigh`, puis je bascule en ultracode pour construire ».
-C'est faux : le curseur ne bouge pas quand le plan est accepté, et ultracode
-tourne **pendant le plan aussi**.
+Mode, curseur et ultracode se fixent **avant le premier message** (`/effort`
+peut encore changer le curseur ensuite — sur Opus 5.5 et Fable 5.1, sans perdre
+le cache). L'advisor se règle à part, par `/advisor`, sans perdre le cache non
+plus. Le curseur ne bouge pas quand le plan est accepté, et ultracode tourne
+**pendant le plan aussi**.
 
 Écrire donc, toujours dans cette forme :
 
-> « Deux réglages à mettre **en même temps**, avant d'envoyer ton premier
->   message : mode **plan**, curseur sur **`<cran ou ultracode>`**. »
+> « Quatre réglages pour la phase Y, à mettre avant ton premier message :
+>   - mode **plan**, parce que <motif> ;
+>   - curseur **`<cran>`**, parce que <motif> ;
+>   - ultracode **<oui / non>**, parce que <motif> ;
+>   - advisor **<non / Fable : `/advisor fable`, surcoût à chaque
+>     consultation>**, parce que <motif>. »
 
 Et donner **la phrase exacte que l'utilisateur peut taper** en ouvrant :
 
@@ -320,6 +317,7 @@ Phase <N+1> — <titre>
 Mode : plan (non négociable pour ouvrir une phase)
 Effort : <cran>, parce que <motif en une ligne>
 Ultracode : <oui, parce que …> / <non, le goulot est l'appareil réel>
+Advisor : <non, parce que …> / <Fable (/advisor fable, surcoût à chaque consultation), parce que …>
 Relecture adversariale à la sortie : <oui, parce que …> / <non>
 FIN
 ```
@@ -343,7 +341,7 @@ suivi, en lien, ou exclu par un `.gitignore` — qui voyage avec le dépôt —
 pourrait venir d'un dépôt cloné ou d'une archive.
 
 **Et dire aussi si la phase qui s'ouvre méritera une relecture adversariale à sa
-sortie.** C'est un autre bouton, pas un sixième cran : l'effort règle la
+sortie.** C'est un autre bouton que l'effort : l'effort règle la
 profondeur pendant la construction, `/code-review` ajoute des relecteurs
 indépendants sur le travail fini. Le signaler dès l'ouverture évite d'y penser
 trop tard — et permet à l'utilisateur de prévoir le coût.

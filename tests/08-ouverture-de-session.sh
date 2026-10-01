@@ -175,4 +175,13 @@ else
     saute "terminal en latin-1 : les trois rappels s'affichent" "locale fr_FR.ISO8859-1 absente de cette machine"
 fi
 
+section "Rappel des quatre réglages"
+REGLAGES_HOOK="$RACINE/hooks/rappel-reglages.sh"
+verifie "le rappel nomme les quatre réglages (mode, effort, ultracode, advisor)" \
+        4 "$(echo '{}' | bash "$REGLAGES_HOOK" | grep -o -i -E 'mode|effort|ultracode|advisor' | sort -u | wc -l | tr -d ' ')"
+verifie "le rappel sort en une seule ligne" \
+        1 "$(echo '{}' | bash "$REGLAGES_HOOK" | wc -l | tr -d ' ')"
+verifie "le rappel est branché sur SessionStart dans hooks.json" \
+        1 "$(python3 -c "import json; d=json.load(open('$RACINE/hooks/hooks.json')); print(1 if any('rappel-reglages.sh' in h['command'] for g in d['hooks']['SessionStart'] for h in g['hooks']) else 0)")"
+
 bilan

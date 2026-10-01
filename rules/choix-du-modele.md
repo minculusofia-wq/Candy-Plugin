@@ -7,20 +7,34 @@ abonnement Claude ou une clé d'API, le cache reste intact (doc Claude Code,
 prompt-caching, « Changing effort level »). Sur les autres modèles, changer
 d'effort vide encore le cache.
 
-## Deux réglages, pas trois
+## Quatre réglages, tous recommandés d'office
 
 | Réglage | Ses positions |
 |---|---|
 | **Le mode** | plan / edit / auto |
-| **Le curseur** | `low` · `medium` · `high` · `xhigh` · `max` · **ultracode** (violet) |
+| **Le curseur** | `low` · `medium` · `high` · `xhigh` · `max` |
+| **Ultracode** | interrupteur oui / non, indépendant du curseur |
+| **L'advisor** | non, ou un modèle conseiller (Fable) — voir « Advisor » plus bas |
 
-⚠️ **Ultracode est la 6ᵉ position du curseur d'effort, pas un interrupteur à
-part.** On ne peut donc pas être en `xhigh` *et* en ultracode. Ne jamais nommer un
-cran ET ultracode dans le même conseil.
+**Au début de chaque tâche, Claude recommande les quatre, chacun justifié en une
+ligne** (format : dernière section). Se taire sur l'un des quatre est une faute —
+y compris pour dire « non » : « advisor : non, corrections listées » est une
+réponse, un silence n'en est pas une.
 
-⚠️ Les deux réglages se mettent **en même temps**, avant le premier message. Le
-curseur ne bouge pas quand un plan est accepté : ultracode tourne pendant le plan
-aussi, et c'est là qu'il sert le plus.
+⚠️ **Ultracode est un interrupteur indépendant du cran** (Claude Code v2.1.284
+ou plus récent ; doc model-config : « a Claude Code setting rather than a model
+effort level […] at whichever effort level the session runs at »). Dans le
+sélecteur `/effort`, `Tab` le bascule sans toucher au cran ; `/effort ultracode`
+l'allume sans changer le cran non plus (« leaves the effort level unchanged ») —
+seul le drapeau de lancement `claude --effort ultracode` met aussi `xhigh`. On
+peut donc conseiller « `high` + ultracode ». Avant v2.1.284, c'était une 6ᵉ
+position qui remplaçait le cran.
+
+⚠️ Mode, curseur et ultracode se mettent **en même temps**, avant le premier
+message. Le curseur ne bouge pas quand un plan est accepté : ultracode tourne
+pendant le plan aussi, et c'est là qu'il sert le plus. L'advisor se règle à
+part, avec `/advisor` : l'activer ou le couper en cours de session garde le
+cache (doc advisor, « Impact on prompt caching »).
 
 Avant le premier message, c'est le plus simple. Ils ne sont pas verrouillés pour
 autant : `/effort <cran>` change le curseur à tout moment, même pendant que
@@ -36,7 +50,7 @@ modèle, au prix d'une relecture sans cache de toute la conversation.
 | Code ordinaire, tests, refactor simple, une phase d'écrans sans zone sensible | `high` |
 | Sécurité, crypto, risque, argent réel, architecture, une phase qui touche une zone sensible | `xhigh` |
 | Un problème **dur**, pas un travail **long** — voir ci-dessous | `max` |
-| Phase **sensible ET large** : chiffrement, micro, position, alerte réelle | **ultracode** |
+| Phase **sensible ET large** : chiffrement, micro, position, alerte réelle | le cran qui convient **+ ultracode** |
 
 **`max` seulement dans trois cas** — une tâche grosse ne suffit pas, une phase
 d'app est longue mais pas dure :
@@ -46,12 +60,12 @@ d'app est longue mais pas dure :
 3. Un arbitrage d'architecture qui engage les phases suivantes
 
 **Ultracode** : Claude découpe la tâche, lance des agents en parallèle et les fait
-se contredire. Au modèle, il envoie `xhigh` ; ce qu'il ajoute, c'est
-l'orchestration de workflows par Claude Code (doc model-config). Face à `max`, il
-échange de la profondeur contre de la largeur ; face à `xhigh`, il garde la même
-profondeur. Le plus cher, de loin. À laisser éteint pour les conversations, les
-questions, la documentation, et chaque fois que le goulot est l'appareil physique de l'utilisateur —
-dix agents ne trouvent pas un bouton mort.
+se contredire. Il n'envoie rien de plus au modèle : ce qu'il ajoute, c'est
+l'orchestration de workflows par Claude Code, au cran où la session tourne (doc
+model-config). Il s'ajoute au cran : `max` + ultracode garde la profondeur et
+ajoute la largeur. Le plus cher, de loin. À laisser éteint pour les
+conversations, les questions, la documentation, et chaque fois que le goulot est
+l'appareil physique de l'utilisateur — dix agents ne trouvent pas un bouton mort.
 
 ## Changer de modèle
 
@@ -93,6 +107,37 @@ une erreur au lieu de basculer.
 Quand cette pause arrive, Claude le signale en une ligne et propose de
 reformuler plutôt que de basculer.
 
+## Advisor — un conseiller plus fort, consulté en cours de tâche
+
+Source : doc Claude Code, page « advisor ». Le modèle principal consulte, à des
+moments qu'il choisit, un second modèle plus fort qui reçoit **toute la
+conversation**, appels d'outils compris, et rend des conseils avant de continuer.
+
+- **Expérimental** : « Behavior, pricing, and availability may change ». API
+  Anthropic seulement (ni Bedrock, ni Vertex, ni Foundry).
+- **Pairage** : le conseiller doit être au moins aussi capable que le modèle
+  principal. Sous Opus 5.5 : Fable, ou Opus 5 ou plus récent ; Sonnet et Haiku
+  sont refusés. Sous Fable 5.1 : Fable 5.1 seul.
+- **Il relit toute la conversation à chaque consultation**, sans cache : plus la
+  session est longue, plus chaque appel coûte, au tarif du modèle conseiller en
+  plus du principal. Sur les plans où Fable se facture en crédits d'usage, le
+  conseiller aussi.
+- **Claude choisit le moment** (avant de s'engager, quand une erreur revient,
+  avant de déclarer fini) ; aucun réglage ne force ni ne plafonne les appels.
+- **Commandes** : `/advisor fable`, `/advisor off`, ou `claude --advisor fable`.
+
+**Recommander oui, avec Fable sous Opus 5.5** (surcoût : tarif Fable sur toute
+la conversation à chaque consultation) : une conception difficile — architecture,
+modèle probabiliste, protocole, format de stockage — ou un défaut qui a déjà
+résisté à une correction. Un Opus conseillé par Opus apporte peu : ne pas le
+recommander.
+
+**Recommander non** : des corrections listées, de la documentation, de la
+lecture ou de la recherche, une tâche courte. Le dire en une ligne quand même.
+
+L'advisor n'est pas une relecture : il conseille pendant le travail ;
+`/code-review` et les subagents relisent après.
+
 ## Relecture : `/code-review`
 
 Proposer à chaque fois **le niveau adapté à ce qui est relu**, avec la commande
@@ -121,9 +166,17 @@ tout de même le quota, sur le modèle de la session : les subagents
 
 ## Format du conseil, et quoi faire si le cran se révèle trop bas
 
-Une ligne, avant de commencer, avec le motif et le gain attendu. Pas une question
-qui bloque : L'utilisateur applique ou ignore. Ce conseil est écrit par `/fin-phase`
-dans `.claude-phase-suivante` et relu par le hook `ouverture-de-phase.sh`.
+**Quatre lignes**, avant de commencer, chacune avec son motif en une ligne. Pas
+une question qui bloque : l'utilisateur applique ou ignore.
+
+> Mode : <plan / auto>, parce que …
+> Effort : <low … max>, parce que …
+> Ultracode : <oui / non>, parce que …
+> Advisor : <non / Fable, surcoût à chaque consultation>, parce que …
+
+Ce conseil est écrit par `/fin-phase` dans `.claude-phase-suivante` et relu par
+le hook `ouverture-de-phase.sh` ; le hook `rappel-reglages.sh` rappelle ce format
+à chaque ouverture de session.
 
 Claude ne peut pas changer le cran lui-même ; l'utilisateur le peut, avec
 `/effort`. Mais **se taire quand il est trop bas est une faute** — le dire en une
