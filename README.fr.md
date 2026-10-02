@@ -98,6 +98,37 @@ tâche faite, sa ligne se retire. Sans ce fichier, le hook ne dit rien.
 
 Il suffit de répondre « go ». Le reste du temps, le hook ne dit rien.
 
+## Les commandes
+
+| Commande | Ce qu'elle fait |
+|---|---|
+| `/verifier` | Lance le contrôle du projet (tests, qualité, types, sécurité, jeu de documents) et rend le verdict |
+| `/debug` | Debug complet du projet, toujours en local : backend, frontend, endpoints, tests, un bug corrigé à la fois |
+| `/fin-session` | Clôt une session d'un projet sans phases : debug si du code a bougé, documents remis d'accord, un commit, push |
+| `/fin-phase` | Clôt une phase : contrôle, porte de sortie relue point par point, essai sur l'appareil réel, documents, commit |
+| `/maj-docs` | Remet les `.md` du projet d'accord avec le code, chaque information dans un seul fichier, commit et push |
+| `/maintenance` | Entretien de `~/.claude` : contrôle mécanique, relecture des transcriptions, audit des consignes, puis `/doctor` et `/skill-doctor` à taper soi-même |
+
+Vous n'avez pas à les retenir : `rules/routage-commandes.md` fait lancer la
+bonne quand vous écrivez « debug », « fin de session », « fin de phase » ou
+« mets à jour la doc ».
+
+### Les commandes de Claude Code que les règles font proposer
+
+Claude ne peut pas les lancer lui-même ; il les propose en une ligne, au bon
+moment, avec la commande à taper.
+
+| Commande | Ce qu'elle fait | Quand elle est proposée |
+|---|---|---|
+| `/effort` | Change le niveau de réflexion du modèle, et active ultracode | Au début de chaque tâche (`choix-du-modele.md`) |
+| `/advisor` | Fait consulter un second modèle, plus fort, pendant la tâche | Conception difficile, défaut qui résiste |
+| `/code-review` | Relecture du code à la recherche de bugs | Code qui touche l'argent, les secrets, l'irréversible |
+| `/rewind` | Ramène le code et la conversation à un point précédent | Une mauvaise direction a été prise |
+| `/context` puis `/clear` | Montre ce qui remplit la conversation, puis repart à neuf | Conversation longue, deuxième échec sur le même défaut |
+| `/btw` | Pose une question à côté, sans l'ajouter à l'historique | Question hors du sujet en cours |
+| `/usage` | Coût de la session et limites du forfait | Fin d'une longue tâche, doute sur la dépense |
+| `/doctor`, `/skill-doctor` | Bilan de l'installation ; coût en contexte de chaque skill | Pendant `/maintenance` |
+
 ## Pour quels projets ? Bots, apps, et tout le reste
 
 Ces règles sont nées sur deux terrains : des **bots de trading** qui tournent en

@@ -101,6 +101,37 @@ the `rappel-entretien.sh` hook offers it in two cases:
 
 Just answer "go". The rest of the time, the hook stays silent.
 
+## The commands
+
+| Command | What it does |
+|---|---|
+| `/verifier` | Runs the project check (tests, quality, types, security, document set) and gives the verdict |
+| `/debug` | Full project debug, always local: backend, frontend, endpoints, tests, one bug fixed at a time |
+| `/fin-session` | Closes a session on a project without phases: debug if code changed, documents brought back in line, one commit, push |
+| `/fin-phase` | Closes a phase: check, exit gate reviewed point by point, run on the real device, documents, commit |
+| `/maj-docs` | Brings the project's `.md` files back in line with the code, each piece of information in one file, commit and push |
+| `/maintenance` | Upkeep of `~/.claude`: mechanical check, transcript review, instruction audit, then `/doctor` and `/skill-doctor` for you to type |
+
+No need to remember them: `rules/routage-commandes.md` makes Claude run the
+right one when you write "debug", "fin de session", "fin de phase" or "mets à
+jour la doc".
+
+### Claude Code commands the rules make Claude suggest
+
+Claude can't run these itself; it suggests them in one line, at the right
+moment, with the command to type.
+
+| Command | What it does | When it is suggested |
+|---|---|---|
+| `/effort` | Changes how much the model reasons, and turns ultracode on | At the start of every task (`choix-du-modele.md`) |
+| `/advisor` | Has a second, stronger model consulted during the task | Hard design work, a defect that resists |
+| `/code-review` | Reviews the code for bugs | Code touching money, secrets, anything irreversible |
+| `/rewind` | Rolls the code and the conversation back to an earlier point | A wrong direction was taken |
+| `/context` then `/clear` | Shows what fills the conversation, then starts fresh | Long conversation, second failure on the same defect |
+| `/btw` | Asks a side question without adding it to the history | A question off the current topic |
+| `/usage` | Session cost and plan limits | End of a long task, doubt about spending |
+| `/doctor`, `/skill-doctor` | Installation checkup; context cost of each skill | During `/maintenance` |
+
 ## Which projects is this for? Bots, apps, and everything else
 
 These rules were forged on two fronts: **trading bots** running non-stop on a

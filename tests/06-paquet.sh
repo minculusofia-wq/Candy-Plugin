@@ -286,10 +286,11 @@ section "Paquet — les règles et les commandes désignent ce qui existe"
 # commande du plugin, jamais un fichier.
 verifie "aucune règle n'écrit de chemin \${CLAUDE_PLUGIN_ROOT} :$(grep -ln 'CLAUDE_PLUGIN_ROOT' rules/*.md 2>/dev/null | tr '\n' ' ')" \
         0 "$(grep -c 'CLAUDE_PLUGIN_ROOT' rules/*.md 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')"
+# Commandes intégrées à Claude Code (doc commands.md, relue le 2026-10-02) : exclues ci-dessous.
 CITEES=$(grep -ohE '`/[a-z][a-z-]+`' rules/*.md 2>/dev/null | tr -d '`/' | sort -u)
 ABSENTES=""
 for c in $CITEES; do
-    case "$c" in effort|advisor|model|plugin|code-review|clear|compact|config|mcp|hooks) continue ;; esac
+    case "$c" in effort|advisor|model|plugin|code-review|clear|compact|config|mcp|hooks|context|rewind|usage|btw) continue ;; esac
     [ -f "commands/$c.md" ] || ABSENTES="$ABSENTES $c"
 done
 verifie "chaque commande citée par une règle existe :$ABSENTES" "" "$ABSENTES"

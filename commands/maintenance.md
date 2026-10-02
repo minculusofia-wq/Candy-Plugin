@@ -16,9 +16,10 @@ rien ne le signale : un hook déclaré mais dont le script a disparu, un skill a
 mauvais format donc jamais chargé, une mémoire qui affirme une échéance dépassée
 depuis des semaines.
 
-Trois étapes. La première est mécanique et rapide. La deuxième relit le passé et
+Quatre étapes. La première est mécanique et rapide. La deuxième relit le passé et
 **propose** — elle ne corrige jamais seule. La troisième ne tourne que si le
 modèle de la session n'a jamais été audité.
+La quatrième donne à l'utilisateur deux bilans de Claude Code à taper.
 
 ---
 
@@ -182,6 +183,25 @@ projets, qui se traitent chacun dans leur propre session.
 
 Ajouter la ligne `AAAA-MM-JJ <modèle>` à `~/.claude/.audit-consignes`, même si
 aucun changement n'a été retenu : c'est ce qui fait taire le rappel.
+
+## Étape 4 — Les deux bilans de Claude Code, tapés par l'utilisateur
+
+`/doctor` et `/skill-doctor` sont des commandes de Claude Code que Claude ne
+peut pas lancer lui-même. Les donner à l'utilisateur une à la fois, et attendre
+qu'il dise « fait » :
+
+- `/doctor` — bilan de l'installation : installations en double, fichiers de
+  réglages illisibles, skills, serveurs MCP et plugins inutilisés comparés à ce
+  qu'ils coûtent en contexte, hooks lents, version plus récente disponible.
+  Il montre ses constats puis demande avant chaque changement. Conseiller de
+  **refuser** ce qui toucherait aux hooks ou aux règles de ce plugin : une
+  mise à jour l'écraserait, et ces fichiers se corrigent à l'étape 2, vérifiés
+  à la source.
+- `/skill-doctor` — ce que chaque skill coûte en contexte et à quelle
+  fréquence il sert. Un skill cher et jamais utilisé se masque avec
+  `/skills` (réversible).
+
+Source : doc Claude Code, `commands.md`, relue le 2026-10-02.
 
 ---
 
