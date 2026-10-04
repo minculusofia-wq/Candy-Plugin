@@ -52,7 +52,7 @@ Elles fonctionnent séparément — prenez-en une, pas les neuf.
 | **9 règles** | vérifier avant d'affirmer · honnêteté brutale · discipline de code · porte de phase · choix du modèle · réflexes de travail · style de communication · routage des commandes · une information, un seul fichier |
 | **6 commandes** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
 | **2 agents** | `relecteur-securite` · `relecteur-de-phase` (contexte neuf, ne consomment pas la conversation) |
-| **13 hooks + 8 scripts** | rappel d'ouverture de phase, rappel des quatre réglages à recommander en début de tâche (mode, effort, ultracode, advisor), rappel des tâches en attente sur un projet, rappel d'entretien du setup, contrôle du jeu de documents à chaque ouverture (fichiers manquants, hors du jeu, CLAUDE.md trop long), fichiers de secrets gardés en écriture et en lecture, protection des secrets (une valeur écrite, un `.env` affiché, un `git add` qui l'emporterait), contrôle avant push (le dépôt et les commits réellement poussés), contrôle du projet en fin de tour (borné dans le temps, seulement sur ce qui a bougé pendant le tour), relecture de la réponse en fin de tour, contrôle du setup lui-même |
+| **14 hooks + 8 scripts** | rappel d'ouverture de phase, rappel du modèle et des quatre réglages à recommander en début de tâche (mode, effort, ultracode, advisor), rappel des tâches en attente sur un projet, rappel d'entretien du setup, contrôle du jeu de documents à chaque ouverture (fichiers manquants, hors du jeu, CLAUDE.md trop long), fichiers de secrets gardés en écriture et en lecture, protection des secrets (une valeur écrite, un `.env` affiché, un `git add` qui l'emporterait), contrôle avant push (le dépôt et les commits réellement poussés), refus d'un git qui sauterait les hooks du dépôt (`--no-verify`, `core.hooksPath`, `HUSKY=0`…), contrôle du projet en fin de tour (borné dans le temps, seulement sur ce qui a bougé pendant le tour), relecture de la réponse en fin de tour, contrôle du setup lui-même |
 
 ### La pièce la plus utile : `hooks/verifier-projet.sh`
 
@@ -225,8 +225,9 @@ make test
 j'attends ce verdict*. Chaque défaut corrigé a ses cas, joués sur la version qui
 avait le défaut : ils doivent y échouer — un test qui passe toujours ne vaut
 rien. Le groupe 09 rejoue l'incident qui a fait naître le contrôle du jeu de
-documents, et les pannes qu'il doit signaler au lieu de se taire. Voir
-[tests/README.md](tests/README.md).
+documents, et les pannes qu'il doit signaler au lieu de se taire. Les groupes
+tournent en parallèle : la suite entière tient dans le temps que lui laisse le
+contrôle de fin de tour. Voir [tests/README.md](tests/README.md).
 
 ## Prérequis
 
@@ -288,6 +289,20 @@ documents, et les pannes qu'il doit signaler au lieu de se taire. Voir
   livre aussi son `info/exclude` : un conseil de phase rangé dedans est lu ;
   et la porte d'entrée cite les noms des fichiers non commités (`git status`),
   donc un nom de fichier du dépôt arrive dans le contexte de Claude.
+- **Le garde des hooks git arrête le réflexe, pas un contournement voulu.** Un
+  pre-commit qui refuse un commit indique souvent lui-même son contournement
+  (`git commit --no-verify`) ; le garde refuse celui-ci, `-n`, `core.hooksPath`
+  ou `include` passés en ligne de commande, `HUSKY`/`SKIP`/`GIT_CONFIG_*` posés
+  pour git, et `git config` qui change `core.hooksPath` ou `include` — à travers `sudo`,
+  `bash -c`, `eval`, `$( )` et les alias git, tandis qu'un message de commit qui
+  cite ces mots passe. Passent : une variable (`F=--no-verify; git commit $F`),
+  un script, un autre langage, un `chmod -x` ou un déplacement du hook, une
+  édition directe de `.git/config`, un nom de commande ou un argument calculé
+  (`$(which git)`, `git commit $(echo …)`), les lanceurs qu'il ne connaît pas
+  (`xcrun git`), l'expansion d'accolades (`git {commit,-n}`), un alias créé sur
+  la même ligne, une commande envoyée à `bash` par un tube, et les interrupteurs
+  des gestionnaires de hooks autres que husky et pre-commit. Installer des hooks par
+  `git config core.hooksPath` reste donc à taper soi-même, une fois.
 - **La barrière que les hooks ne sont pas : le bac à sable de Claude Code.**
   Les hooks lisent le texte d'une commande : un programme qui lit le fichier
   lui-même passe. Pour un fichier qui porte de vraies clés, activez le

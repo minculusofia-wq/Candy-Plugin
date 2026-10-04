@@ -11,5 +11,5 @@
 set -u
 cat >/dev/null 2>&1 || true
 
-echo "Début de tâche : recommander d'office QUATRE réglages, chacun justifié en une ligne — mode (plan/auto), effort (low à max), ultracode (oui/non), advisor (non, ou Fable avec son surcoût). Se taire sur l'un des quatre est une faute (rules/choix-du-modele.md)."
+echo "Début de tâche : recommander d'office le MODÈLE (Opus 5.5 par défaut, Sonnet 5.5 pour un travail en volume vérifiable mécaniquement, Fable 5.1 pour un problème dur donné d'un bloc), puis QUATRE réglages, chacun justifié en une ligne — mode (plan/auto), effort (low à max), ultracode (oui/non), advisor (non, ou Fable avec son surcoût). Se taire sur l'un des quatre est une faute (rules/choix-du-modele.md)."
 exit 0

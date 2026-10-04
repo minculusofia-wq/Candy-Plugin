@@ -287,7 +287,8 @@ plus. Le curseur ne bouge pas quand le plan est accepté, et ultracode tourne
 
 Écrire donc, toujours dans cette forme :
 
-> « Quatre réglages pour la phase Y, à mettre avant ton premier message :
+> « Le modèle et quatre réglages pour la phase Y, à mettre avant ton premier message :
+>   - modèle **<Opus 5.5 / Sonnet 5.5 / Fable 5.1>**, parce que <motif> ;
 >   - mode **plan**, parce que <motif> ;
 >   - curseur **`<cran>`**, parce que <motif> ;
 >   - ultracode **<oui / non>**, parce que <motif> ;

@@ -3,8 +3,9 @@
 # analyse-commande.py — lire une commande comme bash la lit, pour les
 # garde-fous qui en dépendent : protect-secrets.sh (affichage d'un fichier de
 # secrets, git add qui l'emporterait), validate-before-push.sh (le dépôt
-# réellement poussé) et rule12-phase-debug-required.sh (le commit de clôture).
-# Appelé par eux, jamais branché seul.
+# réellement poussé), rule12-phase-debug-required.sh (le commit de clôture) et
+# sans-verif.sh (un git qui sauterait les hooks du dépôt). Appelé par eux,
+# jamais branché seul.
 #
 # Pourquoi un vrai découpage : jusqu'à la 0.3.4, ces garde-fous reconnaissaient
 # la commande par des motifs de texte. « cat .env » passait, « git -C x push »
@@ -21,6 +22,7 @@
 #   analyse-commande.py protection  →  VALEUR\t<où> | LECTURE | TROP_GRAND | AJOUT | AJOUT_INCONNU | OK
 #   analyse-commande.py pousses     →  « <dossier>\t<références> » pour chaque git push, un par ligne
 #   analyse-commande.py cloture     →  « OUI\t<dossier> » | NON
+#   analyse-commande.py sans-verif  →  CONTOURNE | OK   (--no-verify, core.hooksPath…)
 # Toute panne (entrée illisible, exception) sort en code 3 : le garde-fou
 # appelant refuse alors la commande au lieu de la laisser passer.
 
@@ -1863,7 +1865,12 @@ def depot_vise(mots, dossier):
             dossier = os.path.join(dossier or "", os.path.expanduser(o.split("=", 1)[1]))
         elif o.startswith("--git-dir="):
             dossier = dossier_de_git_dir(o.split("=", 1)[1], dossier)
-        elif o in ("--work-tree", "--git-dir", "-c", "--namespace", "--exec-path") and i + 1 < len(mots):
+        # --config-env k=V et --attr-source <arbre> (avec une espace) : leur
+        # valeur était prise pour la sous-commande, et « git --attr-source HEAD
+        # push » n'était pas vu comme un push (0.4.4 ; options à valeur
+        # séparée vérifiées sur git 2.54).
+        elif o in ("--work-tree", "--git-dir", "-c", "--config-env", "--attr-source", "--namespace",
+                   "--exec-path") and i + 1 < len(mots):
             if o == "--work-tree":
                 dossier = os.path.join(dossier or "", os.path.expanduser(mots[i + 1]))
             elif o == "--git-dir":
@@ -2251,6 +2258,211 @@ def protection(t, texte, depart):
     return {"SECRET": "AJOUT", "INCONNU": "AJOUT_INCONNU"}.get(ajout, "OK")
 
 
+# --- Hooks git contournés (sans-verif.sh) ---------------------------------------
+#
+# Un git qui sauterait les hooks du dépôt : un pre-commit qui refuse un commit
+# incohérent ne doit pas être contourné sans bruit. Tout est lu
+# sur la commande découpée, jamais sur son texte brut : un message de commit qui
+# cite --no-verify, HUSKY=0 ou core.hooksPath n'est pas un contournement.
+# Options vérifiées avec « git <cmd> -h » sur git 2.54 (2026-10-04).
+
+PROTEGEES = {"commit", "push", "merge", "pull", "cherry-pick", "rebase", "am"}
+# -n vaut --no-verify pour commit et am seulement (push : --dry-run, merge,
+# pull, rebase : --no-stat, cherry-pick : --no-commit).
+N_SANS_VERIF = {"commit", "am"}
+# Options courtes qui prennent une valeur : dans « -mn », le n est le message.
+# Celles d'am ne sont pas celles de commit : ses -m et -c sont des drapeaux.
+COURTES_A_VALEUR = {"commit": "mFCct", "merge": "mF", "am": "Cp"}
+COURTES_A_VALEUR_COLLEE = {"commit": "uS", "merge": "S", "am": "S"}     # -uno, -S<clé>
+GIT_LONGUES_A_VALEUR = {"commit": {"--message", "--file", "--reuse-message", "--reedit-message", "--template"},
+                        "merge": {"--message", "--file"}}
+# Clés qui changent le dossier des hooks : include.path venu de la ligne de
+# commande passe devant la config locale.
+CLES_HOOKS = ("core.hookspath", "include.path", "includeif.")
+ENV_HOOKS = re.compile(r"GIT_CONFIG_PARAMETERS|GIT_CONFIG_COUNT|GIT_CONFIG_KEY_\d+|HUSKY|HUSKY_SKIP_HOOKS|SKIP")
+
+
+def cle_de_hooks(cle):
+    return cle.strip().lower().startswith(CLES_HOOKS)
+
+
+def parle_de_hooks(texte):
+    """Lecture de repli sur le texte, quand la commande n'a pas pu être lue mot
+    à mot (imbrication trop profonde, guillemets déséquilibrés) ou qu'elle
+    exécute un texte calculé (eval "… $X") : un git qui parle de hooks."""
+    if not re.search(r"\bgit\b", texte):
+        return False
+    if re.search(r"--no-v|hookspath|include\.?path|includeif|--config-env|HUSKY|\bSKIP=|GIT_CONFIG_", texte, re.I):
+        return True
+    # -n ne saute les hooks que pour commit et am : « eval "$(ssh-agent -s)" &&
+    # git log -n 3 » était refusé (relecture de sécurité du 2026-10-04).
+    return bool(re.search(r"\b(commit|am)\b[^;&|\n]*\s-[A-Za-z]*n\b", texte))
+
+
+def sans_verif_dans(sous, args, prof):
+    """True si les arguments de « git <sous> » sautent les hooks : un préfixe de
+    --no-verify dès --no-v (git accepte --no-verif ; plus court, c'est ambigu
+    avec --no-verbose), -n groupé pour commit et am, ou un rebase -x dont la
+    commande le fait."""
+    valeurs = COURTES_A_VALEUR.get(sous, "")
+    collees = COURTES_A_VALEUR_COLLEE.get(sous, "")
+    longues = GIT_LONGUES_A_VALEUR.get(sous, set())
+    k = 0
+    while k < len(args):
+        a = args[k]
+        suivant = args[k + 1] if k + 1 < len(args) else ""
+        if a == "--":
+            break
+        if a.startswith("--"):
+            nom = a.split("=", 1)[0]
+            if len(nom) >= len("--no-v") and "--no-verify".startswith(nom):
+                return True
+            # --exec et ses abréviations (--ex, --exe : git les lance).
+            if sous == "rebase" and len(nom) >= len("--e") and "--exec".startswith(nom):
+                code = a.split("=", 1)[1] if "=" in a else suivant
+                if contourne_les_hooks(code, None, prof + 1) == "CONTOURNE":
+                    return True
+                k += 1 if "=" in a else 2
+                continue
+            if "=" not in a and nom in longues:
+                k += 2                              # --message --no-verify : le message
+                continue
+        elif a.startswith("-") and len(a) > 1:
+            for p, c in enumerate(a[1:], 1):
+                if c == "n" and sous in N_SANS_VERIF:
+                    return True
+                if sous == "rebase" and c == "x":
+                    code = a[p + 1:] or suivant
+                    if contourne_les_hooks(code, None, prof + 1) == "CONTOURNE":
+                        return True
+                    if not a[p + 1:]:
+                        k += 1
+                    break
+                if c in valeurs:
+                    if not a[p + 1:]:
+                        k += 1                      # la valeur est le mot suivant
+                    break
+                if c in collees:
+                    break                           # le reste du mot est sa valeur
+        k += 1
+    return False
+
+
+def config_touche_les_hooks(args):
+    """True si « git config … » écrit, retire ou édite le dossier des hooks.
+    Les lectures passent (--get…, -l, get, list, la clé seule)."""
+    bas = [a.lower() for a in args]
+    if not bas:
+        return False
+    if bas[0] == "edit" or any(a in ("-e", "--edit") for a in bas):
+        return True                                 # git config -e : n'importe quelle clé
+    for k, a in enumerate(bas):
+        if a in ("--remove-section", "--rename-section", "remove-section", "rename-section"):
+            # « --remove-section --file .git/config core » : le nom de fichier
+            # vient avant la section ; on cherche « core » parmi tous les mots.
+            if "core" in [x for x in bas[k + 1:] if not x.startswith("-")]:
+                return True
+    cles = [k for k, a in enumerate(args) if cle_de_hooks(a)]
+    if not cles:
+        return False
+    if bas[0] in ("set", "unset") or any(a in ("--add", "--replace-all", "--unset", "--unset-all") for a in bas):
+        return True
+    if bas[0] in ("get", "list") or any(a.startswith("--get") or a in ("-l", "--list") for a in bas):
+        return False
+    # git config clé valeur. Une valeur qui commence par un tiret en est une
+    # aussi : « git config core.hooksPath -x » passait pour une lecture et
+    # coupait tous les hooks (relecture de sécurité du 2026-10-04).
+    lecture = re.compile(r"--(get.*|show-origin|show-scope|null|name-only|includes|no-includes|type(=.*)?"
+                         r"|default(=.*)?|bool|int|bool-or-int|path|expiry-date)|-z")
+    return any(not lecture.fullmatch(x) for x in args[cles[0] + 1:])
+
+
+def contourne_les_hooks(texte, depart, prof=0):
+    """CONTOURNE si un git de la ligne sauterait les hooks du dépôt, sinon OK :
+    --no-verify ou -n (commit, am) ; -c / --config-env sur core.hooksPath ou
+    include ; GIT_CONFIG_*, HUSKY, SKIP posés pour lui (préfixe, env, export
+    sur la ligne) ; git config qui change core.hooksPath. sudo, env, bash -c,
+    $( ), eval, <<EOF, find -exec, xargs sont dépliés par
+    commandes_et_entrees ; les alias git par sous_commande."""
+    if prof > PROFONDEUR:
+        raise ValueError("imbrication trop profonde")
+    dossier, pile = depart, []
+    protegee, exportee, calcule = False, False, False
+    for mots, _, entrees in commandes_et_entrees(texte):
+        if mots[0] == INCONNU:
+            calcule = True                          # eval "… $X" : jugé sur le texte, à la fin
+            continue
+        nom = os.path.basename(mots[0].lstrip("\\"))
+        if nom in ("cd", "pushd", "popd"):
+            dossier = suivre_dossier(nom, mots, dossier, pile)
+            continue
+        if nom in ("export", "declare", "typeset"):
+            exportee = exportee or any(ENV_HOOKS.fullmatch(a.split("=", 1)[0]) for a in mots[1:])
+            continue
+        if nom != "git":
+            # HUSKY=0 bash -c "git commit …" : la variable est posée sur bash,
+            # qui la transmet au git qu'il lance (relecture de sécurité du
+            # 2026-10-04). Comptée comme un export de la ligne.
+            exportee = exportee or any(g == "prefixe" and ENV_HOOKS.fullmatch(v) for g, v in entrees)
+            continue
+        d, i = depot_vise(mots, dossier)
+        globales = mots[1:i]
+        sous, args = sous_commande(mots, i, d or dossier or depart)
+        # Alias : une chaîne (ci2 → c2 → « commit -n ») est suivie ; un alias
+        # qui rend une option (« !git -c core.hooksPath=x commit ») est relu
+        # comme un git (relecture de la 0.4.4).
+        for _ in range(5):
+            if sous.startswith("-"):
+                relu = [mots[0], sous] + args          # mots relus, rien n'est lancé
+                d2, i2 = depot_vise(relu, d or dossier)
+                globales = globales + relu[1:i2]
+                sous, args = sous_commande(relu, i2, d2 or d or dossier or depart)
+            elif sous and sous not in GIT_CONNUES and re.fullmatch(r"[\w-]{1,40}", sous):
+                suite = sous_commande([mots[0], sous] + args, 1, d or dossier or depart)
+                if suite == (sous, args):
+                    break
+                sous, args = suite
+            else:
+                break
+        ici = d or dossier
+        if sous and sous not in GIT_CONNUES and not sous.startswith("-"):
+            # Alias shell sans « git » à part (« !sh -c 'git commit -n' ») ou
+            # commande externe : relu comme une ligne de shell.
+            if contourne_les_hooks(shlex.join([sous] + args), ici, prof + 1) == "CONTOURNE":
+                return "CONTOURNE"
+            continue
+        if sous == "config" and config_touche_les_hooks(args):
+            return "CONTOURNE"
+        # Les commandes que git lance lui-même : submodule foreach, bisect run.
+        code = None
+        if sous == "submodule" and "foreach" in args:
+            reste = args[args.index("foreach") + 1:]
+            while reste and reste[0].startswith("-"):
+                reste = reste[1:]                   # --recursive, --quiet
+            code = reste[0] if len(reste) == 1 else shlex.join(reste)
+        elif sous == "bisect" and args[:1] == ["run"]:
+            code = shlex.join(args[1:])
+        if code and contourne_les_hooks(code, ici, prof + 1) == "CONTOURNE":
+            return "CONTOURNE"
+        if sous not in PROTEGEES:
+            continue
+        protegee = True
+        for k, o in enumerate(globales):
+            if o in ("-c", "--config-env") and k + 1 < len(globales) and cle_de_hooks(globales[k + 1]):
+                return "CONTOURNE"
+            if o.startswith("--config-env=") and cle_de_hooks(o[len("--config-env="):]):
+                return "CONTOURNE"
+        if any(g == "prefixe" and ENV_HOOKS.fullmatch(v) for g, v in entrees):
+            return "CONTOURNE"
+        if sans_verif_dans(sous, args, prof):
+            return "CONTOURNE"
+    if calcule and parle_de_hooks(texte):
+        return "CONTOURNE"
+    return "CONTOURNE" if protegee and exportee else "OK"
+
+
+
+
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     t, texte, depart = lire_entree()
@@ -2272,6 +2484,14 @@ def main():
             # Illisible : on lit le texte entier, prudemment.
             dossier = depart if re.search(r"\bcommit\b", texte) and porte_cloture_quelque_part(texte) else None
         print(f"OUI\t{dossier}" if dossier else "NON")
+    elif mode == "sans-verif":
+        try:
+            print(contourne_les_hooks(texte, depart))
+        except ValueError:
+            # Guillemets déséquilibrés (bash ne lancerait rien), ou imbrication
+            # au-delà de PROFONDEUR (bash, lui, la lancerait) : un git qui parle
+            # de hooks est refusé, prudemment.
+            print("CONTOURNE" if parle_de_hooks(texte) else "OK")
     else:
         raise SystemExit(3)
 

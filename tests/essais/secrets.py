@@ -313,10 +313,13 @@ try:
         "cp .env /tmp/e.txt && cat /tmp/e.txt", f"{S} srv 'true' && scp srv:/srv/app/.env /tmp/x && cat /tmp/x",
         j("source .env && echo $", PK), "set -a; . ./.env; env", j('echo "${', PK, ':-absent}"'), j('echo "$', PK, '"'),
         j("printenv ", PK), "source .env; export -p", "source .env && env | grep KEY",
+        # 0.4.4 : options de grep à valeur séparée (un nom global de l'analyseur
+        # écrasé les faisait mal lire, en version de travail du garde sans-verif)
+        "grep -rn --include .env KEY .", "grep -rn --exclude-dir node_modules KEY .",
     ]
     permis_6 = [
         "grep -rln API_KEY .", "grep -rc KEY .", "grep -rn x src/", "grep -rn TODO .", "grep -rn KEY --include='*.py' .",
-        "grep -rn KEY --exclude='.env*' .", "rg KEY", "cp .env.example .env", "cp .env .env.bak", "cp .env sauvegarde/",
+        "grep -rn KEY --exclude='.env*' .", "grep -rn --include '*.py' KEY .", "rg KEY", "cp .env.example .env", "cp .env .env.bak", "cp .env sauvegarde/",
         "scp srv:/srv/app/.env backend/.env", "source .env && python3 app.py", "echo ${API_KEY:+défini}", "echo $DRY_RUN",
         "printenv PATH", "source .env && env | grep -c KEY", "set -a; . ./.env; set +a", 'echo "$PWD/x.jpg"',
         j('echo "clé posée ? $([ -n "$', PK, '" ] && echo oui || echo non)"'),

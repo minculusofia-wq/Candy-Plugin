@@ -69,12 +69,12 @@ l'appareil physique de l'utilisateur — dix agents ne trouvent pas un bouton mo
 
 ## Changer de modèle
 
-**Sonnet 5** seulement si les trois sont vraies : travail en volume et répétitif,
+**Sonnet 5.5** seulement si les trois sont vraies : travail en volume et répétitif,
 résultat vérifiable mécaniquement, aucun jugement critique. **Jamais** sur
 sécurité, crypto, paramètres de risque, taille de position, exécution d'ordres,
 clés/wallets/fonds réels, arbitrage d'architecture.
 
-**Fable 5** : session autonome très longue, problème dur donné d'un bloc, migration
+**Fable 5.1** : session autonome très longue, problème dur donné d'un bloc, migration
 transverse. Signaler le surcoût et les 30 jours de conservation des données.
 
 **Avant toute bascule** : les agents délégués n'entament pas le contexte du fil
@@ -166,9 +166,13 @@ tout de même le quota, sur le modèle de la session : les subagents
 
 ## Format du conseil, et quoi faire si le cran se révèle trop bas
 
-**Quatre lignes**, avant de commencer, chacune avec son motif en une ligne. Pas
-une question qui bloque : l'utilisateur applique ou ignore.
+**Cinq lignes** — le modèle, puis les quatre réglages —, avant de commencer,
+chacune avec son motif en une ligne. Pas une question qui bloque : l'utilisateur
+applique ou ignore. Le modèle se dit même quand c'est celui de la session : en
+changer se fait au démarrage d'une conversation neuve, jamais en cours de route
+(le cache est lié au modèle).
 
+> Modèle : <Opus 5.5 par défaut / Sonnet 5.5 si les trois conditions de « Changer de modèle » sont vraies / Fable 5.1 pour un problème dur donné d'un bloc>, parce que …
 > Mode : <plan / auto>, parce que …
 > Effort : <low … max>, parce que …
 > Ultracode : <oui / non>, parce que …

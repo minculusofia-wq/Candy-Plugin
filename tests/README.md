@@ -19,7 +19,7 @@ même chose : *j'envoie ceci à ce hook, j'attends ce verdict*.
 | `08-ouverture-de-session.sh` | l'alerte CLAUDE.md trop long, le rappel de projet et le rappel d'entretien parlent au bon endroit, se taisent ailleurs, rendent un JSON lisible — et une panne du rappel d'entretien s'affiche au lieu de se taire |
 | `09-jeu-de-documents.sh` | le jeu de documents : l'incident rejoué (bot à roadmap sans STRATEGY, JOURNAL, DEPLOY), chaque règle du tableau, le point rouge à la porte, et aucune panne qui passe pour un silence ; la porte d'entrée tient sous la limite de sortie d'un hook, alertes git en tête |
 | `10-fin-de-tour.sh` | le contrôle de fin de tour part de la racine du dépôt, seulement sur ce qui a bougé pendant le tour, rend la main à temps, ne croit pas un relevé qu'un autre compte a pu écrire ; la relecture de la réponse ne plante pas sur une transcription mal formée |
-| `11-lecteur-de-commandes.sh` | les garde-fous qui lisent une commande comme bash : secrets (valeur, lecture d'un fichier de secrets, `git add`) et clôture de phase. Les cas vivent dans `essais/*.py`, un fichier par garde-fou |
+| `11-lecteur-de-commandes.sh` | les garde-fous qui lisent une commande comme bash : secrets (valeur, lecture d'un fichier de secrets, `git add`), clôture de phase et hooks git sautés (`--no-verify`…). Les cas vivent dans `essais/*.py`, un fichier par garde-fou |
 
 ## Les cas sautés
 

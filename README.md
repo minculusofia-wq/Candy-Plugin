@@ -55,7 +55,7 @@ They work on their own. Take one, not all nine.
 | **9 rules** | verify before asserting · brutal honesty · code discipline · phase gate · model choice · working reflexes · communication style · command routing · one piece of information, one file |
 | **6 commands** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
 | **2 agents** | `relecteur-securite` · `relecteur-de-phase` — security and phase reviewers running in a fresh context, so they don't eat your conversation |
-| **13 hooks + 8 scripts** | phase-opening reminder, reminder of the four settings to recommend at the start of a task (mode, effort, ultracode, advisor), reminder of the task waiting on a project, setup maintenance reminder, document-set check at every session start (missing files, files outside the set, oversized CLAUDE.md), secret files guarded against both writing and reading, secret protection (a value written out, a `.env` printed, a `git add` that would take it along), pre-push check (the repo and the commits actually pushed), end-of-turn project check (time-boxed, only on what changed during the turn), answer review at the end of each turn, a check on the setup itself |
+| **14 hooks + 8 scripts** | phase-opening reminder, reminder of the model and the four settings to recommend at the start of a task (mode, effort, ultracode, advisor), reminder of the task waiting on a project, setup maintenance reminder, document-set check at every session start (missing files, files outside the set, oversized CLAUDE.md), secret files guarded against both writing and reading, secret protection (a value written out, a `.env` printed, a `git add` that would take it along), pre-push check (the repo and the commits actually pushed), a git that would skip the repo's own hooks (`--no-verify`, `core.hooksPath`, `HUSKY=0`…) refused, end-of-turn project check (time-boxed, only on what changed during the turn), answer review at the end of each turn, a check on the setup itself |
 
 ### The most useful piece: `hooks/verifier-projet.sh`
 
@@ -224,7 +224,8 @@ expect that verdict*. Every fixed defect has its cases, played against the
 version that had the defect: they must fail there — a test that always passes
 is worth nothing. Group 09 replays the incident that gave birth to the
 document-set check, and the failures it must report instead of staying quiet.
-See [tests/README.md](tests/README.md).
+The groups run in parallel, so the whole suite fits in the time the end-of-turn
+check gives it. See [tests/README.md](tests/README.md).
 
 ## Requirements
 
@@ -283,6 +284,20 @@ See [tests/README.md](tests/README.md).
   `.git` folder ships its `info/exclude` too: a phase advice stored there is
   read; and the phase gate quotes the names of uncommitted files
   (`git status`), so a file name from the repo reaches Claude's context.
+- **The git-hook guard stops the reflex, not a deliberate bypass.** A
+  pre-commit hook that refuses a commit often prints its own way around it
+  (`git commit --no-verify`); the guard refuses that, `-n`, `core.hooksPath` or
+  `include` passed on the command line, `HUSKY`/`SKIP`/`GIT_CONFIG_*` set for
+  git, and `git config` changing `core.hooksPath` or `include` — through `sudo`, `bash -c`,
+  `eval`, `$( )` and git aliases, while a commit message that quotes those
+  words goes through. These get through: a variable (`F=--no-verify; git commit
+  $F`), a script, another language, `chmod -x` or a move of the hook, a direct
+  edit of `.git/config`, a computed command name (`$(which git)`) or argument
+  (`git commit $(echo …)`), launchers it does not know (`xcrun git`), brace
+  expansion (`git {commit,-n}`), an alias created on the same line, a command
+  piped into `bash`, and the off switches of hook managers other than husky and
+  pre-commit. Installing hooks with `git config
+  core.hooksPath` is therefore yours to type, once.
 - **The wall the hooks are not: Claude Code's sandbox.** The hooks read the
   text of a command, so a program that reads the file by itself gets through.
   For a file that holds real keys, turn on Claude Code's
