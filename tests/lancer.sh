@@ -9,8 +9,9 @@
 #
 # Les groupes tournent EN MÊME TEMPS (0.4.4) : en série, la suite approchait
 # le temps que le contrôle de fin de tour lui laisse (~200 s), et il l'aurait
-# coupée. Chacun écrit dans son fichier ; leurs sorties s'affichent ensuite,
-# dans l'ordre. Un groupe qui n'a rendu aucun code compte comme un échec.
+# coupée. Leurs sorties s'affichent dans l'ordre, chacune dès que son tour
+# vient (tests/parallele.sh). Un groupe qui n'a rendu aucun code compte comme
+# un échec.
 
 cd "$(dirname "$0")/.."
 ECHECS=0
@@ -28,21 +29,17 @@ echo "${GRAS}=== TESTS DU PLUGIN ===${NC}"
 # Deux chiffres, pas « 0 suivi de n'importe quoi » : avec l'ancien motif, un
 # dixième groupe n'était jamais lancé et le bilan annonçait quand même que tout
 # passe (vérifié).
-FOND=$(mktemp -d "${TMPDIR:-/tmp}/candy-tests.XXXXXX")
-trap 'rm -rf "$FOND"' EXIT
-for groupe in tests/[0-9][0-9]-*.sh; do
-    [ -f "$groupe" ] || continue
-    nom=$(basename "$groupe" .sh)
-    ( bash "$groupe" > "$FOND/$nom.sortie" 2>&1 < /dev/null; echo $? > "$FOND/$nom.code" ) &
+source tests/parallele.sh
+groupe() { bash "$1"; }
+LISTE=()
+for f in tests/[0-9][0-9]-*.sh; do
+    [ -f "$f" ] && LISTE+=("$f")
 done
-wait
-for groupe in tests/[0-9][0-9]-*.sh; do
-    [ -f "$groupe" ] || continue
-    GROUPES=$((GROUPES + 1))
-    nom=$(basename "$groupe" .sh)
-    cat "$FOND/$nom.sortie" 2>/dev/null
-    [ "$(cat "$FOND/$nom.code" 2>/dev/null)" = 0 ] || ECHECS=$((ECHECS + 1))
-done
+GROUPES=${#LISTE[@]}
+if [ "$GROUPES" -gt 0 ]; then
+    en_parallele groupe "${LISTE[@]}"
+    ECHECS=$ECHOUES
+fi
 
 # Un lanceur qui ne trouve aucun groupe ne doit pas annoncer que tout passe.
 if [ "$GROUPES" -eq 0 ]; then

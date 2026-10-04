@@ -46,16 +46,16 @@ Rules are not loaded by the plugin — Claude Code reads them from your own fold
 cp -R rules/*.md ~/.claude/rules/
 ```
 
-They work on their own. Take one, not all nine.
+They work on their own. Take one, not all of them.
 
 ## What's inside
 
 | | |
 |---|---|
-| **9 rules** | verify before asserting · brutal honesty · code discipline · phase gate · model choice · working reflexes · communication style · command routing · one piece of information, one file |
-| **6 commands** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
-| **2 agents** | `relecteur-securite` · `relecteur-de-phase` — security and phase reviewers running in a fresh context, so they don't eat your conversation |
-| **14 hooks + 8 scripts** | phase-opening reminder, reminder of the model and the four settings to recommend at the start of a task (mode, effort, ultracode, advisor), reminder of the task waiting on a project, setup maintenance reminder, document-set check at every session start (missing files, files outside the set, oversized CLAUDE.md), secret files guarded against both writing and reading, secret protection (a value written out, a `.env` printed, a `git add` that would take it along), pre-push check (the repo and the commits actually pushed), a git that would skip the repo's own hooks (`--no-verify`, `core.hooksPath`, `HUSKY=0`…) refused, end-of-turn project check (time-boxed, only on what changed during the turn), answer review at the end of each turn, a check on the setup itself |
+| **Rules** | verify before asserting · brutal honesty · code discipline · phase gate · model choice · working reflexes · communication style · command routing · one piece of information, one file |
+| **Commands** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
+| **Agents** | `relecteur-securite` · `relecteur-de-phase` — security and phase reviewers running in a fresh context, so they don't eat your conversation |
+| **Hooks and scripts** | phase-opening reminder, reminder of the model and the four settings to recommend at the start of a task (mode, effort, ultracode, advisor), reminder of the task waiting on a project, setup maintenance reminder, document-set check at every session start (missing files, files outside the set, oversized CLAUDE.md), secret files guarded against both writing and reading, secret protection (a value written out, a `.env` printed, a `git add` that would take it along), pre-push check (the repo and the commits actually pushed), a git that would skip the repo's own hooks (`--no-verify`, `core.hooksPath`, `HUSKY=0`…) refused, end-of-turn project check (time-boxed, only on what changed during the turn), answer review at the end of each turn, a check on the setup itself |
 
 ### The most useful piece: `hooks/verifier-projet.sh`
 

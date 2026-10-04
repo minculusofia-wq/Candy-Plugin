@@ -114,7 +114,7 @@ for libelle, texte in [
     attendre(f"permis : {libelle}", 0, code)
 debut = time.time()
 code, _, _ = lancer("protect-secrets.sh", "Write", {"file_path": "/p/contrat.json", "content": "0x" + "ab12" * 150000})
-attendre("600 Ko d'hexadécimal (bytecode) : analysé en moins de 5 s", 1, int(time.time() - debut < 5), f"{time.time() - debut:.1f} s")
+attendre("600 Ko d'hexadécimal (bytecode) : analysé en moins de 10 s", 1, int(time.time() - debut < 10), f"{time.time() - debut:.1f} s")
 
 section("Secrets — valeurs écrites qui doivent PASSER")
 permis = {

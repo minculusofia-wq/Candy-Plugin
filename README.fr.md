@@ -43,16 +43,16 @@ depuis votre dossier personnel. Copiez celles qui vous intéressent :
 cp -R rules/*.md ~/.claude/rules/
 ```
 
-Elles fonctionnent séparément — prenez-en une, pas les neuf.
+Elles fonctionnent séparément — prenez-en une, pas toutes.
 
 ## Ce que ça contient
 
 | | |
 |---|---|
-| **9 règles** | vérifier avant d'affirmer · honnêteté brutale · discipline de code · porte de phase · choix du modèle · réflexes de travail · style de communication · routage des commandes · une information, un seul fichier |
-| **6 commandes** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
-| **2 agents** | `relecteur-securite` · `relecteur-de-phase` (contexte neuf, ne consomment pas la conversation) |
-| **14 hooks + 8 scripts** | rappel d'ouverture de phase, rappel du modèle et des quatre réglages à recommander en début de tâche (mode, effort, ultracode, advisor), rappel des tâches en attente sur un projet, rappel d'entretien du setup, contrôle du jeu de documents à chaque ouverture (fichiers manquants, hors du jeu, CLAUDE.md trop long), fichiers de secrets gardés en écriture et en lecture, protection des secrets (une valeur écrite, un `.env` affiché, un `git add` qui l'emporterait), contrôle avant push (le dépôt et les commits réellement poussés), refus d'un git qui sauterait les hooks du dépôt (`--no-verify`, `core.hooksPath`, `HUSKY=0`…), contrôle du projet en fin de tour (borné dans le temps, seulement sur ce qui a bougé pendant le tour), relecture de la réponse en fin de tour, contrôle du setup lui-même |
+| **Règles** | vérifier avant d'affirmer · honnêteté brutale · discipline de code · porte de phase · choix du modèle · réflexes de travail · style de communication · routage des commandes · une information, un seul fichier |
+| **Commandes** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
+| **Agents** | `relecteur-securite` · `relecteur-de-phase` (contexte neuf, ne consomment pas la conversation) |
+| **Hooks et scripts** | rappel d'ouverture de phase, rappel du modèle et des quatre réglages à recommander en début de tâche (mode, effort, ultracode, advisor), rappel des tâches en attente sur un projet, rappel d'entretien du setup, contrôle du jeu de documents à chaque ouverture (fichiers manquants, hors du jeu, CLAUDE.md trop long), fichiers de secrets gardés en écriture et en lecture, protection des secrets (une valeur écrite, un `.env` affiché, un `git add` qui l'emporterait), contrôle avant push (le dépôt et les commits réellement poussés), refus d'un git qui sauterait les hooks du dépôt (`--no-verify`, `core.hooksPath`, `HUSKY=0`…), contrôle du projet en fin de tour (borné dans le temps, seulement sur ce qui a bougé pendant le tour), relecture de la réponse en fin de tour, contrôle du setup lui-même |
 
 ### La pièce la plus utile : `hooks/verifier-projet.sh`
 

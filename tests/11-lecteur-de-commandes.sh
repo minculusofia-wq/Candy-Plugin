@@ -9,19 +9,11 @@
 # dans l'ordre ; un essai qui n'a rendu aucun code compte comme un échec.
 
 RACINE="$(cd "$(dirname "$0")/.." && pwd)"
-ECHEC=0
-FOND=$(mktemp -d "${TMPDIR:-/tmp}/candy-essais.XXXXXX")
-trap 'rm -rf "$FOND"' EXIT
-for essai in "$RACINE"/tests/essais/[a-z]*.py; do
-    nom=$(basename "$essai" .py)
-    [ "$nom" = "commun" ] && continue
-    ( python3 -I "$essai" "$RACINE/hooks" > "$FOND/$nom.sortie" 2>&1 < /dev/null; echo $? > "$FOND/$nom.code" ) &
+source "$RACINE/tests/parallele.sh"
+essai() { python3 -I "$1" "$RACINE/hooks"; }
+ESSAIS=()
+for f in "$RACINE"/tests/essais/[a-z]*.py; do
+    [ "$(basename "$f")" = "commun.py" ] || ESSAIS+=("$f")
 done
-wait
-for essai in "$RACINE"/tests/essais/[a-z]*.py; do
-    nom=$(basename "$essai" .py)
-    [ "$nom" = "commun" ] && continue
-    cat "$FOND/$nom.sortie" 2>/dev/null
-    [ "$(cat "$FOND/$nom.code" 2>/dev/null)" = 0 ] || ECHEC=1
-done
-exit "$ECHEC"
+en_parallele essai "${ESSAIS[@]}"
+[ "$ECHOUES" -eq 0 ]

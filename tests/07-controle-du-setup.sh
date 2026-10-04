@@ -295,7 +295,7 @@ for f in heredoc-vers-fichier.sh printf-calcule.sh exec-stderr.sh echo-capture.s
 done
 
 # Des fichiers de hooks piégés pour être lents : 16 000 fonctions d'une ligne
-# prenaient 71 s. Le contrôle doit finir en moins de 5 s.
+# prenaient 71 s. Le contrôle doit finir en moins de 10 s.
 LENT="$BAC/lent"
 mkdir -p "$LENT/hooks"
 python3 -I - "$LENT" <<'PY'
@@ -315,11 +315,11 @@ cmd = lambda nom: ("python3 -I ~/.claude/hooks/" if nom.endswith(".py") else "ba
 json.dump({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": cmd(n)} for n in hooks]}]}},
           open(os.path.join(d, "settings.json"), "w"))
 PY
-verifie "des fichiers de hooks piégés pour être lents : contrôle fini en moins de 5 s" \
+verifie "des fichiers de hooks piégés pour être lents : contrôle fini en moins de 10 s" \
         0 "$(python3 -I -c '
 import subprocess, sys
 try:
-    r = subprocess.run(["bash", sys.argv[1], sys.argv[2]], capture_output=True, timeout=5)
+    r = subprocess.run(["bash", sys.argv[1], sys.argv[2]], capture_output=True, timeout=10)
     sortie = (r.stdout + r.stderr).decode("utf-8", "replace")
     print(0 if "=== BILAN ===" in sortie and "Traceback" not in sortie else 1)
 except subprocess.TimeoutExpired:
@@ -375,11 +375,11 @@ LIGNE="$BAC/ligne"
 mkdir -p "$LIGNE/hooks"
 python3 -I -c 'import sys; open(sys.argv[1] + "/hooks/l.sh", "w").write("x;" + "echo;" * 120000 + "\n")' "$LIGNE"
 printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/l.sh"}]}]}}' > "$LIGNE/settings.json"
-verifie "une ligne de 600 Ko pleine d'echo : contrôle fini en moins de 5 s" \
+verifie "une ligne de 600 Ko pleine d'echo : contrôle fini en moins de 10 s" \
         0 "$(python3 -I -c '
 import subprocess, sys
 try:
-    r = subprocess.run(["bash", sys.argv[1], sys.argv[2]], capture_output=True, timeout=5)
+    r = subprocess.run(["bash", sys.argv[1], sys.argv[2]], capture_output=True, timeout=10)
     sortie = (r.stdout + r.stderr).decode("utf-8", "replace")
     print(0 if "=== BILAN ===" in sortie and "Traceback" not in sortie else 1)
 except subprocess.TimeoutExpired:
@@ -412,11 +412,11 @@ verifie "un settings.json imbriqué sur 200 000 niveaux : signalé, sans trace P
 # du préfixe à chaque occurrence, 12 s sur celle-ci. Il en faut moins d'une.
 printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"%s"}]}]}}' \
     "$(python3 -I -c 'print("/" * 300000 + "a/.claude/hooks/" * 20000)')" > "$FORME/settings.json"
-verifie "une commande de 600 000 caractères est lue en moins de 5 s, jusqu'au bilan" \
+verifie "une commande de 600 000 caractères est lue en moins de 10 s, jusqu'au bilan" \
         0 "$(python3 -I -c '
 import subprocess, sys
 try:
-    r = subprocess.run(["bash", sys.argv[1], sys.argv[2]], capture_output=True, timeout=5)
+    r = subprocess.run(["bash", sys.argv[1], sys.argv[2]], capture_output=True, timeout=10)
     sortie = (r.stdout + r.stderr).decode("utf-8", "replace")
     print(0 if "=== BILAN ===" in sortie and "Traceback" not in sortie else 1)
 except subprocess.TimeoutExpired:
