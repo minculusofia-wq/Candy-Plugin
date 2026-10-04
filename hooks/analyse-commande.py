@@ -1835,6 +1835,47 @@ def valeur_alias(nom, dossier, en_ligne):
     return valeur if r.returncode == 0 and valeur else None
 
 
+def texte_alias_shell(corps, args):
+    """Le texte que git donne au shell pour un alias « !corps » : il lance
+    sh -c '<corps> "$@"' <corps> <arguments>. Les "$@", $*, $1… du corps valent
+    donc les arguments : ils sont remplacés par eux, et les arguments suivent le
+    corps. « !f() { git commit "$@"; }; f » perdait ses arguments, dans les
+    quatre garde-fous (relecture de sécurité de la 0.4.5)."""
+    tous = " ".join(shlex.quote(a) for a in args)
+    t = re.sub(r'"\$\{?[@*]\}?"|\$\{?[@*]\}?', lambda m: tous, corps)
+
+    def un(m):
+        k = int(m.group(1))
+        return shlex.quote(args[k - 1]) if k <= len(args) else "''"
+    t = re.sub(r'"\$\{?([1-9])\}?"|\$\{?([1-9])\}?', lambda m: un(re.match(r"(\d)", m.group(1) or m.group(2))), t)
+    return " ".join([t] + [shlex.quote(a) for a in args])
+
+
+def racine_du_depot(dossier):
+    """La racine de l'arbre de travail qui contient « dossier », ou None : git
+    lance un alias shell depuis là, pas depuis le dossier courant (relecture de
+    sécurité de la 0.4.5 : « git aall » = « !git add . » lancé depuis sub/
+    emporte le .env de la racine)."""
+    import subprocess
+    if not dossier or not os.path.isdir(dossier):
+        return None
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    try:
+        r = subprocess.run(["git", *GIT_SUR, "-C", dossier, "rev-parse", "--show-toplevel"], capture_output=True,
+                           env=env, timeout=5, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    racine = r.stdout.decode("utf-8", "replace").strip()
+    if r.returncode != 0 or not racine:
+        return None
+    # git rend le chemin résolu (/private/var sous macOS) : on garde l'écriture
+    # du dossier donné, en remontant jusqu'à la racine.
+    haut = os.path.abspath(dossier)
+    while os.path.realpath(haut) != os.path.realpath(racine) and os.path.dirname(haut) != haut:
+        haut = os.path.dirname(haut)
+    return haut if os.path.realpath(haut) == os.path.realpath(racine) else racine
+
+
 def git_resolu(mots, dossier, repli, en_ligne=None):
     """(dépôt, options globales, sous-commande, arguments, alias en ligne) de
     « git … », alias résolus EN CHAÎNE (p2 → p → push) : c'est le seul endroit
@@ -1857,7 +1898,7 @@ def git_resolu(mots, dossier, repli, en_ligne=None):
         if valeur is None:
             break                                   # commande externe (git-lfs…), ou inconnue
         if valeur.startswith("!"):
-            return d, globales, SHELL, [" ".join([valeur[1:]] + [shlex.quote(a) for a in args])], en_ligne
+            return d, globales, SHELL, [texte_alias_shell(valeur[1:], args)], en_ligne
         try:
             mots_alias = shlex.split(valeur)
         except ValueError:
@@ -1893,7 +1934,8 @@ def commandes_git(texte, depart, prof=0, en_ligne=None, parents=()):
         yield mots, entrees, dossier, {"d": d, "globales": globales, "sous": sous, "args": args,
                                        "alias": alias, "parents": parents}
         if sous == SHELL:
-            yield from commandes_git(args[0], d or dossier or depart, prof + 1, alias,
+            lieu = d or dossier or depart
+            yield from commandes_git(args[0], racine_du_depot(lieu) or lieu, prof + 1, alias,
                                      parents + ((globales, entrees),))
 
 
@@ -2325,7 +2367,9 @@ VARIABLES_HOOKS = {"HUSKY", "HUSKY_SKIP_HOOKS", "SKIP", "GIT_CONFIG_PARAMETERS"}
 # Un préfixe posé sur ces commandes passe aux git qu'elles lancent, sans qu'on
 # voie lesquels (script, Makefile). Sur une autre (pytest, npm test), il ne vaut
 # que pour elle : « SKIP=1 pytest && git commit » était refusé.
-LANCEURS_DE_SCRIPTS = INTERPRETES | {"make", "gmake"}
+# find -exec et tmux new lancent une commande dépliée à part, sans le préfixe :
+# la variable leur est transmise (relecture de sécurité de la 0.4.5).
+LANCEURS_DE_SCRIPTS = INTERPRETES | {"make", "gmake", "find", "tmux"}
 
 
 def cle_de_hooks(cle):
@@ -2484,7 +2528,8 @@ def contourne_les_hooks(texte, depart, prof=0, herite=False, en_ligne=None):
         if g is None:
             if nom in ("export", "declare", "typeset"):
                 exportee = exportee or any(affectation_de_hooks(a) for a in mots[1:] if not a.startswith("-"))
-            elif nom in LANCEURS_DE_SCRIPTS or INTERPRETES_CODE.fullmatch(nom):
+            elif nom in LANCEURS_DE_SCRIPTS or (INTERPRETES_CODE.fullmatch(nom) and mots[1:2] != ["-m"]):
+                # python -m pytest : un module, pas un script qui commite.
                 # HUSKY=0 bash -c "git commit …" : bash transmet la variable au
                 # git qu'il lance (relecture de sécurité du 2026-10-04).
                 exportee = exportee or any(g2 == "affectation" and affectation_de_hooks(v) for g2, v in entrees)
@@ -2518,6 +2563,13 @@ def contourne_les_hooks(texte, depart, prof=0, herite=False, en_ligne=None):
         if pose or sans_verif_dans(sous, args, prof, ici, pose, g["alias"]):
             return "CONTOURNE"
     if any(parle_de_hooks(c) for c in calcules) or (calcules and parle_de_hooks(sans_messages(texte, messages))):
+        return "CONTOURNE"
+    # eval "$(cat <<'X' … X)" : le code exécuté est le corps du document, que
+    # sans_messages a retiré ; chaque corps est relu comme une ligne de shell
+    # (relecture de sécurité de la 0.4.5). Un message qui CITE une commande
+    # n'en est pas une : seul un git qui saute les hooks y est refusé.
+    if calcules and any(contourne_les_hooks(c, depart, prof + 1, herite, en_ligne) == "CONTOURNE"
+                        for c in decouper(texte)[2]):
         return "CONTOURNE"
     return "CONTOURNE" if protegee and exportee else "OK"
 

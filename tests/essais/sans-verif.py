@@ -39,7 +39,8 @@ depot = os.path.join(base, "depot")
 ALIAS = {"ci": "commit -n", "envoie": "!git -c core.hooksPath=/x commit", "c2": "commit -n", "ci2": "c2",
          "shci": "!sh -c 'git commit -n'", "cm": "!git add -A && git commit -n -m",
          "shc": "!sh -c 'git commit -m x'", "p": "push", "p2": "p", "sp": "!git push origin HEAD",
-         "opt": "-c core.hooksPath=/x commit"}
+         "opt": "-c core.hooksPath=/x commit", "cf": '!f() { git commit "$@"; }; f',
+         "fp": '!f() { git push "$@"; }; f', "af": '!f() { git add "$@"; }; f', "aall": "!git add ."}
 
 
 def lancer(cmd=None, cwd=depot, brut=None, env=None):
@@ -97,6 +98,8 @@ passent = [
     "SKIP=1 pytest && git commit -m x", "HUSKY=0 npm test; git push",
     "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0='*' git commit -m x",
     "git shc", "git p2", "git sp",
+    # relecture de sécurité de la 0.4.5
+    "git cf -m x", "SKIP=1 python3 -m pytest && git commit -m x",
 ]
 refuses = [
     f"git commit {NV} -m x", f"git commit -m x {NV}", f"git push {NV}", f"git push origin main {NV}",
@@ -164,6 +167,11 @@ refuses = [
     "git -c alias.a=b -c alias.b='commit -n' a",
     "git -c alias.a='!git b' -c alias.b='commit -n' a",
     f'X={NV}; eval "git commit $X -m y"',
+    # relecture de sécurité de la 0.4.5 : alias en fonction, find et tmux qui
+    # transmettent la variable, eval nourri par un <<EOF
+    "git cf -n -m x", f"git cf {NV} -m x", f"git -c alias.z='!f() {{ git commit \"$@\"; }}; f' z {NV} -m x",
+    "HUSKY=0 find . -maxdepth 0 -exec git commit -m x \\;", "HUSKY=0 tmux new -d 'git commit -m x'",
+    f"eval \"$(cat <<'X'\ngit commit {NV} -m x\nX\n)\"",
 ]
 
 try:
@@ -198,6 +206,25 @@ try:
                            input=json.dumps({"tool_input": {"command": cmd}, "cwd": depot}).encode(),
                            capture_output=True, timeout=60)
         attendre(f"push vu : {cmd!r}", True, r.stdout.decode().startswith(depot))
+
+    section("Les autres garde-fous suivent un alias shell en fonction, depuis la racine du dépôt")
+    # Relecture de sécurité de la 0.4.5 : « !f() { git push "$@"; }; f » perdait
+    # ses arguments ; un alias shell est lancé par git depuis la racine.
+    sous = os.path.join(depot, "sous")
+    os.makedirs(sous, exist_ok=True)
+    open(os.path.join(depot, ".env"), "w").write("X=1\n")
+
+    def mode(m, cmd, cwd=depot):
+        r = subprocess.run(["python3", "-I", os.path.join(H, "analyse-commande.py"), m],
+                           input=json.dumps({"tool_input": {"command": cmd}, "cwd": cwd}).encode(),
+                           capture_output=True, timeout=60)
+        return r.stdout.decode().strip()
+    attendre("pousses : « git fp origin main » contrôle main", True, mode("pousses", "git fp origin main").endswith("main"))
+    attendre("cloture : « git cf -m 'cloture(phase 3)' » vu", True,
+             mode("cloture", "git cf -m 'cloture(phase 3) : fin'").startswith("OUI"))
+    attendre("protection : « git af .env » refusé", True, mode("protection", "git af .env").startswith("AJOUT"))
+    attendre("protection : « git aall » depuis un sous-dossier voit le .env de la racine", True,
+             mode("protection", "git aall", sous).startswith("AJOUT"))
 
     section("Aucun nom global défini deux fois dans l'analyseur")
     arbre = ast.parse(open(os.path.join(H, "analyse-commande.py"), encoding="utf-8").read())
