@@ -11,10 +11,14 @@
 #   - -n de git commit et de git am (pour les autres, -n est autre chose) ;
 #   - -c / --config-env sur core.hooksPath ou include (la ligne de commande
 #     passe devant la config du dépôt) ;
-#   - GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT, GIT_CONFIG_KEY_n, HUSKY, SKIP
-#     posés pour lui (préfixe, env, export sur la même ligne) ;
-#   - git rebase -x / --exec, git submodule foreach, git bisect run dont la
-#     commande ferait l'un des précédents ; un alias (en chaîne, ou shell).
+#   - HUSKY, SKIP, GIT_CONFIG_PARAMETERS, et GIT_CONFIG_KEY_n quand il nomme
+#     core.hooksPath ou include, posés pour lui (préfixe, env, export sur la
+#     même ligne, ou préfixe d'un shell, d'un interprète ou de make qu'il
+#     lance ; sur une autre commande — SKIP=1 pytest — il ne vaut que pour elle) ;
+#   - git rebase -x / --exec, git submodule foreach, git bisect run, un alias
+#     shell, dont la commande ferait l'un des précédents — ou dont le git
+#     lanceur pose lui-même core.hooksPath ou HUSKY : git le transmet aux git
+#     qu'il lance ; un alias en chaîne, dont chaque git d'un alias shell.
 # Refusé aussi : git config qui écrit, retire ou édite core.hooksPath ou include. Les
 # lectures passent. Une installation de hooks par core.hooksPath se tape donc
 # à la main, une fois, par l'utilisateur.
@@ -29,7 +33,8 @@
 # .git/config passent. Passent aussi un nom de commande calculé
 # ($(which git) commit …) et les lanceurs que l'analyseur ne connaît pas
 # (xcrun git, arch -arm64 git, script -q /dev/null git). Un eval dont le texte
-# n'est connu qu'à l'exécution est jugé sur son texte. Passent encore (relecture
+# n'est connu qu'à l'exécution est jugé sur son texte, puis sur la ligne sans
+# ses messages de commit ni ses <<EOF. Passent encore (relecture
 # de sécurité du 2026-10-04, laissés tels quels : des contournements voulus,
 # pas des réflexes) : l'expansion d'accolades (git {commit,-n}), un alias créé
 # sur la même ligne, une commande envoyée à bash par un tube ou par <( ), un

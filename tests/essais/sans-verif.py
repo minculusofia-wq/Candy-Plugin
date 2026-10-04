@@ -37,7 +37,9 @@ base = tempfile.mkdtemp(prefix="essai-sans-verif.")
 depot = os.path.join(base, "depot")
 # Alias permanents du dépôt : résolus par le garde (git config --get alias.x).
 ALIAS = {"ci": "commit -n", "envoie": "!git -c core.hooksPath=/x commit", "c2": "commit -n", "ci2": "c2",
-         "shci": "!sh -c 'git commit -n'"}
+         "shci": "!sh -c 'git commit -n'", "cm": "!git add -A && git commit -n -m",
+         "shc": "!sh -c 'git commit -m x'", "p": "push", "p2": "p", "sp": "!git push origin HEAD",
+         "opt": "-c core.hooksPath=/x commit"}
 
 
 def lancer(cmd=None, cwd=depot, brut=None, env=None):
@@ -88,6 +90,13 @@ passent = [
     # relecture de sécurité du 2026-10-04 : -n hors commit/am après un eval
     'eval "$(ssh-agent -s)" && git log -n 3', 'eval "$X" && git log --oneline -n 5',
     'HUSKY=0 bash -c "git status"', "git config --type=path --get core.hooksPath",
+    # relecture xhigh de la 0.4.4 : faux refus
+    f'eval "$(ssh-agent -s)" && git commit -m "doc: le garde refuse {NV}"',
+    "eval \"$(ssh-agent -s)\" && git commit -m 'feat: option am -n'",
+    "eval \"$(ssh-agent -s)\" && git commit -m 'option --skip=x'",
+    "SKIP=1 pytest && git commit -m x", "HUSKY=0 npm test; git push",
+    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0='*' git commit -m x",
+    "git shc", "git p2", "git sp",
 ]
 refuses = [
     f"git commit {NV} -m x", f"git commit -m x {NV}", f"git push {NV}", f"git push origin main {NV}",
@@ -145,6 +154,16 @@ refuses = [
     "git config core.hooksPath -x", "git config --global core.hooksPath -nulle",
     'HUSKY=0 bash -c "git commit -m x"', 'env GIT_CONFIG_PARAMETERS=x sh -c "git push"',
     'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/x bash -c "git commit -m x"',
+    # relecture xhigh de la 0.4.4 : alias shell, config transmise aux git lancés par git
+    "git cm wip", "git opt -m x",
+    "git -c core.hooksPath=/dev/null submodule foreach 'git commit -m x'",
+    "git -c core.hooksPath=/dev/null bisect run git commit -m x",
+    "HUSKY=0 git submodule foreach 'git commit -m x'",
+    "git -c core.hooksPath=/dev/null shc", "HUSKY=0 git shc",
+    f"cd {depot} && git rebase -x 'git ci' main",
+    "git -c alias.a=b -c alias.b='commit -n' a",
+    "git -c alias.a='!git b' -c alias.b='commit -n' a",
+    f'X={NV}; eval "git commit $X -m y"',
 ]
 
 try:
@@ -172,7 +191,9 @@ try:
     section("Le contrôle avant push voit les options globales à valeur séparée")
     # « git --attr-source HEAD push » : la valeur était prise pour la
     # sous-commande, et le push n'était pas contrôlé.
-    for cmd in ("git --attr-source HEAD push", "git --config-env core.editor=E push"):
+    # Les alias en chaîne (p2 → p → push) et les alias shell (« !git push »)
+    # sont suivis par TOUS les garde-fous, pas seulement celui-ci.
+    for cmd in ("git --attr-source HEAD push", "git --config-env core.editor=E push", "git p2", "git sp"):
         r = subprocess.run(["python3", "-I", os.path.join(H, "analyse-commande.py"), "pousses"],
                            input=json.dumps({"tool_input": {"command": cmd}, "cwd": depot}).encode(),
                            capture_output=True, timeout=60)

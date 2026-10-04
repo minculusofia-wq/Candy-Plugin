@@ -439,6 +439,8 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None):
         tete = orig[:len(orig) - len(mots_cmd)]
         entrees = entrees + [("prefixe", w.split("=", 1)[0]) for w in tete
                              if re.fullmatch(r"[A-Za-z_]\w*=.*", w)]
+        # La valeur aussi : GIT_CONFIG_KEY_0=safe.directory ne touche pas aux hooks.
+        entrees = entrees + [("affectation", w) for w in tete if re.fullmatch(r"[A-Za-z_]\w*=.*", w)]
         if mots_cmd and any(os.path.basename(w) == "xargs" for w in tete):
             entrees = entrees + [("xargs", "")]     # ses arguments viennent de la commande d'avant
         if not mots_cmd:
@@ -465,7 +467,9 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None):
         elif nom == "eval":
             code = " ".join(mots_cmd[1:])
             if "$" in code or "`" in code:
-                sortie.append(([INCONNU], ecrit, [], None) if suite else ([INCONNU], ecrit, []))
+                # Son texte est gardé à part : sans-verif le juge, lui seul.
+                sortie.append(([INCONNU], ecrit, [("calcule", code)], None) if suite
+                              else ([INCONNU], ecrit, [("calcule", code)]))
             else:
                 sortie.extend(commandes_et_entrees(code, prof + 1, suite))
         elif nom == "tmux":
@@ -1801,48 +1805,96 @@ GIT_CONNUES = {"add", "commit", "push", "pull", "fetch", "status", "log", "diff"
                "update-index", "whatchanged", "help", "version", "var", "cherry", "range-diff", "sparse-checkout"}
 
 
-def sous_commande(mots, i, dossier):
-    """(sous-commande, arguments) de « git … <sous-commande> », alias résolu :
-    « git p » avec alias.p = push est un push, « git -c alias.x=push x »
-    aussi. git config est lu, rien n'est exécuté ; un alias « !… » (commande
-    shell) est jugé sur ses mots."""
+SHELL = "!"          # sous-commande d'un alias shell : ses arguments sont [texte du shell]
+
+
+def alias_en_ligne(globales):
+    """{nom: valeur} des alias posés sur la ligne : « git -c alias.x=push x »."""
+    res = {}
+    for k, o in enumerate(globales[:-1]):
+        if o == "-c" and globales[k + 1].lower().startswith("alias.") and "=" in globales[k + 1]:
+            cle, valeur = globales[k + 1].split("=", 1)
+            res[cle[len("alias."):].lower()] = valeur
+    return res
+
+
+def valeur_alias(nom, dossier, en_ligne):
+    """La valeur de alias.<nom> : posée sur la ligne, sinon lue dans git config
+    (rien n'est exécuté). None si ce n'est pas un alias."""
     import subprocess
-    if i >= len(mots):
-        return "", []
-    nom, reste = mots[i], mots[i + 1:]
-    if nom in GIT_CONNUES or not re.fullmatch(r"[\w-]{1,40}", nom):
-        return nom, reste
-    # git -c alias.x=push x : l'alias est donné sur la ligne même.
-    for k in range(1, i):
-        if mots[k] == "-c" and k + 1 < i and mots[k + 1].lower().startswith(f"alias.{nom.lower()}="):
-            valeur = mots[k + 1].split("=", 1)[1]
-            try:
-                mots_alias = shlex.split(valeur.lstrip("!"))
-            except ValueError:
-                mots_alias = valeur.lstrip("!").split()
-            if valeur.startswith("!"):
-                g = next((j + 1 for j, w in enumerate(mots_alias) if os.path.basename(w) == "git"), None)
-                mots_alias = mots_alias[g:] if g is not None else mots_alias
-            return (mots_alias[0], mots_alias[1:] + reste) if mots_alias else (nom, reste)
+    if nom.lower() in en_ligne:
+        return en_ligne[nom.lower()]
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     try:
         r = subprocess.run(["git", *GIT_SUR] + (["-C", dossier] if dossier and os.path.isdir(dossier) else [])
                            + ["config", "--get", f"alias.{nom}"], capture_output=True, env=env, timeout=5,
                            stdin=subprocess.DEVNULL)
     except (OSError, subprocess.TimeoutExpired):
-        return nom, reste
+        return None
     valeur = r.stdout.decode("utf-8", "replace").strip()
-    if r.returncode != 0 or not valeur:
-        return nom, reste
-    try:
-        mots_alias = shlex.split(valeur.lstrip("!"))
-    except ValueError:
-        mots_alias = valeur.lstrip("!").split()
-    if valeur.startswith("!"):
-        # alias shell : « !git push origin HEAD » ; on garde la 1re sous-commande git citée
-        k = next((j + 1 for j, w in enumerate(mots_alias) if os.path.basename(w) == "git"), None)
-        mots_alias = mots_alias[k:] if k is not None else mots_alias
-    return (mots_alias[0], mots_alias[1:] + reste) if mots_alias else (nom, reste)
+    return valeur if r.returncode == 0 and valeur else None
+
+
+def git_resolu(mots, dossier, repli, en_ligne=None):
+    """(dépôt, options globales, sous-commande, arguments, alias en ligne) de
+    « git … », alias résolus EN CHAÎNE (p2 → p → push) : c'est le seul endroit
+    où ils le sont, pour tous les garde-fous. Jusqu'à la 0.4.4, chaque
+    garde-fou ne résolvait qu'un maillon, sauf sans-verif qui avait sa boucle à
+    lui : « git p2 » n'était pas vu comme un push (relecture xhigh de la 0.4.4).
+    Un alias qui commence par des options (« -c x=y commit ») les ajoute aux
+    globales. Un alias shell (« !… ») rend SHELL et le texte que git donne au
+    shell (le corps, suivi des arguments) : il est relu par commandes_git.
+    en_ligne : alias posés par -c alias.* sur cette ligne ou par le git qui a
+    lancé celui-ci (git les transmet par GIT_CONFIG_PARAMETERS)."""
+    d, i = depot_vise(mots, dossier)
+    globales = mots[1:i]
+    en_ligne = dict(en_ligne or {}, **alias_en_ligne(globales))
+    sous, args = (mots[i], mots[i + 1:]) if i < len(mots) else ("", [])
+    for _ in range(PROFONDEUR):
+        if sous in GIT_CONNUES or not re.fullmatch(r"[\w-]{1,40}", sous):
+            break
+        valeur = valeur_alias(sous, d or dossier or repli, en_ligne)
+        if valeur is None:
+            break                                   # commande externe (git-lfs…), ou inconnue
+        if valeur.startswith("!"):
+            return d, globales, SHELL, [" ".join([valeur[1:]] + [shlex.quote(a) for a in args])], en_ligne
+        try:
+            mots_alias = shlex.split(valeur)
+        except ValueError:
+            mots_alias = valeur.split()
+        if not mots_alias:
+            break
+        relu = [mots[0]] + mots_alias + args        # mots relus, rien n'est lancé
+        d, j = depot_vise(relu, d)
+        globales = globales + relu[1:j]
+        en_ligne.update(alias_en_ligne(relu[1:j]))
+        sous, args = (relu[j], relu[j + 1:]) if j < len(relu) else ("", [])
+    return d, globales, sous, args, en_ligne
+
+
+def commandes_git(texte, depart, prof=0, en_ligne=None, parents=()):
+    """Le parcours commun des garde-fous git : chaque commande de la ligne,
+    (mots, entrées, dossier courant, g), cd / pushd / popd suivis. g vaut None
+    hors git ; pour un git, {d, globales, sous, args, alias, parents}, alias
+    résolus par git_resolu. Le corps d'un alias shell est relu comme une ligne
+    de shell, ses git à la suite ; « parents » porte alors (globales, entrées)
+    des git qui l'ont lancé : leur -c et leurs variables passent aux git du
+    corps. Jusqu'à la 0.4.4, ce parcours était recopié dans quatre fonctions,
+    et un alias shell n'y était jugé que sur son premier git (relecture xhigh)."""
+    dossier, pile = depart, []
+    for mots, _, entrees in commandes_et_entrees(texte, prof):
+        nom = os.path.basename(mots[0].lstrip("\\"))
+        if nom in ("cd", "pushd", "popd"):
+            dossier = suivre_dossier(nom, mots, dossier, pile)
+        if nom != "git":
+            yield mots, entrees, dossier, None
+            continue
+        d, globales, sous, args, alias = git_resolu(mots, dossier, depart, en_ligne)
+        yield mots, entrees, dossier, {"d": d, "globales": globales, "sous": sous, "args": args,
+                                       "alias": alias, "parents": parents}
+        if sous == SHELL:
+            yield from commandes_git(args[0], d or dossier or depart, prof + 1, alias,
+                                     parents + ((globales, entrees),))
 
 
 def dossier_de_git_dir(valeur, dossier):
@@ -1884,14 +1936,10 @@ def depot_vise(mots, dossier):
 def ajouts_git(texte, depart):
     """[(dossier, arguments de git add)] pour chaque git add / git stage, en
     suivant les cd qui le précèdent sur la ligne (cd x && git add .)."""
-    dossier, res, pile = depart, [], []
-    for mots, _, _ in commandes_et_entrees(texte):
-        nom = os.path.basename(mots[0].lstrip("\\"))
-        if nom in ("cd", "pushd", "popd"):
-            dossier = suivre_dossier(nom, mots, dossier, pile)
-        elif nom == "git":
-            d, i = depot_vise(mots, dossier)
-            sous, args = sous_commande(mots, i, d or dossier or depart)
+    res = []
+    for _, _, _, g in commandes_git(texte, depart):
+        if g:
+            d, sous, args = g["d"], g["sous"], g["args"]
             if sous in ("add", "stage"):
                 res.append((d, args))
             elif sous == "update-index" and "--add" in args:
@@ -1914,7 +1962,7 @@ def depots_pousses(texte, depart):
     push ne partait que sur le texte « git push » et vérifiait le dossier
     d'ouverture de la session : « git -C autre-depot push » n'était pas
     contrôlé, « cd x && git push » contrôlait le mauvais dossier."""
-    dossier, res, pile = depart, [], []
+    res = []
     # GIT_DIR=x git push, GIT_WORK_TREE=x, env -C x git push : le dossier est
     # posé avant la commande.
     impose = None
@@ -1932,13 +1980,9 @@ def depots_pousses(texte, depart):
     if re.search(r"\bxargs\b[^|;&]*\bgit\b[^|;&]*\b(add|stage)\b", texte) or \
             re.search(r"\bgit\b[^|;&\n]*\b(add|stage|update-index)\b[^|;&\n]*[$`]", texte):
         ajoute = "tout"
-    for mots, _, _ in commandes_et_entrees(texte):
-        nom = os.path.basename(mots[0].lstrip("\\"))
-        if nom in ("cd", "pushd", "popd"):
-            dossier = suivre_dossier(nom, mots, dossier, pile)
-        elif nom == "git":
-            d, i = depot_vise(mots, dossier)
-            sous, args = sous_commande(mots, i, d or dossier or depart)
+    for _, _, dossier, g in commandes_git(texte, depart):
+        if g:
+            d, sous, args = g["d"], g["sous"], g["args"]
             # Un commit fait sur la ligne (commit, merge, cherry-pick, revert,
             # am, rebase — --continue compris) n'existe pas encore quand le hook
             # lit les commits : ce qu'il emportera est sur le disque. pull et
@@ -2165,18 +2209,12 @@ def commit_de_cloture(texte, depart):
     bloquait un commit ordinaire)."""
     docs = decouper(texte)[2]
     tous_les_mots = []
-    dossier, pile = depart, []
-    for mots, _, entrees in commandes_et_entrees(texte):
+    for mots, entrees, dossier, g in commandes_git(texte, depart):
         tous_les_mots += mots
-        nom = os.path.basename(mots[0].lstrip("\\"))
-        if nom in ("cd", "pushd", "popd"):
-            dossier = suivre_dossier(nom, mots, dossier, pile)
+        if not g:
             continue
-        if nom != "git":
-            continue
-        d, i = depot_vise(mots, dossier)
-        ici = d or dossier or depart
-        sous, args = sous_commande(mots, i, ici)
+        ici = g["d"] or dossier or depart
+        sous, args = g["sous"], g["args"]
         if sous not in ("commit", "merge"):
             continue
         msgs, fichiers = messages_du_commit(args)
@@ -2279,31 +2317,76 @@ GIT_LONGUES_A_VALEUR = {"commit": {"--message", "--file", "--reuse-message", "--
 # Clés qui changent le dossier des hooks : include.path venu de la ligne de
 # commande passe devant la config locale.
 CLES_HOOKS = ("core.hookspath", "include.path", "includeif.")
-ENV_HOOKS = re.compile(r"GIT_CONFIG_PARAMETERS|GIT_CONFIG_COUNT|GIT_CONFIG_KEY_\d+|HUSKY|HUSKY_SKIP_HOOKS|SKIP")
+# Variables qui sautent les hooks quelle que soit leur valeur. GIT_CONFIG_COUNT
+# et GIT_CONFIG_VALUE_n n'en sont pas : c'est GIT_CONFIG_KEY_n qui dit la clé, et
+# « GIT_CONFIG_KEY_0=safe.directory », courant en CI, était refusé (relecture
+# xhigh de la 0.4.4).
+VARIABLES_HOOKS = {"HUSKY", "HUSKY_SKIP_HOOKS", "SKIP", "GIT_CONFIG_PARAMETERS"}
+# Un préfixe posé sur ces commandes passe aux git qu'elles lancent, sans qu'on
+# voie lesquels (script, Makefile). Sur une autre (pytest, npm test), il ne vaut
+# que pour elle : « SKIP=1 pytest && git commit » était refusé.
+LANCEURS_DE_SCRIPTS = INTERPRETES | {"make", "gmake"}
 
 
 def cle_de_hooks(cle):
     return cle.strip().lower().startswith(CLES_HOOKS)
 
 
+def affectation_de_hooks(affectation):
+    """True si « VAR=valeur » (ou « VAR » seul, exporté) saute les hooks des
+    git qui la reçoivent."""
+    nom, _, valeur = affectation.partition("=")
+    if nom in VARIABLES_HOOKS:
+        return True
+    if re.fullmatch(r"GIT_CONFIG_KEY_\d+", nom):
+        return not valeur or "$" in valeur or "`" in valeur or cle_de_hooks(valeur)
+    return False
+
+
+def pose_des_hooks(globales, entrees):
+    """True si ce git sauterait les hooks par ce qui est posé AVANT sa
+    sous-commande : -c / --config-env sur core.hooksPath ou include, une
+    variable de VARIABLES_HOOKS en préfixe."""
+    for k, o in enumerate(globales):
+        if o in ("-c", "--config-env") and k + 1 < len(globales) and cle_de_hooks(globales[k + 1]):
+            return True
+        if o.startswith("--config-env=") and cle_de_hooks(o[len("--config-env="):]):
+            return True
+    return any(g == "affectation" and affectation_de_hooks(v) for g, v in entrees)
+
+
 def parle_de_hooks(texte):
     """Lecture de repli sur le texte, quand la commande n'a pas pu être lue mot
     à mot (imbrication trop profonde, guillemets déséquilibrés) ou qu'elle
-    exécute un texte calculé (eval "… $X") : un git qui parle de hooks."""
+    exécute un texte calculé (eval "… $X") : un git qui parle de hooks. HUSKY
+    et SKIP en majuscules et en début de mot : « --skip=x » n'en est pas un."""
     if not re.search(r"\bgit\b", texte):
         return False
-    if re.search(r"--no-v|hookspath|include\.?path|includeif|--config-env|HUSKY|\bSKIP=|GIT_CONFIG_", texte, re.I):
+    if re.search(r"--no-v|hookspath|include\.?path|includeif|--config-env|GIT_CONFIG_", texte, re.I) or \
+            re.search(r"\bHUSKY|(?<![\w-])SKIP=", texte):
         return True
     # -n ne saute les hooks que pour commit et am : « eval "$(ssh-agent -s)" &&
     # git log -n 3 » était refusé (relecture de sécurité du 2026-10-04).
     return bool(re.search(r"\b(commit|am)\b[^;&|\n]*\s-[A-Za-z]*n\b", texte))
 
 
-def sans_verif_dans(sous, args, prof):
+def sans_messages(texte, messages):
+    """Le texte de la ligne, corps des <<EOF et messages de commit retirés :
+    « eval "$(ssh-agent -s)" && git commit -m "doc: refuse --no-verify" » était
+    refusé, le texte entier étant lu dès qu'un eval calculé y figurait
+    (relecture xhigh de la 0.4.4)."""
+    t = sans_documents(texte)
+    for m in sorted((m for m in messages if m), key=len, reverse=True):
+        t = t.replace(m, " ")
+    return t
+
+
+def sans_verif_dans(sous, args, prof, dossier=None, herite=False, en_ligne=None):
     """True si les arguments de « git <sous> » sautent les hooks : un préfixe de
     --no-verify dès --no-v (git accepte --no-verif ; plus court, c'est ambigu
     avec --no-verbose), -n groupé pour commit et am, ou un rebase -x dont la
-    commande le fait."""
+    commande le fait — relue dans le dossier du rebase, avec ce que git lui
+    transmet (herite, en_ligne : voir contourne_les_hooks)."""
     valeurs = COURTES_A_VALEUR.get(sous, "")
     collees = COURTES_A_VALEUR_COLLEE.get(sous, "")
     longues = GIT_LONGUES_A_VALEUR.get(sous, set())
@@ -2320,7 +2403,7 @@ def sans_verif_dans(sous, args, prof):
             # --exec et ses abréviations (--ex, --exe : git les lance).
             if sous == "rebase" and len(nom) >= len("--e") and "--exec".startswith(nom):
                 code = a.split("=", 1)[1] if "=" in a else suivant
-                if contourne_les_hooks(code, None, prof + 1) == "CONTOURNE":
+                if contourne_les_hooks(code, dossier, prof + 1, herite, en_ligne) == "CONTOURNE":
                     return True
                 k += 1 if "=" in a else 2
                 continue
@@ -2333,7 +2416,7 @@ def sans_verif_dans(sous, args, prof):
                     return True
                 if sous == "rebase" and c == "x":
                     code = a[p + 1:] or suivant
-                    if contourne_les_hooks(code, None, prof + 1) == "CONTOURNE":
+                    if contourne_les_hooks(code, dossier, prof + 1, herite, en_ligne) == "CONTOURNE":
                         return True
                     if not a[p + 1:]:
                         k += 1
@@ -2377,62 +2460,45 @@ def config_touche_les_hooks(args):
     return any(not lecture.fullmatch(x) for x in args[cles[0] + 1:])
 
 
-def contourne_les_hooks(texte, depart, prof=0):
+def contourne_les_hooks(texte, depart, prof=0, herite=False, en_ligne=None):
     """CONTOURNE si un git de la ligne sauterait les hooks du dépôt, sinon OK :
     --no-verify ou -n (commit, am) ; -c / --config-env sur core.hooksPath ou
-    include ; GIT_CONFIG_*, HUSKY, SKIP posés pour lui (préfixe, env, export
+    include ; HUSKY, SKIP, GIT_CONFIG_* posés pour lui (préfixe, env, export
     sur la ligne) ; git config qui change core.hooksPath. sudo, env, bash -c,
     $( ), eval, <<EOF, find -exec, xargs sont dépliés par
-    commandes_et_entrees ; les alias git par sous_commande."""
+    commandes_et_entrees ; les alias git (en chaîne, ou shell) par
+    commandes_git.
+    herite : ce texte est lancé par un git qui a posé de quoi sauter les hooks
+    (submodule foreach, bisect run, rebase -x, commande externe) ; git le
+    transmet par GIT_CONFIG_PARAMETERS et l'environnement, vérifié sur git
+    2.54. Un git protégé qu'il lance les saute donc (relecture xhigh de la
+    0.4.4 : seule la sous-commande immédiate était regardée)."""
     if prof > PROFONDEUR:
         raise ValueError("imbrication trop profonde")
-    dossier, pile = depart, []
-    protegee, exportee, calcule = False, False, False
-    for mots, _, entrees in commandes_et_entrees(texte):
+    protegee, exportee, calcules, messages = False, herite, [], []
+    for mots, entrees, dossier, g in commandes_git(texte, depart, prof, en_ligne):
         if mots[0] == INCONNU:
-            calcule = True                          # eval "… $X" : jugé sur le texte, à la fin
+            calcules += [v for genre, v in entrees if genre == "calcule"]
             continue
         nom = os.path.basename(mots[0].lstrip("\\"))
-        if nom in ("cd", "pushd", "popd"):
-            dossier = suivre_dossier(nom, mots, dossier, pile)
+        if g is None:
+            if nom in ("export", "declare", "typeset"):
+                exportee = exportee or any(affectation_de_hooks(a) for a in mots[1:] if not a.startswith("-"))
+            elif nom in LANCEURS_DE_SCRIPTS or INTERPRETES_CODE.fullmatch(nom):
+                # HUSKY=0 bash -c "git commit …" : bash transmet la variable au
+                # git qu'il lance (relecture de sécurité du 2026-10-04).
+                exportee = exportee or any(g2 == "affectation" and affectation_de_hooks(v) for g2, v in entrees)
             continue
-        if nom in ("export", "declare", "typeset"):
-            exportee = exportee or any(ENV_HOOKS.fullmatch(a.split("=", 1)[0]) for a in mots[1:])
-            continue
-        if nom != "git":
-            # HUSKY=0 bash -c "git commit …" : la variable est posée sur bash,
-            # qui la transmet au git qu'il lance (relecture de sécurité du
-            # 2026-10-04). Comptée comme un export de la ligne.
-            exportee = exportee or any(g == "prefixe" and ENV_HOOKS.fullmatch(v) for g, v in entrees)
-            continue
-        d, i = depot_vise(mots, dossier)
-        globales = mots[1:i]
-        sous, args = sous_commande(mots, i, d or dossier or depart)
-        # Alias : une chaîne (ci2 → c2 → « commit -n ») est suivie ; un alias
-        # qui rend une option (« !git -c core.hooksPath=x commit ») est relu
-        # comme un git (relecture de la 0.4.4).
-        for _ in range(5):
-            if sous.startswith("-"):
-                relu = [mots[0], sous] + args          # mots relus, rien n'est lancé
-                d2, i2 = depot_vise(relu, d or dossier)
-                globales = globales + relu[1:i2]
-                sous, args = sous_commande(relu, i2, d2 or d or dossier or depart)
-            elif sous and sous not in GIT_CONNUES and re.fullmatch(r"[\w-]{1,40}", sous):
-                suite = sous_commande([mots[0], sous] + args, 1, d or dossier or depart)
-                if suite == (sous, args):
-                    break
-                sous, args = suite
-            else:
-                break
-        ici = d or dossier
-        if sous and sous not in GIT_CONNUES and not sous.startswith("-"):
-            # Alias shell sans « git » à part (« !sh -c 'git commit -n' ») ou
-            # commande externe : relu comme une ligne de shell.
-            if contourne_les_hooks(shlex.join([sous] + args), ici, prof + 1) == "CONTOURNE":
-                return "CONTOURNE"
-            continue
+        sous, args, ici = g["sous"], g["args"], g["d"] or dossier
+        # Ce qui est posé pour ce git, ou pour le git qui l'a lancé (alias shell).
+        pose = herite or pose_des_hooks(g["globales"], entrees) or \
+            any(pose_des_hooks(gl, en) for gl, en in g["parents"])
+        if sous == SHELL:
+            continue                                # son corps suit, relu par commandes_git
         if sous == "config" and config_touche_les_hooks(args):
             return "CONTOURNE"
+        if sous in ("commit", "merge"):
+            messages += messages_du_commit(args)[0]
         # Les commandes que git lance lui-même : submodule foreach, bisect run.
         code = None
         if sous == "submodule" and "foreach" in args:
@@ -2442,25 +2508,18 @@ def contourne_les_hooks(texte, depart, prof=0):
             code = reste[0] if len(reste) == 1 else shlex.join(reste)
         elif sous == "bisect" and args[:1] == ["run"]:
             code = shlex.join(args[1:])
-        if code and contourne_les_hooks(code, ici, prof + 1) == "CONTOURNE":
+        if code and contourne_les_hooks(code, ici, prof + 1, pose, g["alias"]) == "CONTOURNE":
             return "CONTOURNE"
+        if sous and sous not in GIT_CONNUES and pose:
+            return "CONTOURNE"                      # commande externe (git flow…) : elle peut commiter
         if sous not in PROTEGEES:
             continue
         protegee = True
-        for k, o in enumerate(globales):
-            if o in ("-c", "--config-env") and k + 1 < len(globales) and cle_de_hooks(globales[k + 1]):
-                return "CONTOURNE"
-            if o.startswith("--config-env=") and cle_de_hooks(o[len("--config-env="):]):
-                return "CONTOURNE"
-        if any(g == "prefixe" and ENV_HOOKS.fullmatch(v) for g, v in entrees):
+        if pose or sans_verif_dans(sous, args, prof, ici, pose, g["alias"]):
             return "CONTOURNE"
-        if sans_verif_dans(sous, args, prof):
-            return "CONTOURNE"
-    if calcule and parle_de_hooks(texte):
+    if any(parle_de_hooks(c) for c in calcules) or (calcules and parle_de_hooks(sans_messages(texte, messages))):
         return "CONTOURNE"
     return "CONTOURNE" if protegee and exportee else "OK"
-
-
 
 
 def main():
