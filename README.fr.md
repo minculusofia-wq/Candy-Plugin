@@ -64,6 +64,11 @@ vérifier (tests, lint, types, build) et rend trois verdicts possibles :
 - `2` **aucun moyen de vérification n'existe dans ce projet** — le cas le plus
   utile, celui que personne ne signale d'habitude
 
+Une cible `make test` est suivie dans ses cibles préalables et ses sous-make
+(`test: test-back`, `$(MAKE) -C backend test`) : les mêmes tests ne tournent
+jamais deux fois. `VERIFIER_A_BLANC=1` liste les contrôles qu'il lancerait, sans
+en lancer aucun.
+
 ### Les rappels par projet
 
 Quand une tâche doit attendre la prochaine ouverture d'un projet, écrivez-la une
@@ -97,6 +102,13 @@ tâche faite, sa ligne se retire. Sans ce fichier, le hook ne dit rien.
   vous présente le reste en une seule liste à valider.
 
 Il suffit de répondre « go ». Le reste du temps, le hook ne dit rien.
+
+Les contrôles qui n'ont de sens que pour votre propre setup vont dans
+`~/.claude/hooks/verifier-setup-local.sh` : le contrôle du setup le lance à la
+fin et compte les points qu'il signale. Les formules qui veulent dire « pas
+encore fait » dans vos projets (au-delà de « à créer », « à trancher », « non
+commencé ») vont une par ligne dans `~/.claude/motifs-audit-md.txt`, lu par
+l'audit des `.md`.
 
 ## Les commandes
 

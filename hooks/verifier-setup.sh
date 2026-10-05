@@ -15,7 +15,12 @@
 #   · un fichier de skill au mauvais format, donc jamais chargé ;
 #   · une mémoire qui affirme une échéance dépassée depuis des semaines ;
 #   · la même consigne écrite dans une règle ET dans un hook, donc envoyée
-#     deux fois dans la même fenêtre de contexte.
+#     deux fois dans la même fenêtre de contexte ;
+#   · un plugin activé que Claude Code ne charge plus.
+#
+# Un setup peut ajouter ses propres contrôles dans
+# hooks/verifier-setup-local.sh : lancé à la fin s'il existe, il écrit ses
+# lignes et sort avec son nombre de points à regarder.
 #
 # Ne corrige rien. Signale, et rend la main.
 #
@@ -65,7 +70,7 @@ echo
 # par une commande ou une règle. Ne tester que settings.json est le piège : un
 # outil lancé par une commande passerait pour un orphelin (vérifié — cette
 # erreur a été commise en écrivant ce script).
-echo "[1/7] Hooks : branchés ou appelés ailleurs"
+echo "[1/8] Hooks : branchés ou appelés ailleurs"
 AV=$ALERTES
 NB=0
 if [ -d "$CLAUDE/hooks" ]; then
@@ -99,7 +104,7 @@ fi
 # contrôle, il se vérifie alors à la main. Un hook qui n'écrit rien (il agit sur
 # un fichier) n'est pas concerné.
 echo
-echo "[2/7] Hooks : entendus par quelqu'un"
+echo "[2/8] Hooks : entendus par quelqu'un"
 # Les hooks du plugin lui-même sont branchés dans son hooks.json, à côté de ce
 # script, et non dans settings.json : sans cette lecture, le contrôle ne les
 # voyait jamais (l'avertissement de pre-edit-guard est resté muet sans être
@@ -591,7 +596,7 @@ ALERTES=$((ALERTES + $?))
 # Un .md posé à la racine, ou un dossier dont le SKILL.md est enfoui plus bas,
 # reste inerte sur le disque sans jamais rien signaler.
 echo
-echo "[3/7] Skills : chargeables"
+echo "[3/8] Skills : chargeables"
 AV=$ALERTES
 NB=0
 if [ -d "$CLAUDE/skills" ]; then
@@ -619,14 +624,29 @@ if [ -d "$CLAUDE/skills" ]; then
         fi
     done
 fi
-[ "$ALERTES" = "$AV" ] && ok "$NB skill(s), tous chargeables"
+# Un lien symbolique mort dans un skill actif : le skill se charge, mais son
+# outil n'existe pas. Un skill réglé « off » dans skillOverrides n'est pas
+# signalé (0.5.0, repris d'une copie locale).
+if [ -d "$CLAUDE/skills" ]; then
+    MORTS=$(cd "$CLAUDE" && find skills -path skills/synced -prune -o -type l ! -exec test -e {} \; -print 2>/dev/null \
+        | cut -d/ -f2 | sort -u | while read -r sk; do
+            python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("skillOverrides",{}).get(sys.argv[2])=="off" else 1)' "$CLAUDE/settings.json" "$sk" 2>/dev/null || echo "$sk"
+        done)
+    [ -n "$MORTS" ] && alerte "skill actif avec un lien mort : $(echo "$MORTS" | tr '\n' ' ')— le réparer, ou le régler « off » dans skillOverrides"
+fi
+# « $8 », « $0.03 » dans une commande ou un skill : Claude Code remplace $N par
+# le N-ième argument (doc skills, « Available string substitutions ») — un
+# montant devenait « <premier argument>.03 ». Écrire « 8 $ », ou échapper : \$8.
+DOLLARS=$(cd "$CLAUDE" && grep -nE '(^|[^\\])\$[0-9]' commands/*.md skills/*/SKILL.md 2>/dev/null | cut -d: -f1,2)
+[ -n "$DOLLARS" ] && alerte "\$ suivi d'un chiffre (pris pour un argument) : $(echo "$DOLLARS" | tr '\n' ' ')— écrire « 8 $ » ou \\\$8"
+[ "$ALERTES" = "$AV" ] && ok "$NB skill(s), tous chargeables, aucun \$N pris pour un argument"
 
 # ------------------------------------------------------------- 4. Mémoires ---
 # Deux façons pour une mémoire de devenir fausse sans que personne le voie :
 # une échéance écrite au passé, ou un fichier que plus rien n'a touché.
 # En Python : bash ne sait pas compter les alertes produites dans un pipe.
 echo
-echo "[4/7] Mémoires : échéances et fraîcheur"
+echo "[4/8] Mémoires : échéances et fraîcheur"
 AV=$ALERTES
 python3 -I - "$CLAUDE" <<'PYMEM'
 import os, re, sys, glob, datetime
@@ -692,17 +712,45 @@ ALERTES=$((ALERTES + $?))
 # Un avertissement, pas une erreur : un setup non versionné est le cas normal
 # au départ. Le signaler une fois par mois suffit à ce que la question se pose.
 echo
-echo "[5/7] Historique : le setup est-il annulable ?"
+echo "[5/8] Historique : le setup est-il annulable ?"
 AV=$ALERTES
-if git -C "$CLAUDE" -c core.fsmonitor=false -c log.showSignature=false rev-parse --git-dir >/dev/null 2>&1; then
-    SALE=$(git -C "$CLAUDE" -c core.fsmonitor=false -c log.showSignature=false status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+G=(git -C "$CLAUDE" -c core.fsmonitor=false -c log.showSignature=false -c gpg.program=false)
+if "${G[@]}" rev-parse --git-dir >/dev/null 2>&1; then
+    # settings.json ne compte pas quand seul le cran d'effort a changé : /effort
+    # l'enregistre à chaque changement de cran (0.5.0, repris d'une copie locale).
+    SALE=$("${G[@]}" status --porcelain 2>/dev/null | grep -v ' settings\.json$' | wc -l | tr -d ' ')
+    if "${G[@]}" status --porcelain -- settings.json 2>/dev/null | grep -q .; then
+        AUTRES=$("${G[@]}" diff -U0 -- settings.json 2>/dev/null | grep -E '^[+-]' \
+            | grep -vE '^(\+\+\+|---)' | grep -vc '"effortLevel"')
+        [ "$AUTRES" != 0 ] && SALE=$((SALE + 1))
+    fi
     [ "$SALE" != 0 ] && avert "$SALE fichier(s) non commité(s) dans le setup"
-    DERNIER=$(git -C "$CLAUDE" -c core.fsmonitor=false -c log.showSignature=false log -1 --format=%ct 2>/dev/null)
+    # Aucune adresse IP publique suivie par git : une adresse de serveur n'a
+    # rien à faire dans l'historique d'un setup, privé ou non.
+    IPS=$("${G[@]}" ls-files -z 2>/dev/null | (cd "$CLAUDE" && python3 -I -c '
+import ipaddress, os, re, sys
+for f in sys.stdin.buffer.read().decode("utf-8", "replace").split("\0"):
+    if not f or not os.path.isfile(f) or os.path.getsize(f) > 2000000:
+        continue
+    try:
+        t = open(f, encoding="utf-8").read()
+    except (UnicodeDecodeError, OSError):
+        continue
+    for m in re.finditer(r"(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})(?![\d.])", t):
+        try:
+            if ipaddress.ip_address(m.group(1)).is_global:
+                print(f)
+                break
+        except ValueError:
+            pass
+' 2>/dev/null))
+    [ -n "$IPS" ] && alerte "adresse IP publique suivie par git : $(echo "$IPS" | tr '\n' ' ')— la remplacer par un renvoi au document de déploiement du projet"
+    DERNIER=$("${G[@]}" log -1 --format=%ct 2>/dev/null)
     LIMITE=$(date -v-30d +%s 2>/dev/null || date -d "30 days ago" +%s)
     if [ -n "$DERNIER" ] && [ "$DERNIER" -lt "$LIMITE" ]; then
         avert "aucun commit depuis plus de 30 jours"
     fi
-    [ "$ALERTES" = "$AV" ] && ok "dépôt propre, commit récent"
+    [ "$ALERTES" = "$AV" ] && ok "dépôt propre, commit récent, aucune adresse IP publique suivie"
 else
     avert "$CLAUDE n'est pas un dépôt git — aucune modification des règles ou des mémoires n'est annulable"
     echo "     Un « git init » local suffit. Avant d'ajouter un remote : relire ce"
@@ -710,14 +758,48 @@ else
     echo "     traîne vite."
 fi
 
-# ---------------------------------------------------------- 6. Duplication ---
+# --------------------------------------------------------------- 6. Plugins ---
+# Un plugin activé peut ne plus se charger (emplacement disparu, manifeste
+# cassé) sans que rien ne le dise : sur un poste, aucun plugin ne s'est chargé
+# pendant deux mois. Claude Code le sait : « claude plugin list --json » donne
+# les erreurs de chargement. Ne concerne que l'installation réelle (~/.claude),
+# pas un autre dossier contrôlé (0.5.0, repris d'une copie locale).
+echo
+echo "[6/8] Plugins : activés ET chargés"
+AV=$ALERTES
+if [ -n "${VERIFIER_PLUGINS_JSON:-}" ]; then
+    LISTE=$(cat "$VERIFIER_PLUGINS_JSON" 2>/dev/null)          # pour les essais
+elif [ "$(cd "$CLAUDE" && pwd -P)" != "$(cd "$HOME/.claude" 2>/dev/null && pwd -P)" ]; then
+    LISTE="-"
+else
+    BINAIRE=$(command -v claude 2>/dev/null || ls -d "$HOME"/.vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude 2>/dev/null | sort -V | tail -1)
+    LISTE=$([ -n "$BINAIRE" ] && "$BINAIRE" plugin list --json 2>/dev/null)
+fi
+if [ "$LISTE" = "-" ]; then
+    ok "dossier autre que ~/.claude : plugins non concernés"
+elif [ -z "$LISTE" ]; then
+    avert "plugins non vérifiés : binaire claude introuvable ou muet"
+else
+    PANNES=$(printf '%s' "$LISTE" | python3 -I -c '
+import json, sys
+for p in json.load(sys.stdin):
+    if p.get("enabled") and p.get("errors"):
+        print("%s (%s)" % (p.get("id"), "; ".join(p["errors"])[:120]))
+' 2>/dev/null) || PANNES="liste des plugins illisible"
+    while IFS= read -r L; do
+        [ -n "$L" ] && alerte "plugin activé mais qui ne se charge pas : $L"
+    done <<< "$PANNES"
+    [ "$ALERTES" = "$AV" ] && ok "chaque plugin activé se charge"
+fi
+
+# ---------------------------------------------------------- 7. Duplication ---
 # Une même consigne présente dans une règle ET dans un hook arrive deux fois
 # dans la même fenêtre de contexte, souvent formulée différemment.
 # En Python : iconv s'arrête au premier caractère non convertible sur macOS
 # (les hooks contiennent des flèches et des symboles), ce qui donnait un faux
 # négatif silencieux.
 echo
-echo "[6/7] Duplication règle ↔ hook"
+echo "[7/8] Duplication règle ↔ hook"
 AV=$ALERTES
 python3 -I - "$CLAUDE" <<'PYDUP'
 import os, sys, glob, unicodedata
@@ -731,8 +813,14 @@ def norm(t):
     t = "".join(c if (c.isalnum() or c.isspace()) else " " for c in t.lower())
     return " ".join(t.split())
 
+# relire-ma-reponse.sh détecte les formules qu'une règle interdit : il DOIT
+# les contenir. Doublon voulu (0.5.0, repris d'une copie locale).
+EXCLUS = {"relire-ma-reponse.sh"}
+
 htxt = []
 for f in glob.glob(os.path.join(claude, "hooks", "*.sh")):
+    if os.path.basename(f) in EXCLUS:
+        continue
     try:
         htxt.append(norm(open(f, encoding="utf-8", errors="replace").read()))
     except OSError:
@@ -761,9 +849,9 @@ sys.exit(min(n, 250))
 PYDUP
 ALERTES=$((ALERTES + $?))
 
-# --------------------------------------------------------------- 7. Poids ---
+# --------------------------------------------------------------- 8. Poids ---
 echo
-echo "[7/7] Poids du setup"
+echo "[8/8] Poids du setup"
 RELEVE="$CLAUDE/.maintenance-dernier-releve"
 KO=$(du -sk "$CLAUDE" 2>/dev/null | awk '{print $1}')
 LISIBLE=$(du -sh "$CLAUDE" 2>/dev/null | awk '{print $1}')
@@ -786,6 +874,16 @@ else
     ok "$LISIBLE — aucun relevé d'entretien (seule /maintenance en écrit un)"
 fi
 [ "$ECRIRE_RELEVE" = 1 ] && [ -n "${KO:-}" ] && echo "$(date +%Y-%m-%d) $KO" > "$RELEVE" 2>/dev/null
+
+# ------------------------------------------------- Contrôles propres au setup ---
+# hooks/verifier-setup-local.sh, s'il existe : il écrit ses lignes et sort avec
+# son nombre de points à regarder (0 = rien).
+if [ -f "$CLAUDE/hooks/verifier-setup-local.sh" ]; then
+    echo
+    echo "[+] Contrôles propres à ce setup (hooks/verifier-setup-local.sh)"
+    bash "$CLAUDE/hooks/verifier-setup-local.sh" "$CLAUDE"
+    ALERTES=$((ALERTES + $?))
+fi
 
 # --------------------------------------------------------------- BILAN -------
 echo

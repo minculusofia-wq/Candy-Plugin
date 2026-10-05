@@ -133,6 +133,26 @@ printf 'test:\n\t@true\n' > "$BAC/masque/Makefile"
 : > "$BAC/compte-masque"
 env PATH="$BAC/outils:$PATH" COMPTEUR_PYTEST="$BAC/compte-masque" bash "$CONTROLE" "$BAC/masque" >/dev/null 2>&1
 verifie "« test: @true » : pytest tourne quand même" 1 "$(grep -c . "$BAC/compte-masque")"
+# 0.5.0 : « test: test-back », test-back lançant pytest dans backend/ (une
+# disposition réelle) : seule la recette de « test: » était lue, et pytest
+# était relancé depuis la racine, une seconde fois.
+mkdir -p "$BAC/prealable/backend"
+printf 'test: test-back\n\ntest-back:\n\tcd backend && pytest -q\n' > "$BAC/prealable/Makefile"
+: > "$BAC/compte-prealable"
+env PATH="$BAC/outils:$PATH" COMPTEUR_PYTEST="$BAC/compte-prealable" bash "$CONTROLE" "$BAC/prealable" >/dev/null 2>&1
+verifie "test: test-back (qui lance pytest) : pytest ne tourne qu'une fois" 1 "$(grep -c . "$BAC/compte-prealable")"
+# « $(MAKE) -C backend test » : ni la cible du backend ni pytest ne sont relancés.
+mkdir -p "$BAC/sousmake/backend"
+printf 'test:\n\t$(MAKE) -C backend test\n' > "$BAC/sousmake/Makefile"
+printf 'test:\n\tpytest -q\n' > "$BAC/sousmake/backend/Makefile"
+: > "$BAC/compte-sousmake"
+env PATH="$BAC/outils:$PATH" COMPTEUR_PYTEST="$BAC/compte-sousmake" bash "$CONTROLE" "$BAC/sousmake" >/dev/null 2>&1
+verifie "make -C backend test : les tests ne tournent qu'une fois" 1 "$(grep -c . "$BAC/compte-sousmake")"
+# VERIFIER_A_BLANC=1 : la liste des contrôles, sans en lancer aucun.
+: > "$BAC/compte-blanc"
+SORTIE=$(env PATH="$BAC/outils:$PATH" COMPTEUR_PYTEST="$BAC/compte-blanc" VERIFIER_A_BLANC=1 bash "$CONTROLE" "$BAC/masque" 2>&1); CODE=$?
+verifie "à blanc : code 0, rien ne tourne, pytest listé" "0 0 1" \
+        "$CODE $(grep -c . "$BAC/compte-blanc") $(echo "$SORTIE" | grep -c '\[A BLANC\] pytest')"
 # Le script test que crée « npm init » n'est pas un test.
 if outil npm; then
     mkdir -p "$BAC/npminit"

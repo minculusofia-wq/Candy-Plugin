@@ -70,6 +70,9 @@ cat >/dev/null 2>&1 || true
 # La liste des chemins possibles vit dans jeu-de-documents.sh, qui en a aussi
 # besoin pour reconnaitre une app par phases : une seule liste.
 JEU="$ICI/jeu-de-documents.sh"
+# Une copie locale de ces hooks le nomme jeu-de-documents.py : sans ce repli,
+# la porte disait « NON controlee » a chaque ouverture (0.5.0).
+[[ -f "$JEU" ]] || JEU="$ICI/jeu-de-documents.py"
 ROADMAP=$(python3 -I "$JEU" --roadmap "$PROJET" 2>/dev/null)
 CODE=$?
 if [[ "$CODE" != 0 ]]; then
@@ -108,14 +111,23 @@ bloc_documents() {
 }
 BLOC_DOCS=$(bloc_documents)
 
-# --- La prochaine phase : la premiere ligne « ### Phase N » sans 🟢 ----------
+# --- La prochaine phase non livree ------------------------------------------
 #
 # Le marqueur fait foi dans la roadmap. On ne devine pas depuis un autre
-# document.
+# document. Deux conventions : « ### Phase N » marquee 🟢 une fois livree, et
+# « ## Jalon N » marque « CLOS » ou « FAIT ». Une roadmap en jalons rendait ce
+# hook muet : rien ne disait que la porte n'etait pas controlee (0.5.0, repris
+# d'une copie locale).
 PROCHAINE=$(grep -E '^### Phase [0-9]+' "$ROADMAP" 2>/dev/null \
     | grep -v '🟢' \
     | head -1 \
     | sed -E 's/^### (Phase [0-9]+)[^0-9].*/\1/')
+if [[ -z "$PROCHAINE" ]]; then
+    PROCHAINE=$(grep -E '^## Jalon [0-9]+' "$ROADMAP" 2>/dev/null \
+        | grep -viE 'CLOS|FAIT' \
+        | head -1 \
+        | sed -E 's/^## (Jalon [0-9]+( bis)?).*/\1/')
+fi
 
 if [[ -z "$PROCHAINE" ]]; then
     # Aucune phase ouverte reconnue — toutes livrees, ou format inconnu. Le
@@ -130,7 +142,7 @@ if [[ -z "$PROCHAINE" ]]; then
     exit 0
 fi
 
-NUMERO=$(echo "$PROCHAINE" | grep -oE '[0-9]+')
+NUMERO=$(echo "$PROCHAINE" | grep -oE '[0-9]+' | head -1)
 
 # --- Les deux points que ce hook peut trancher seul --------------------------
 # Calcules ici, affiches juste sous le titre (voir l'en-tete).
@@ -170,16 +182,24 @@ ALERTES_GIT=$(alertes_git)
 echo "=== PORTE D'ENTREE — $PROCHAINE ==="
 echo
 [[ -n "$ALERTES_GIT" ]] && { echo "$ALERTES_GIT"; echo; }
-echo "Si cette conversation OUVRE cette phase, avant toute ligne de code (rules/porte-de-phase.md) :"
-echo "  1. lancer le controle du projet et montrer sa sortie reelle ;"
-echo "  2. verifier que le depot est propre ;"
-echo "  3. verifier qu'il est pousse ;"
-echo "  4. verifier que le jeu de documents est complet et que les documents"
-echo "     d'etat disent tous la meme chose ;"
-echo "  5. verifier les constats assignes a cette phase A LA SOURCE — sur"
-echo "     un projet réel, trois constats d'audit sur quatre se sont reveles faux ou a"
-echo "     moitie faux en allant lire le fichier cite."
-echo "Puis ecrire le plan et attendre la validation de l'utilisateur."
+# La regle installee est chargee dans chaque conversation : la recopier ici
+# coute du contexte pour rien. Sans elle (le plugin ne charge pas ses regles),
+# les cinq points s'ecrivent en entier.
+if [[ -f "$HOME/.claude/rules/porte-de-phase.md" ]]; then
+    echo "Si cette conversation OUVRE cette phase : les cinq points de rules/porte-de-phase.md,"
+    echo "avant toute ligne de code."
+else
+    echo "Si cette conversation OUVRE cette phase, avant toute ligne de code (rules/porte-de-phase.md) :"
+    echo "  1. lancer le controle du projet et montrer sa sortie reelle ;"
+    echo "  2. verifier que le depot est propre ;"
+    echo "  3. verifier qu'il est pousse ;"
+    echo "  4. verifier que le jeu de documents est complet et que les documents"
+    echo "     d'etat disent tous la meme chose ;"
+    echo "  5. verifier les constats assignes a cette phase A LA SOURCE — sur"
+    echo "     un projet réel, trois constats d'audit sur quatre se sont reveles faux ou a"
+    echo "     moitie faux en allant lire le fichier cite."
+    echo "Puis ecrire le plan et attendre la validation de l'utilisateur."
+fi
 echo
 echo "Un point rouge = la phase ne s'ouvre pas. On le corrige d'abord."
 echo
@@ -221,6 +241,20 @@ if [[ -n "$CONSEIL" ]] && { [[ -L "$CONSEIL" || ! -f "$CONSEIL" ]] || ! conseil_
     CONSEIL=""
 fi
 if [[ -n "$CONSEIL" ]]; then
+    # Ecrit par /fin-phase APRES ses commits, a la cloture d'une PHASE ; l'etat,
+    # lui, avance a chaque commit. Un commit plus recent que le conseil le rend
+    # perime : un conseil qui decrivait encore le lot 2 alors que le lot 4 etait
+    # entame a deja servi de reference (0.5.0, repris d'une copie locale).
+    DATE_CONSEIL=$(python3 -I -c 'import os, sys; print(int(os.stat(sys.argv[1]).st_mtime))' "$CONSEIL" 2>/dev/null || echo 0)
+    DERNIER_COMMIT=$(g -C "$PROJET" log -1 --format=%ct 2>/dev/null || echo 0)
+    if [[ "$DERNIER_COMMIT" =~ ^[0-9]+$ && "$DATE_CONSEIL" =~ ^[0-9]+$ && "$DERNIER_COMMIT" -gt 0 \
+          && "$DATE_CONSEIL" -lt "$DERNIER_COMMIT" ]]; then
+        JOURS=$(( (DERNIER_COMMIT - DATE_CONSEIL) / 86400 ))
+        echo "⚠️ LE CONSEIL CI-DESSOUS EST PERIME : des commits ont suivi son ecriture (${JOURS} jour(s) d'ecart)."
+        echo "   NE PAS s'y fier pour l'etat d'avancement : la source est la roadmap (section de la"
+        echo "   phase) et l'entete de CLAUDE.md. Le relire et le corriger fait partie de cette session."
+        echo
+    fi
     echo "--- Reglage conseille pour cette phase (ecrit a la cloture de la precedente) ---"
     python3 -I -c 'import sys
 t = open(sys.argv[1], encoding="utf-8", errors="replace").read()
@@ -228,16 +262,21 @@ print(t[:3000].rstrip())
 if len(t) > 3000:
     print("[... conseil coupe a 3 000 caracteres : le lire en entier dans " + sys.argv[1] + "]")' "$CONSEIL"
     echo
-    echo "Quatre reglages sont recommandes au debut d'une tache : mode, effort,"
-    echo "ultracode (interrupteur a part, independant du cran), advisor. Si le curseur"
-    echo "de cette conversation ne correspond pas au conseil, le DIRE en une ligne avec"
-    echo "la commande a taper (/effort <cran>) : sur Opus 5.5 et Fable 5.1, le"
-    echo "changement garde le cache ; sur un autre modele, plus tard, il fait relire"
-    echo "la conversation sans cache."
+    if [[ -f "$HOME/.claude/rules/choix-du-modele.md" ]]; then
+        echo "Si le curseur de cette conversation ne correspond pas au conseil : le dire en"
+        echo "une ligne avec la commande a taper (/effort <cran>) — rules/choix-du-modele.md."
+    else
+        echo "Le modele et quatre reglages sont recommandes au debut d'une tache : mode,"
+        echo "effort, ultracode (interrupteur a part, independant du cran), advisor. Si le"
+        echo "curseur de cette conversation ne correspond pas au conseil, le DIRE en une ligne"
+        echo "avec la commande a taper (/effort <cran>) : sur Opus 5.5 et Fable 5.1, le"
+        echo "changement garde le cache ; sur un autre modele, il fait relire la conversation"
+        echo "sans cache."
+    fi
     echo
 fi
 
-echo "Roadmap : $ROADMAP_REL, section « ### $PROCHAINE » (numero $NUMERO)."
+echo "Roadmap : $ROADMAP_REL, section « $PROCHAINE » (numero $NUMERO)."
 echo "=== FIN PORTE D'ENTREE ==="
 
 exit 0

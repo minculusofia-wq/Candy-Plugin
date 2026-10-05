@@ -143,6 +143,12 @@ def fin_de_substitution(t, k):
         if c == "\\":
             i += 2
             continue
+        if c == "$" and t.startswith("$'", i):
+            # $'c\'est' : l'apostrophe échappée ne ferme rien. Avant la 0.5.0,
+            # elle faisait échouer le découpage de toute la ligne, et la
+            # commande suivante (cat ~/.ssh/cle) n'était plus lue.
+            i = chaine_ansi_c(t, i + 2)[1]
+            continue
         if c == "#" and (i == k or t[i - 1] in " \t\n;(|&"):
             j = t.find("\n", i)                     # un commentaire : « c'est » n'ouvre rien
             i = n if j < 0 else j
@@ -417,7 +423,13 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None):
         elif m in REDIRECTIONS or re.fullmatch(r"\d*[<>&|]*[<>][<>&|]*", m):
             op = m.lstrip("0123456789")             # 2> f : le descripteur est collé par le lexer
             cible = mots[i + 1] if i + 1 < len(mots) else ""
-            if ">" in op and not (cible == "/dev/null" or re.fullmatch(r"&?\d+|&?-", cible)):
+            if op == "<>":
+                # exec 3<> .env, cat 0<> .env : ouvert en lecture ET en écriture.
+                # Avant la 0.5.0, seule l'écriture était notée : la lecture du
+                # .env passait.
+                ecrit = True
+                entrees += [("sortie", cible), ("fichier", cible)]
+            elif ">" in op and not (cible == "/dev/null" or re.fullmatch(r"&?\d+|&?-", cible)):
                 ecrit = True                        # > f, >> f, &> f, 2> f : un fichier est écrit
                 entrees.append(("sortie", cible))
             elif op == "<<<":
@@ -1229,8 +1241,13 @@ def copie_d_un_secret(nom, args, dossier, distant, detection):
     for a in args:
         if sauter:
             sauter = False
-        elif a in EXCLUSIONS:
-            sauter = True                           # rsync --exclude .env : un motif, pas une source
+        elif nom == "rsync" and a in ("--exclude", "--include", "--filter", "--exclude-from", "--files-from"):
+            # rsync --exclude .env : un motif, pas une source. Réservé à rsync :
+            # appliquée à toutes les copies, la liste des exclusions de tar et
+            # zip prenait le -f de cp, mv ou ln pour une option à valeur, et
+            # « cp -f .env /tmp/e.txt » passait (comparaison avec une copie
+            # locale, 0.5.0).
+            sauter = True
         elif a.startswith("-") and len(a) > 1:
             sauter = not a.startswith("--") and a[-1] in a_valeur
         else:
@@ -1261,7 +1278,13 @@ class TropGrand(Exception):
 # Jusqu'à la seconde relecture de la 0.4.0 : 20 000 fichiers, comptés même
 # quand --include les écartait — rg, l'outil Grep et grep --include étaient
 # refusés dans tout projet avec un gros dossier de compilation.
-LIMITE_PARCOURS = int(os.environ.get("CANDY_LIMITE_PARCOURS") or 150000)
+# CANDY_LIMITE_PARCOURS ne peut que l'abaisser (essais) ; une valeur illisible
+# garde la limite au lieu de faire planter l'import (avant la 0.5.0 : chaque
+# commande refusée comme une panne de Python).
+try:
+    LIMITE_PARCOURS = min(150000, int(os.environ.get("CANDY_LIMITE_PARCOURS") or 150000))
+except ValueError:
+    LIMITE_PARCOURS = 150000
 DUREE_PARCOURS = 8.0
 
 
@@ -1491,11 +1514,13 @@ def bre_en_python(motif):
     return "".join(sortie)
 
 
-def sortie_masquee(cmds, k, texte, sources=None, dossier=None):
+def sortie_masquee(cmds, k, texte, sources=None, dossier=None, distant=False):
     """La sortie du lecteur cmds[k] part-elle dans un tube qui ne garde que
     les noms ou un compte (cat .env | cut -d= -f1, … | grep -c, … | wc -l) ?
     « export $(grep -v '^#' .env | xargs) » aussi : la sortie devient des
-    variables, rien ne s'affiche."""
+    variables, rien ne s'affiche. distant : la commande tourne sur un serveur ;
+    le fichier qu'elle lit ne se lit pas d'ici, même si un fichier local porte
+    le même chemin (0.5.0)."""
     j = k
     while cmds[j][3] == "|":
         if j + 1 >= len(cmds):
@@ -1512,7 +1537,9 @@ def sortie_masquee(cmds, k, texte, sources=None, dossier=None):
             _, programme, options = lire_arguments(nom, mots[1:], motifs)
             masque = lecture_masquee(nom, programme, options, motifs)
             if masque == "reglage":
-                return bool(sources) and reglages_inoffensifs(motifs, sources, dossier)
+                if not sources:
+                    return False
+                return reglage_nom_prudent(motifs) if distant else reglages_inoffensifs(motifs, sources, dossier)
             if masque:
                 return True
         if nom not in FILTRES:
@@ -1553,7 +1580,11 @@ def git_affiche_un_secret(sous, args, dossier, detection):
     motif_git = None
     if sous == "grep":
         if "-e" in avant and avant.index("-e") + 1 < len(avant):
-            motif_git = avant[avant.index("-e") + 1]
+            # Le motif sort des chemins : « -e .env » était refusé à tort, et un
+            # motif avec « : » passait pour rev:chemin, sans que git soit lancé
+            # (0.5.0).
+            k = avant.index("-e")
+            motif_git, avant = avant[k + 1], avant[:k] + avant[k + 2:]
         elif not any(o in ("-f", "--regexp") or o.startswith(("-e", "-f")) for o in options):
             premier = next((k for k, a in enumerate(avant) if not a.startswith("-")), None)
             if premier is not None:
@@ -1792,7 +1823,7 @@ def verdict_secret(texte, detection=None, prof=0, depart=None, distant=False, ch
         masque = lecture_masquee(nom, programme, options, motifs)
         if masque == "reglage":
             masque = reglage_nom_prudent(motifs) if distant else reglages_inoffensifs(motifs, secrets, dossier)
-        if masque or sortie_masquee(cmds, k, texte, secrets, dossier):
+        if masque or sortie_masquee(cmds, k, texte, secrets, dossier, distant):
             continue
         return "SECRET"
     return "OK"
@@ -2329,7 +2360,10 @@ def commit_de_cloture(texte, depart):
 RECHERCHE_BRUTE = re.compile(r"\b[efz]?grep\b[^|;&\n]*\s-\w*[rR]|\b(rg|ag)\b|\bxargs\b|\$\(\s*<")
 NOM_DE_SECRET_BRUT = re.compile(r"\.env\b|\.pem\b|\.key\b|/environ\b|id_(rsa|ed25519|ecdsa|dsa)\b|wallet|keystore|"
                                 r"credentials|\.envrc|\.pgpass|\.npmrc|secrets\.(toml|json|ya?ml)|keypair|"
-                                r"mnemonic|\.claude\.json|\.git-credentials|\.netrc", re.I)
+                                r"mnemonic|\.claude\.json|\.git-credentials|\.netrc|"
+                                # dossiers de clés : un nom libre dedans (~/.ssh/cle_serveur)
+                                # passait le repli au-delà de PROFONDEUR (0.5.0)
+                                r"\.ssh/|\.gnupg/|\.aws/|\.kube/|solana/|\.foundry/", re.I)
 
 
 def lire_entree():

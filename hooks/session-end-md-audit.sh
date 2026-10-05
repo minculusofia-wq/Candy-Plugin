@@ -46,10 +46,13 @@ if ! g -C "$PROJECT_DIR" rev-parse --git-dir > /dev/null 2>&1; then
     echo -e "${YELLOW}Pas un repo git, audit limite.${NC}"
 fi
 
-# Lister tous les .md du projet (en excluant archives, node_modules, .venv, build)
+# Lister tous les .md du projet (en excluant archives, node_modules, .venv,
+# venv, build). venv/ sans point : jusqu'a la 0.4.6, les README des paquets
+# installes y donnaient de faux liens casses, qui devenaient un rouge de porte.
 MD_FILES=$(find "$PROJECT_DIR" -name "*.md" \
     -not -path "*/node_modules/*" \
     -not -path "*/.venv/*" \
+    -not -path "*/venv/*" \
     -not -path "*/archives/*" \
     -not -path "*/.git/*" \
     -not -path "*/.pytest_cache/*" \
@@ -99,7 +102,16 @@ def cible_du_lien(brute):
         cible = cible.split(None, 1)[0] if cible.split() else ""
     cible = unquote(cible.split("#", 1)[0].split("?", 1)[0])
     return os.path.expanduser(cible) if cible.startswith("~/") else cible
-STATUTS = re.compile(r"(à créer|a creer|à trancher|a trancher|non commencé|non commence)", re.I)
+# Statuts en attente. Des formules propres a un setup (« validation finale
+# <nom> ») s'ajoutent une par ligne dans ~/.claude/motifs-audit-md.txt, lu s'il
+# existe (lignes vides et « # » ignorees ; texte exact, pas une regex).
+_MOTIFS = ["à créer", "a creer", "à trancher", "a trancher", "non commencé", "non commence"]
+try:
+    with open(os.path.expanduser("~/.claude/motifs-audit-md.txt"), encoding="utf-8") as _h:
+        _MOTIFS += [l.strip() for l in _h if l.strip() and not l.lstrip().startswith("#")]
+except OSError:
+    pass
+STATUTS = re.compile("(" + "|".join(re.escape(m) for m in _MOTIFS) + ")", re.I)
 
 vus = set()
 for f in fichiers:

@@ -140,6 +140,13 @@ sleep 1; printf 'x = 6\n' > "$TRACE/app.py"
 verifie "des tests qui écrivent un fichier : refuse une fois" 2 "$(fin_s "$TRACE")"
 verifie "  sans boucle ensuite" 0 "$(fin_s "$TRACE" 1)"
 verifie "les relevés vont dans le dossier donné, pas ailleurs" 1 "$([ -f "$CONTROLE_ETATS/essai.json" ] && echo 1 || echo 0)"
+# 0.5.0 : hors d'un plugin (hooks copiés dans ~/.claude/hooks), sans dossier
+# donné, les relevés vont dans ~/.claude/state/tours — à soi — et non plus dans
+# un dossier temporaire partagé.
+MAISON="$BAC/maison"; mkdir -p "$MAISON"
+python3 -I -c 'import json, sys; print(json.dumps({"cwd": sys.argv[1], "session_id": "essai"}))' "$TRACE" \
+    | env -u CONTROLE_ETATS -u CLAUDE_PLUGIN_DATA HOME="$MAISON" python3 -I "$RACINE/hooks/controle-fin-de-tour.py" debut
+verifie "hors d'un plugin : relevé dans ~/.claude/state/tours" 1 "$([ -f "$MAISON/.claude/state/tours/essai.json" ] && echo 1 || echo 0)"
 # Relecture xhigh : au-delà de 5 000 fichiers non suivis, un fichier créé après
 # la fenêtre du relevé était invisible ; et un dossier des relevés ouvert aux
 # autres (umask 002) faisait taire les relevés pour toujours, sans un mot.

@@ -233,4 +233,30 @@ verifie "erreur de syntaxe : la commande de hooks.json affiche HORS SERVICE" 1 \
     "$(echo "$S" | python3 -c 'import sys,json; print(1 if "HORS SERVICE" in json.load(sys.stdin)["systemMessage"] else 0)' 2>/dev/null)"
 verifie "erreur de syntaxe : la porte le dit au lieu de se taire" 1 "$(a "$(porte "$F" "$CASSE/hooks/ouverture-de-phase.sh")" "a echoue")"
 
+# ------------------------------------------------------------------------------
+section "Porte d'entrée — 0.5.0 : jalons, conseil périmé, copie locale"
+# Repris d'une copie locale de ces hooks (comparaison du 2026-10-05) : une
+# roadmap en « ## Jalon N » rendait la porte muette ; un conseil plus vieux que
+# le dernier commit décrivait un état dépassé ; une copie qui nomme le jeu de
+# documents « .py » faisait dire « NON controlee » à chaque ouverture.
+J=$(projet jalons)
+printf '## Jalon 1 — Base — CLOS\n## Jalon 2 — Suite\n' > "$J/ROADMAP.md"
+for f in CLAUDE SPEC JOURNAL README; do echo "# $f" > "$J/$f.md"; done
+commiter "$J" init
+verifie "roadmap en jalons : la porte du jalon ouvert s'affiche" 1 "$(a "$(porte "$J")" "=== PORTE D'ENTREE — Jalon 2 ===")"
+V=$(projet conseil-vieux)
+printf '### Phase 1 — Base\n' > "$V/ROADMAP.md"
+for f in CLAUDE SPEC JOURNAL README; do echo "# $f" > "$V/$f.md"; done
+echo ".claude-phase-suivante" >> "$V/.git/info/exclude"
+commiter "$V" init
+echo "Effort : high" > "$V/.claude-phase-suivante"
+verifie "conseil écrit après le dernier commit : pas d'alerte" 0 "$(a "$(porte "$V")" "PERIME")"
+touch -t 202001010000 "$V/.claude-phase-suivante"
+verifie "conseil plus vieux que le dernier commit : PERIME, ne pas s'y fier" 1 "$(a "$(porte "$V")" "PERIME")"
+LOCALE="$BAC/copie-locale"; mkdir -p "$LOCALE"; cp -R "$RACINE/hooks" "$LOCALE/"
+mv "$LOCALE/hooks/jeu-de-documents.sh" "$LOCALE/hooks/jeu-de-documents.py"
+S=$(porte "$J" "$LOCALE/hooks/ouverture-de-phase.sh")
+verifie "jeu de documents nommé .py (copie locale) : la porte le trouve" "1 0" \
+        "$(a "$S" "PORTE D'ENTREE — Jalon 2") $(a "$S" "a echoue")"
+
 bilan

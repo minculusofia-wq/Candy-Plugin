@@ -513,6 +513,48 @@ verifie "/maintenance lance le contrôle avec --releve" \
 verifie "les commandes lancent python3 avec -I" \
         0 "$(grep -h 'python3 ' "$RACINE"/commands/*.md | grep -vc 'python3 -I')"
 
+section "Contrôle du setup — 0.5.0 : repris d'une copie locale"
+# Une copie locale de ces hooks avait des contrôles que le plugin n'avait pas,
+# chacun né d'une panne réelle : un lien mort dans un skill, un « $8 » pris pour
+# un argument, un plugin activé qui ne se chargeait plus depuis deux mois, une
+# adresse de serveur dans l'historique ; et le doublon voulu de
+# relire-ma-reponse.sh signalé à tort. Un setup peut aussi ajouter ses propres
+# contrôles (hooks/verifier-setup-local.sh).
+L5="$BAC/v050"
+mkdir -p "$L5/hooks" "$L5/rules" "$L5/commands" "$L5/skills/outil"
+printf '{"skillOverrides": {}}\n' > "$L5/settings.json"
+printf -- '---\nname: outil\ndescription: x\n---\nx\n' > "$L5/skills/outil/SKILL.md"
+ln -s "$BAC/disparu" "$L5/skills/outil/aide"
+printf 'Le pari coute $8 de mise.\n' > "$L5/commands/pari.md"
+printf '[{"id": "x@y", "enabled": true, "errors": ["Path not found"]}]\n' > "$BAC/plugins.json"
+S5=$(VERIFIER_PLUGINS_JSON="$BAC/plugins.json" bash "$CONTROLE" "$L5" 2>&1)
+verifie "lien mort dans un skill actif : signalé" 1 "$(echo "$S5" | grep -c 'lien mort : outil')"
+verifie "« \$8 » dans une commande : signalé" 1 "$(echo "$S5" | grep -c 'pris pour un argument) : commands/pari.md:1')"
+verifie "plugin activé qui ne se charge pas : signalé" 1 "$(echo "$S5" | grep -c 'ne se charge pas : x@y')"
+verifie "dossier autre que ~/.claude, sans liste fournie : plugins non concernés" 1 \
+        "$(bash "$CONTROLE" "$L5" 2>&1 | grep -c 'plugins non concernés')"
+printf '{"skillOverrides": {"outil": "off"}}\n' > "$L5/settings.json"
+verifie "le même skill réglé « off » : plus signalé" 0 \
+        "$(VERIFIER_PLUGINS_JSON="$BAC/plugins.json" bash "$CONTROLE" "$L5" 2>&1 | grep -c 'lien mort')"
+(
+  cd "$L5" && git init -q && git config user.email t@t.t && git config user.name t
+  printf 'serveur : 8.8.8.8\n' > rules/notes.md
+  printf '{"skillOverrides": {"outil": "off"}, "effortLevel": "medium"}\n' > settings.json
+  git add -A && git commit -qm depart
+  printf '{"skillOverrides": {"outil": "off"}, "effortLevel": "high"}\n' > settings.json
+) >/dev/null 2>&1
+S5=$(VERIFIER_PLUGINS_JSON="$BAC/plugins.json" bash "$CONTROLE" "$L5" 2>&1)
+verifie "adresse IP publique suivie par git : signalée" 1 "$(echo "$S5" | grep -c 'IP publique suivie par git : rules/notes.md')"
+verifie "settings.json modifié par le seul cran d'effort : pas « non commité »" 0 "$(echo "$S5" | grep -c 'non commité')"
+printf '# relire-ma-reponse.sh\nFLATTERIE = "ne jamais commencer une réponse par une formule de politesse inutile"\n' > "$L5/hooks/relire-ma-reponse.sh"
+printf 'Ne jamais commencer une réponse par une formule de politesse inutile.\n' > "$L5/rules/ton.md"
+verifie "doublon voulu de relire-ma-reponse.sh : pas signalé" 0 \
+        "$(VERIFIER_PLUGINS_JSON="$BAC/plugins.json" bash "$CONTROLE" "$L5" 2>&1 | grep -c 'rules/ton.md')"
+printf '#!/bin/bash\necho "  ✗ contrôle local : un point"\nexit 1\n' > "$L5/hooks/verifier-setup-local.sh"
+S5=$(VERIFIER_PLUGINS_JSON="$BAC/plugins.json" bash "$CONTROLE" "$L5" 2>&1)
+verifie "verifier-setup-local.sh : lancé, et son point compte au bilan" "1 1" \
+        "$(echo "$S5" | grep -c 'contrôle local : un point') $(echo "$S5" | grep -c '\[+\] Contrôles propres')"
+
 section "Le dépôt du plugin sort propre"
 bash "$CONTROLE" "$VIERGE" >/dev/null 2>&1
 verifie "un setup vierge ne rend que l'avertissement de dépôt" 1 $?

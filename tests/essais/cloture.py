@@ -69,7 +69,13 @@ try:
                'git commit -m "$(cat msg-cloture.txt)"', "git commit -F lien.txt",
                f'git -c alias.fin=commit fin -m "{MARQUEUR}"',
                # relecture xhigh : un $( ) sans cat ni document laissait passer le marqueur
-               f'git commit -m "$(printf %s "{MARQUEUR}")"']
+               f'git commit -m "$(printf %s "{MARQUEUR}")"',
+               # 0.5.0 : un alias shell donné sur la ligne (cas de la copie locale),
+               # et git écrit sans le mot « git » d'un seul tenant — le filtre
+               # rapide sur le texte brut laissait passer la clôture.
+               f"git -c 'alias.fin=!git commit' fin -m \"{MARQUEUR}\"",
+               f'g\\it commit -m "{MARQUEUR}"', f"'g'it commit -m \"{MARQUEUR}\"",
+               f"$'\\x67it' commit -m \"{MARQUEUR}\""]
     for cmd in refuses:
         attendre(f"clôture refusée : {cmd.replace(depot, '…')[:55]!r}", 2, lancer(cmd, cwd=base if depot in cmd else depot))
     subprocess.run(["git", "-C", depot, "config", "alias.ci", "commit"], check=True)
@@ -77,7 +83,10 @@ try:
     permis = [f'git log --grep "{MARQUEUR}" && git commit -m "fix: x"',
               f'git commit -m "fix: x" -m "suite de {MARQUEUR}"',
               f"git commit -m \"$(cat <<'EOF'\nfix: x\n\nprépare {MARQUEUR}\nEOF\n)\"",
-              'git commit -m "$(date +%F) : fix x"']
+              'git commit -m "$(date +%F) : fix x"',
+              # 0.5.0, cas de la copie locale : titres calculés et alias ordinaires
+              'git commit -m "$(date): ajout"', 'git commit -m "$(printf %s "fix: x")"',
+              'git -c alias.fin=commit fin -m "fix: x"', f'git -c alias.fin=log fin --grep "{MARQUEUR}"']
     for cmd in permis:
         attendre(f"commit ordinaire permis : {cmd[:55]!r}", 0, lancer(cmd))
 

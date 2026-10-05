@@ -133,6 +133,24 @@ verifie "mention dans un dossier au nom avec espace : vue" \
 verifie "mention dans un dossier au nom avec apostrophe : vue" \
         1 "$(echo "$NOMS" | grep -c "notes d'équipe/A.md:2 → mention de 'docs/parti.md'")"
 
+section "Audit des .md — 0.5.0 : venv/ et motifs propres à un setup"
+# Repris d'une copie locale : les README des paquets installés dans venv/
+# donnaient de faux liens cassés ; une formule d'attente propre à un setup
+# (« validation finale <nom> ») se déclare dans ~/.claude/motifs-audit-md.txt.
+mkdir -p "$BAC/v050/venv/lib/paquet" "$BAC/maison/.claude"
+(
+  cd "$BAC/v050" && git init -q && git config user.email t@t.t && git config user.name t
+  printf '# Paquet\n[absent](ABSENT.md)\n' > venv/lib/paquet/README.md
+  printf '# Plan\nRelecture : validation finale Martin\n' > PLAN.md
+  git add -A && git commit -qm depart
+) >/dev/null 2>&1
+V=$(bash "$AUDIT" "$BAC/v050" 2>&1)
+verifie "un lien cassé sous venv/ n'est pas signalé" 0 "$(echo "$V" | grep -c 'ABSENT.md')"
+verifie "sans fichier de motifs : la formule propre n'est pas un statut" 0 "$(echo "$V" | grep -c 'validation finale Martin')"
+printf '# formules d attente de ce setup\nvalidation finale Martin\n' > "$BAC/maison/.claude/motifs-audit-md.txt"
+V=$(HOME="$BAC/maison" bash "$AUDIT" "$BAC/v050" 2>&1)
+verifie "avec ~/.claude/motifs-audit-md.txt : la formule est un statut" 1 "$(echo "$V" | grep -c 'validation finale Martin')"
+
 section "Audit des .md — le dépôt lui-même sort propre"
 bash "$AUDIT" "$RACINE" >/dev/null 2>&1
 verifie "aucun signalement sur Candy-Plugin" 0 $?

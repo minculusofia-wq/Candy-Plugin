@@ -42,7 +42,7 @@ done
 
 [ -n "$TROP" ] || exit 0
 
-LIGNE="⚠️ $TROP — la doc officielle vise moins de $LIMITE lignes par CLAUDE.md, et ce plugin alerte aussi au-delà de $((LIMITE_OCTETS / 1000)) Ko. Le surplus se range selon la règle « une information, un seul fichier » (rules/une-info-un-fichier.md)."
+LIGNE="⚠️ $TROP — la doc officielle vise moins de $LIMITE lignes par CLAUDE.md, et ce contrôle alerte aussi au-delà de $((LIMITE_OCTETS / 1000)) Ko. Le surplus se range selon la règle « une information, un seul fichier » (rules/une-info-un-fichier.md)."
 
 python3 -I -c 'import json, sys
 m = sys.argv[1]

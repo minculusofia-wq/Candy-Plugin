@@ -67,6 +67,10 @@ lint, types, build) and returns one of three verdicts:
 - `2` **there is no way to verify this project** — the most useful case, and the
   one nothing else tells you about
 
+A `make test` target is followed through its prerequisites and sub-makes
+(`test: test-back`, `$(MAKE) -C backend test`), so the same tests never run
+twice. `VERIFIER_A_BLANC=1` lists the checks it would run without running any.
+
 ### Per-project reminders
 
 When a task has to wait until you next open a project, write it once in
@@ -100,6 +104,12 @@ the `rappel-entretien.sh` hook offers it in two cases:
   incident, and shows you the rest as a single list to approve.
 
 Just answer "go". The rest of the time, the hook stays silent.
+
+Checks that only make sense for your own setup go in
+`~/.claude/hooks/verifier-setup-local.sh`: the setup check runs it at the end
+and counts the points it reports. Phrases that mean "not done yet" in your
+projects (beyond "to create", "to decide", "not started") go one per line in
+`~/.claude/motifs-audit-md.txt`, read by the `.md` audit.
 
 ## The commands
 

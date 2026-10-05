@@ -43,23 +43,15 @@ projets », affirmé d'après une mémoire vieille de deux jours alors que les
 quatre étaient faits — et la liste des rappels, relue la même heure, n'en
 annonçait plus qu'un.
 
-## Dans un rapport ou une analyse
-
-Chaque chiffre, chaque nom de constante, chaque contrainte technique porte son
-`[fichier:ligne]`. Avant de rédiger : lister les affirmations à sourcer, ouvrir
-chaque fichier, coller la source à côté. Relire le rapport final — chaque chiffre
-a-t-il une source ? Sinon, supprimer ou marquer « non vérifié ».
-
-Mieux vaut 5 points tous sourcés qu'un rapport de 20 dont 3 sont inventés. Les
-points inventés contaminent la confiance dans l'ensemble.
-
-## Exemple de faute réelle
-
-« Cette plateforme exige 5 $ minimum par ordre » → **inventé**.
-Réalité dans `constants.py:90` : `MIN_ORDER_SIZE_SHARES = 5.0` — 5 parts, pas 5 $.
-
 ## Principe
 
 L'utilisateur préfère attendre 30 secondes pour une réponse vérifiée plutôt qu'une
 réponse instantanée fausse. Une affirmation juste par hasard reste une faute :
 le problème n'est pas le résultat, c'est le processus.
+
+---
+
+*Procédure détaillée pour un rapport (workflow de rédaction, relecture finale,
+exemple de faute réelle) : injectée par le hook `rule13-source-or-silence.sh`
+au moment où elle sert. La recopier ici l'enverrait deux fois dans la même
+conversation — le contrôle du setup le signalait.*

@@ -63,9 +63,10 @@ INPUT=$(cat)
 # cloture et que le dernier commit du depot porte bien le marqueur (moins de
 # 10 minutes), le temoin est retire — il ne sert qu'une fois.
 #
-# Filtre rapide : sans « git », aucun commit a lire (ce hook tourne sur chaque
-# commande, avant et apres elle).
-[[ "$INPUT" == *git* ]] || exit 0
+# Pas de filtre rapide sur le texte brut : jusqu'a la 0.5.0, une commande sans
+# le mot « git » d'un seul tenant sortait ici, et g\it, 'g'it ou $'\x67it'
+# lancent bien git. Aucune sous-chaine ne resiste a l'echappement ; seule la
+# lecture comme bash tranche.
 if [[ "${1:-}" == "apres" ]]; then
     SORTIE=$(printf '%s' "$INPUT" | python3 -I "$H/analyse-commande.py" cloture 2>/dev/null) || exit 0
     [[ "$SORTIE" == OUI$'\t'* ]] || exit 0

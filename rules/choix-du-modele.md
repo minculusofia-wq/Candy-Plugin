@@ -41,6 +41,15 @@ autant : `/effort <cran>` change le curseur à tout moment, même pendant que
 Claude travaille — sur Opus 5.5 et Fable 5.1, sans perdre le cache ; sur un autre
 modèle, au prix d'une relecture sans cache de toute la conversation.
 
+**Ce que `/effort` enregistre** (doc model-config) : un cran validé par `Entrée`
+dans le sélecteur, ou tapé après `/effort`, devient le défaut **du modèle** —
+enregistré sous `modelSettings` dans les réglages utilisateur — et vaut pour
+les sessions suivantes ; `s` dans le sélecteur le garde pour la session
+seulement. `max` ne vaut que pour la session en cours, sauf s'il vient de la
+variable `CLAUDE_CODE_EFFORT_LEVEL`. Ni cette variable ni le réglage
+`effortLevel` n'acceptent `ultracode` ; s'ils fixent le cran, ultracode reste
+allumé à ce cran.
+
 ## Quel cran pour quelle demande
 
 | Ce que l'utilisateur demande | Cran |
@@ -66,6 +75,18 @@ model-config). Il s'ajoute au cran : `max` + ultracode garde la profondeur et
 ajoute la largeur. Le plus cher, de loin. À laisser éteint pour les
 conversations, les questions, la documentation, et chaque fois que le goulot est
 l'appareil physique de l'utilisateur — dix agents ne trouvent pas un bouton mort.
+
+**Le test, trois questions, toutes à « oui »** — un seul « non », et ultracode
+est du gaspillage :
+1. **Le travail se découpe-t-il en morceaux indépendants ?** Auditer 40 fichiers
+   selon 5 angles, oui. Concevoir un modèle probabiliste, non : c'est une seule
+   chaîne de raisonnement, et dix agents ne la raccourcissent pas.
+2. **La vérification croisée apporte-t-elle quelque chose ?** Des agents qui se
+   contredisent trouvent des défauts ; des agents qui exécutent une spec claire
+   font la même chose en dix exemplaires.
+3. **Les subagents gratuits ne suffisent-ils vraiment pas ?** `relecteur-securite`
+   et `relecteur-de-phase` couvrent déjà l'audit large d'un dépôt, sans
+   facturation à part. C'est la question qui élimine la plupart des tentations.
 
 ## Changer de modèle
 
@@ -125,6 +146,11 @@ conversation**, appels d'outils compris, et rend des conseils avant de continuer
 - **Claude choisit le moment** (avant de s'engager, quand une erreur revient,
   avant de déclarer fini) ; aucun réglage ne force ni ne plafonne les appels.
 - **Commandes** : `/advisor fable`, `/advisor off`, ou `claude --advisor fable`.
+- **Fable conseiller, sur les plans où Fable se facture en crédits d'usage** :
+  Claude Code ne l'applique qu'après le consentement unique à cette
+  facturation, qui se donne par `/model fable` ; avant, `/advisor fable`
+  renvoie vers `/model fable` (doc advisor, « Fable advisor and usage
+  credits »).
 
 **Recommander oui, avec Fable sous Opus 5.5** (surcoût : tarif Fable sur toute
 la conversation à chaque consultation) : une conception difficile — architecture,
@@ -139,6 +165,23 @@ L'advisor n'est pas une relecture : il conseille pendant le travail ;
 `/code-review` et les subagents relisent après.
 
 ## Relecture : `/code-review`
+
+**Quand la proposer — la question qui tranche** : si ce code se trompe, est-ce
+que quelqu'un perd de l'argent, ou est-ce qu'une capture d'écran suffit à s'en
+apercevoir ?
+
+- **Toujours** : du code qui touche des fonds (passage d'ordres, adresse de
+  dépôt, envoi depuis un wallet, retrait), qui calcule de l'argent (commission,
+  taille de position, seuils de risque), des secrets (schéma d'environnement,
+  authentification, dérivation de clé, tout ce qui peut atterrir dans un
+  journal ou un fichier commité), ou de l'irréversible (migration de base,
+  purge, format de stockage).
+- **Jamais** : de la documentation seule, des traductions seules, un affichage
+  qui ne calcule rien de neuf, un diagnostic qui ne change aucun comportement.
+  La proposer à tort use la seule chose qui la rend utile : qu'on la prenne au
+  sérieux quand elle est proposée.
+- **Entre les deux** : les relecteurs gratuits d'abord, et n'escalader que
+  s'ils remontent quelque chose de structurel.
 
 Proposer à chaque fois **le niveau adapté à ce qui est relu**, avec la commande
 exacte, sa cible et la raison en une ligne — jamais `max` par réflexe :

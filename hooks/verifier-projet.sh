@@ -35,9 +35,20 @@ RESUME=""
 # controle qui suit.
 CODE_NEUTRE=""
 
+# VERIFIER_A_BLANC=1 : liste les controles qui tourneraient, sans en lancer
+# aucun (pour comparer deux versions de ce script sur un projet sans executer
+# son code). Code 0, verdict « A BLANC ».
+A_BLANC="${VERIFIER_A_BLANC:-0}"
+
 lancer() {
     local nom="$1"; shift
     local neutre="$CODE_NEUTRE"; CODE_NEUTRE=""
+    if [ "$A_BLANC" = 1 ]; then
+        echo "  [A BLANC] $nom : $*"
+        RESUME="${RESUME}  A BLANC  $nom\n"
+        TROUVE=1
+        return 0
+    fi
     # La sortie va dans un fichier, pas dans « $( ) » : un processus laisse en
     # arriere-plan par les tests tenait la capture ouverte, et le controle
     # attendait jusqu'a la fin du budget du hook Stop. bash attend la commande,
@@ -78,22 +89,97 @@ lancer() {
 CIBLES="test lint typecheck audit"
 [ "${VERIFIER_SANS_AUDIT:-0}" = 1 ] && CIBLES="test lint typecheck"
 
-# La cible « test » du Makefile lance-t-elle pytest elle-meme ? Alors pytest
-# n'est pas relance plus bas : jusqu'a la 0.3.4, il tournait deux fois. Une
-# cible qui ne l'appelle pas (« test: @true ») ne masque toujours rien.
-recette_test_lance_pytest() {
-    awk '/^test:/ { dans = 1; if ($0 ~ /pytest/) { print "oui"; exit } ; next }
-         dans && /^[^\t]/ { dans = 0 }
-         dans && /pytest/ { print "oui"; exit }' Makefile 2>/dev/null | grep -q oui
+# Ce que la cible <cible> d'un Makefile fait vraiment, en suivant ses cibles
+# prealables (« test: test-back test-front »), les « $(MAKE) cible » et les
+# « make -C dossier cible » : « pytest » si elle lance pytest, « backend » si
+# elle entre dans backend/. Jusqu'a la 0.4.6, seule la recette de « test: »
+# etait lue : « test: test-back » (test-back: cd backend && pytest) faisait
+# relancer pytest depuis la racine, une seconde fois et sans sa configuration.
+# Une cible qui ne l'appelle pas (« test: @true ») ne masque toujours rien.
+ce_que_fait_la_cible() {  # ce_que_fait_la_cible <Makefile> <cible>
+    python3 -I - "$1" "$2" <<'PYEOF' 2>/dev/null
+import os, re, sys
+
+def regles(chemin):
+    r, courantes = {}, []
+    try:
+        lignes = open(chemin, encoding="utf-8", errors="replace").read().splitlines()
+    except OSError:
+        return r
+    for l in lignes:
+        if l.startswith("\t"):
+            for c in courantes:
+                r[c][1].append(l)
+            continue
+        m = re.match(r"^([\w.%/-]+(?:[ \t]+[\w.%/-]+)*)[ \t]*::?(?!=)(.*)$", l)
+        if m:
+            courantes = m.group(1).split()
+            pre, _, ligne = m.group(2).partition(";")
+            for c in courantes:
+                r.setdefault(c, [[], []])
+                r[c][0] += pre.split()
+                if ligne.strip():
+                    r[c][1].append(ligne)
+        elif l.strip() and not l.lstrip().startswith("#"):
+            courantes = []
+    return r
+
+trouve, vus = set(), set()
+
+def suivre(makefile, cible, prof=0):
+    if prof > 8 or (makefile, cible) in vus:
+        return
+    vus.add((makefile, cible))
+    r = regles(makefile)
+    if cible not in r:
+        return
+    pre, recette = r[cible]
+    for p in pre:
+        suivre(makefile, p, prof + 1)
+    base = os.path.dirname(makefile)
+    for l in recette:
+        if "pytest" in l:
+            trouve.add("pytest")
+        if re.search(r"(^|[\s;&(])(cd|pushd)\s+(\./)?backend\b|-C\s*(\./)?backend\b|--directory[= ](\./)?backend\b", l):
+            trouve.add("backend")
+        # Un sous-make : ses options (-C dossier, -f fichier…), ses variables
+        # (X=1) et ses cibles ; sans cible, la premiere regle du Makefile vise.
+        for m in re.finditer(r"(?:\$\(MAKE\)|\$\{MAKE\}|\bmake\b)([^;&|)]*)", l):
+            mots, dossier, cibles, k = m.group(1).split(), None, [], 0
+            while k < len(mots):
+                w = mots[k]
+                if w in ("-C", "-f", "-I", "-o", "-W") and k + 1 < len(mots):
+                    dossier = mots[k + 1] if w == "-C" else dossier
+                    k += 2
+                    continue
+                if w.startswith("-C") and len(w) > 2:
+                    dossier = w[2:]
+                elif w.startswith("--directory="):
+                    dossier = w.split("=", 1)[1]
+                elif not w.startswith("-") and "=" not in w:
+                    cibles.append(w)
+                k += 1
+            sous = os.path.join(base, dossier, "Makefile") if dossier else makefile
+            if not cibles:
+                cibles = [c for c in regles(sous) if not c.startswith(".")][:1]
+            for c in cibles:
+                suivre(sous, c, prof + 1)
+
+suivre(sys.argv[1], sys.argv[2])
+print(" ".join(sorted(trouve)))
+PYEOF
 }
 PYTEST_PAR_MAKE=0
+BACKEND_PAR_MAKE=""
 
 # --- Makefile : la source de vérité si elle existe ---
 if [ -f Makefile ]; then
     for cible in $CIBLES; do
         if grep -qE "^${cible}:" Makefile; then
             lancer "make $cible" make "$cible"
-            [ "$cible" = test ] && recette_test_lance_pytest && PYTEST_PAR_MAKE=1
+            FAIT=$(ce_que_fait_la_cible Makefile "$cible")
+            [ "$cible" = test ] && [[ " $FAIT " == *" pytest "* ]] && PYTEST_PAR_MAKE=1
+            [[ " $FAIT " == *" backend "* ]] && BACKEND_PAR_MAKE="$BACKEND_PAR_MAKE $cible"
         fi
     done
 fi
@@ -101,6 +187,9 @@ fi
 # --- Backend dans un sous-dossier ---
 if [ -f backend/Makefile ]; then
     for cible in $CIBLES; do
+        # Deja lancee par la cible de la racine (make -C backend, cd backend) :
+        # la relancer ferait tourner les memes tests deux fois.
+        [[ " $BACKEND_PAR_MAKE " == *" $cible "* ]] && continue
         if grep -qE "^${cible}:" backend/Makefile; then
             lancer "backend: make $cible" make -C backend "$cible"
         fi
@@ -163,6 +252,10 @@ fi
 
 printf "%b" "$RESUME"
 echo
+if [ "$A_BLANC" = 1 ]; then
+    echo "A BLANC : rien n'a ete lance."
+    exit 0
+fi
 if [ "$ECHECS" -eq 0 ]; then
     echo "TOUT PASSE."
     exit 0

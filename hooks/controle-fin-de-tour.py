@@ -28,7 +28,9 @@
 #
 # Les relevés sont rangés dans le dossier de données du plugin
 # (${CLAUDE_PLUGIN_DATA}, gardé d'une mise à jour à l'autre — doc des plugins,
-# « Environment variables »), ou dans CONTROLE_ETATS s'il est donné (essais).
+# « Environment variables »), dans CONTROLE_ETATS s'il est donné (essais), et
+# hors d'un plugin (ces hooks copiés dans ~/.claude/hooks) dans
+# ~/.claude/state/tours.
 #
 # Entrée : le JSON du hook Stop sur stdin. Argument : budget en secondes, ou
 # « debut » (relevé du début de tour, UserPromptSubmit, toujours silencieux).
@@ -67,7 +69,9 @@ def dossier_des_etats():
         return os.environ["CONTROLE_ETATS"]
     if os.environ.get("CLAUDE_PLUGIN_DATA"):
         return os.path.join(os.environ["CLAUDE_PLUGIN_DATA"], "tours")
-    return os.path.join(tempfile.gettempdir(), f"candy-tours-{os.getuid()}")
+    # Hors d'un plugin : un dossier à soi, plutôt qu'un dossier temporaire
+    # partagé que d'autres comptes peuvent préparer (0.5.0).
+    return os.path.join(os.path.expanduser("~"), ".claude", "state", "tours")
 
 
 ETATS = dossier_des_etats()

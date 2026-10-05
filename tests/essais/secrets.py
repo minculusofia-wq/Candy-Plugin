@@ -826,6 +826,52 @@ try:
         code, _, _ = lancer("pre-edit-guard.sh", "Grep", {"pattern": motif, "path": d42, "output_mode": "content"},
                             cwd=d42)
         attendre(f"Grep {'refusé' if attendu else 'permis'} sur le dossier : {motif}", attendu, code)
+
+    section("Secrets — 0.5.0 : ce que la copie locale fermait, et les trous communs")
+    # Une copie locale de ces garde-fous avait divergé du plugin. Leur
+    # comparaison (2026-10-05) a montré ce qu'elle fermait et que le plugin
+    # laissait passer — une option de cp prise pour une valeur, un $'…' qui
+    # cassait la lecture de la ligne, git grep -e, un tube distant jugé sur un
+    # fichier local homonyme — et des trous communs aux deux : ln -f, la
+    # redirection <> (lecture ET écriture), l'imbrication au-delà de la limite.
+    d50 = os.path.join(base, "d50")
+    os.makedirs(os.path.join(d50, "src"))
+    subprocess.run(["git", "init", "-q", d50], check=True)
+    open(os.path.join(d50, ".env"), "w").write("DATABASE_URL=none\n")
+    open(os.path.join(d50, "src", "app.py"), "w").write("x = 1\n")
+    profond = "cat ~/.ssh/cle_serveur"
+    for _ in range(8):
+        profond = f'echo "$({profond})"'           # plus profond que PROFONDEUR : relu sur le texte
+    for cmd in ["cp -f .env /tmp/e.txt", "mv -f .env /tmp/e.txt", "rsync -a -x .env /tmp/e.txt",
+                "ln -f .env /tmp/e.txt", "cp -fv .env /tmp/e.txt", "exec 3<> .env; cat <&3",
+                "echo \"$(echo $'c\\'est')\" ; cat ~/.ssh/cle_serveur", profond,
+                f"ssh srv \"cat {d50}/.env | grep '^DATABASE_URL='\""]:
+        code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d50)
+        attendre(f"Bash refusé : {cmd.replace(base, '…')[:70]!r}", 2, code)
+    for cmd in ["cp -f .env .env.bak", "rsync -a --exclude .env src/ /tmp/x/", "cp -f src/app.py /tmp/a.py",
+                "rsync -a -x src/ /tmp/x/", "ssh srv \"cat /srv/app/.env | grep '^LOG_LEVEL='\""]:
+        code, _, err = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d50)
+        attendre(f"Bash permis : {cmd!r}", 0, code, err.strip()[:80])
+    # git grep -e MOTIF : le motif était gardé parmi les chemins. « -e .env »
+    # était refusé à tort, et un motif avec « : » ne faisait plus lancer git :
+    # la ligne d'un .env suivi s'affichait.
+    d51 = os.path.join(base, "d51")
+    subprocess.run(["git", "init", "-q", d51], check=True)
+    g51 = ["git", "-C", d51, "-c", "user.email=a@b", "-c", "user.name=a"]
+    os.makedirs(os.path.join(d51, "config"))
+    open(os.path.join(d51, "app.py"), "w").write("x = 1\n")
+    open(os.path.join(d51, "config", "secrets.yml"), "w").write(j("api", "_key: ", B64, "\n"))
+    open(os.path.join(d51, ".env"), "w").write(j("API", "_KEY=", B64, "\n"))
+    subprocess.run(g51 + ["add", "-f", "app.py", "config/secrets.yml", ".env"], check=True)
+    subprocess.run(g51 + ["commit", "-qm", "un"], check=True)
+    for cmd, attendu in (("git grep -e 'api_key:'", 2), ("git grep -n -e api_key", 2), ("git grep -e 'API_KEY='", 2),
+                         ("git grep -e .env", 0), ("git grep -e 'x = 1'", 0)):
+        code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d51, env={"CLAUDE_PROJECT_DIR": d51})
+        attendre(f"git grep {'refusé' if attendu else 'permis'} : {cmd!r}", attendu, code)
+    # Une limite de parcours illisible faisait planter l'analyseur à l'import :
+    # chaque commande était refusée comme une panne de Python.
+    code, _, err = lancer("protect-secrets.sh", "Bash", {"command": "ls"}, cwd=d50, env={"CANDY_LIMITE_PARCOURS": "abc"})
+    attendre("CANDY_LIMITE_PARCOURS illisible : ls permis, pas de panne", 0, code, err.strip()[:80])
 finally:
     shutil.rmtree(base, ignore_errors=True)
 

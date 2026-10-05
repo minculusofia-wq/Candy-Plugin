@@ -244,15 +244,13 @@ dans la conversation neuve — à tout moment sur Opus 5.5 et Fable 5.1, qui gar
 le cache ; tôt de préférence sur un autre modèle, où chaque changement fait
 relire toute la conversation sans cache.
 
-Lire la section `### Phase Y` de `ROADMAP.md` et appliquer la grille de
-la règle « choix du modèle » :
-
-| Ce que contient la phase | Cran |
-|---|---|
-| Écrans, navigation, réglages, tests, refactor — sans zone sensible | `high` |
-| Sécurité, chiffrement, clés, secrets, micro, position, argent réel | `xhigh` |
-| Un **arbitrage d'architecture** qui engage les phases suivantes, ou un bug déjà corrigé deux fois sans succès | `max` |
-| Phase sensible **et** large — chiffrement, micro, position, déclencheurs, alerte réelle | le cran de la ligne qui convient **+ ultracode** — un interrupteur à part, qui s'ajoute au cran |
+Lire la section `### Phase Y` de `ROADMAP.md` et choisir le cran avec le
+tableau « Quel cran pour quelle demande » de la règle « choix du modèle »
+(`${CLAUDE_PLUGIN_ROOT}/rules/choix-du-modele.md`, ou sa copie installée), qui
+fait foi — ne pas le recopier ici : une grille recopiée finit par contredire
+l'originale. Une phase **sensible et large** (chiffrement, micro, position,
+déclencheurs, alerte réelle) ajoute l'interrupteur **ultracode** au cran qui
+convient.
 
 Une phase d'app descend rarement sous `high`, et `max` ne se conseille **pas**
 parce qu'une phase est longue : une phase est longue, pas dure. En cas de doute
@@ -295,14 +293,65 @@ plus. Le curseur ne bouge pas quand le plan est accepté, et ultracode tourne
 >   - advisor **<non / Fable : `/advisor fable`, surcoût à chaque
 >     consultation>**, parce que <motif>. »
 
-Et donner **la phrase exacte que l'utilisateur peut taper** en ouvrant :
+### Le PROMPT COMPLET, pas une phrase
 
-> « Porte d'entrée de la phase N d'abord, ne code rien. »
+Jusqu'à la 0.4.6, cette section prescrivait une phrase d'ouverture seule
+(« Porte d'entrée de la phase N d'abord, ne code rien. »). Sur un projet réel,
+c'est exactement ce qui a été rendu, et l'utilisateur a dû demander « c'est ça
+le prompt ? » pour obtenir le vrai : **le prompt complet vient d'office, jamais
+sur relance.**
 
-Cette phrase vaut mieux qu'un réglage bien compris : une consigne dans le premier
-message tient quel que soit le mode, alors qu'un réglage mal lu ne se rattrape
-pas. _Et il n'est pas établi que le mode plan retienne les agents lancés en
-parallèle par ultracode : le dire quand on conseille les deux ensemble._
+Une phrase d'ouverture ne transporte rien. Le prompt que la conversation neuve
+reçoit est la **seule** chose qui l'empêche de repartir sur un état faux : elle
+n'a pas la mémoire de la phase qui vient de se fermer, et c'est ici — roadmap
+ouverte, code frais, mesures encore chaudes — qu'on sait ce qu'elle ignore.
+
+**Rendre un bloc à copier, dans cette structure, chaque section non vide :**
+
+```
+<Phase N> — <titre>.
+Porte d'entrée d'abord, ne code rien.
+
+Lis <les documents exacts, avec leur section> avant tout. Ne re-décide pas ce
+qui y est écrit.
+
+CE QUI EST DÉJÀ FAIT, ne le refais pas :
+<les phases closes, ce qu'elles ont livré, où le récit est écrit>
+
+CE QUI EST VÉRIFIÉ À LA SOURCE, et à ne pas re-mesurer de tête :
+<chaque fait avec sa valeur exacte et son fichier — y compris les endroits où la
+spec est PÉRIMÉE : numéros de ligne qui ont bougé, chiffres qui ont changé>
+
+CE QU'IL FAUT ÉTABLIR, dans cet ordre, chaque affirmation sourcée :
+<les questions ouvertes, numérotées>
+
+CONTRAINTES :
+<ce qu'il ne faut pas casser, avec le motif — pas juste l'interdit>
+
+Termine par /fin-phase.
+```
+
+**Le contenu se rassemble PENDANT la phase, pas au moment de l'écrire.** Ce qui
+a été mesuré, ce qui s'est révélé faux dans la spec, ce qui a été renvoyé à plus
+tard : ce sont les mêmes faits que le journal reçoit. Les relire depuis le
+journal plutôt que de mémoire.
+
+**Deux sections valent plus que les autres**, parce qu'elles évitent le travail
+refait et le travail faux :
+
+- **« déjà fait »** — sans elle, la session neuve re-explore, re-mesure et parfois
+  re-décide ce qui vient d'être tranché ;
+- **« vérifié à la source »** — y compris les endroits où la spec ment : une
+  spec qui annonce un bloc aux lignes 250-263 alors qu'il vit en 260-270, ou
+  « 28 » quand il y en a 26. Une session qui cite la spec de confiance commente
+  le mauvais bloc.
+
+**Interdit** : rendre la phrase d'ouverture seule ; rendre une description de ce
+qu'il faudrait demander au lieu du texte ; renvoyer à un fichier « où le prompt
+est écrit » sans l'afficher. L'utilisateur copie ce qu'il lit.
+
+_Constaté sur un vrai setup : les agents qu'un workflow lance pendant le mode
+plan reçoivent eux aussi le mode plan et restent en lecture seule._
 
 ### Écrire le conseil pour qu'il survive à la fermeture de la conversation
 
@@ -335,7 +384,11 @@ chemin relatif au dossier de `-C`, que le shell ne partage pas — le `>>`
 écrivait alors à côté, et le conseil restait non exclu, donc non lu.
 
 Le fichier est **remplacé** à chaque fin de phase, jamais complété : un conseil
-périmé est pire que pas de conseil. Il reste hors de git — il décrit un réglage
+périmé est pire que pas de conseil — et l'ouverture le dit périmé dès qu'un
+commit l'a suivi. **Ces lignes seulement** : l'état du projet vit dans ses
+documents, et l'ouverture n'affiche que les 3 000 premiers caractères du fichier
+(un conseil qui recopiait l'état poussait hors de la vue de Claude l'alerte
+« dépôt non propre »). Il reste hors de git — il décrit un réglage
 de session, pas un état du projet — et `ouverture-de-phase.sh` ne lit qu'un
 conseil exclu par `.git/info/exclude`, jamais par un `.gitignore` : un conseil
 suivi, en lien, ou exclu par un `.gitignore` — qui voyage avec le dépôt —

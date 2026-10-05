@@ -70,7 +70,7 @@ case "$VERDICT" in
         echo "(.env, cle, wallet, environnement d'un processus), en local ou sur un serveur." >&2
         echo "Pour verifier qu'une variable existe : grep -c '^NOM=' fichier. Les noms seuls : cut -d= -f1 fichier." >&2
         echo "Un reglage qui n'est pas un secret : grep '^DRY_RUN=' fichier (sans -A, -B, -C ni -v)." >&2
-        echo "Une URL de RPC ou de webhook, un sujet de notification sont des secrets." >&2
+        echo "Une URL de RPC ou de webhook, un sujet de notification (ntfy) sont des secrets. Dans ~/.claude.json, lire les noms (les cles de mcpServers), jamais les valeurs." >&2
         exit 2
         ;;
     TROP_GRAND)
