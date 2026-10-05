@@ -100,14 +100,40 @@ ce_que_fait_la_cible() {  # ce_que_fait_la_cible <Makefile> <cible>
     python3 -I - "$1" "$2" <<'PYEOF' 2>/dev/null
 import os, re, sys
 
+def variables(chemin):
+    """Les variables du Makefile (X = …, X := …, X ?= …) : « $(PYTEST) -q »
+    lance pytest sans en écrire le nom."""
+    v = {}
+    try:
+        lignes = open(chemin, encoding="utf-8", errors="replace").read().splitlines()
+    except OSError:
+        return v
+    for l in lignes:
+        m = re.match(r"^(?:export\s+)?([A-Za-z_][\w.]*)\s*(?:[:?+]?=|::=)\s*(.*)$", l)
+        if m and not l.startswith("\t"):
+            v[m.group(1)] = m.group(2)
+    return v
+
+def developper(ligne, v):
+    for _ in range(5):
+        # Une variable inconnue du fichier ($(MAKE), une variable d'environnement)
+        # reste telle quelle : vidée, « $(MAKE) -C backend test » n'était plus un sous-make.
+        neuve = re.sub(r"\$[({]([A-Za-z_][\w.]*)[)}]", lambda m: v.get(m.group(1), m.group(0)), ligne)
+        if neuve == ligne:
+            break
+        ligne = neuve
+    return ligne
+
 def regles(chemin):
     r, courantes = {}, []
     try:
         lignes = open(chemin, encoding="utf-8", errors="replace").read().splitlines()
     except OSError:
         return r
+    v = variables(chemin)
     for l in lignes:
         if l.startswith("\t"):
+            l = "\t" + developper(l[1:], v)
             for c in courantes:
                 r[c][1].append(l)
             continue
@@ -192,6 +218,8 @@ if [ -f backend/Makefile ]; then
         [[ " $BACKEND_PAR_MAKE " == *" $cible "* ]] && continue
         if grep -qE "^${cible}:" backend/Makefile; then
             lancer "backend: make $cible" make -C backend "$cible"
+            # Sans Makefile a la racine, c'est elle qui lance pytest (backend/tests).
+            [ "$cible" = test ] && [[ " $(ce_que_fait_la_cible backend/Makefile test) " == *" pytest "* ]] && PYTEST_PAR_MAKE=1
         fi
     done
 fi

@@ -148,6 +148,19 @@ printf 'test:\n\tpytest -q\n' > "$BAC/sousmake/backend/Makefile"
 : > "$BAC/compte-sousmake"
 env PATH="$BAC/outils:$PATH" COMPTEUR_PYTEST="$BAC/compte-sousmake" bash "$CONTROLE" "$BAC/sousmake" >/dev/null 2>&1
 verifie "make -C backend test : les tests ne tournent qu'une fois" 1 "$(grep -c . "$BAC/compte-sousmake")"
+# pytest lancé par une variable de Make (« $(PYTEST) -q », la forme de quatre
+# projets réels) : sans développer la variable, pytest était relancé.
+mkdir -p "$BAC/variable"
+printf 'PYTEST = pytest\n\ntest:\n\t$(PYTEST) -q\n' > "$BAC/variable/Makefile"
+: > "$BAC/compte-variable"
+env PATH="$BAC/outils:$PATH" COMPTEUR_PYTEST="$BAC/compte-variable" bash "$CONTROLE" "$BAC/variable" >/dev/null 2>&1
+verifie "test: \$(PYTEST) -q : pytest ne tourne qu'une fois" 1 "$(grep -c . "$BAC/compte-variable")"
+# La cible test est dans backend/Makefile, sans Makefile à la racine.
+mkdir -p "$BAC/seulbackend/backend"
+printf 'PYTEST := pytest\ntest:\n\t$(PYTEST) tests/ -v\n' > "$BAC/seulbackend/backend/Makefile"
+: > "$BAC/compte-seulbackend"
+env PATH="$BAC/outils:$PATH" COMPTEUR_PYTEST="$BAC/compte-seulbackend" bash "$CONTROLE" "$BAC/seulbackend" >/dev/null 2>&1
+verifie "backend/Makefile seul, test: \$(PYTEST) : pytest ne tourne qu'une fois" 1 "$(grep -c . "$BAC/compte-seulbackend")"
 # VERIFIER_A_BLANC=1 : la liste des contrôles, sans en lancer aucun.
 : > "$BAC/compte-blanc"
 SORTIE=$(env PATH="$BAC/outils:$PATH" COMPTEUR_PYTEST="$BAC/compte-blanc" VERIFIER_A_BLANC=1 bash "$CONTROLE" "$BAC/masque" 2>&1); CODE=$?
