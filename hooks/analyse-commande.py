@@ -392,8 +392,9 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None, reperes=Fals
     « texte » (<<< t), « document » (corps d'un <<EOF), « prefixe » (VAR=…
     placé devant la commande). suite=True ajoute un 4e élément : le
     séparateur qui suit la commande (« | » pour un tube), ou None.
-    reperes=True (les secrets seulement) : le {} de find -exec devient le
-    repère qui porte les dossiers et les motifs ; sinon, le nom cherché."""
+    reperes=True : le {} de find -exec devient le repère qui porte les
+    dossiers et les motifs, pour qui parcourt le dossier comme find (secrets,
+    réglages de risque) ; sinon, le nom cherché."""
     if prof > PROFONDEUR:
         raise ValueError("imbrication trop profonde")
     res, cur, ecrit, entrees = [], [], False, []
@@ -537,12 +538,12 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None, reperes=Fals
             # porte les dossiers et les motifs de find, jugé en parcourant le
             # dossier comme lui (fichiers cachés compris). Jusqu'à la relecture
             # de la 0.4.0, sans -name, {} était retiré et cat jugé sans argument.
-            # Le repère ne sert qu'aux secrets (reperes=True). Pour les autres
-            # (déploiement, lancement, réglages de risque, git), {} vaut le
-            # nom cherché, ou disparaît sans -name : le repère, que rien
-            # d'autre ne sait lire, rendait muets ces garde-fous (relecture de
-            # sécurité de la 0.5.0 : find -exec sed -i {} sur un réglage de
-            # risque ne demandait plus d'accord).
+            # Le repère sert à qui parcourt le dossier comme find (reperes=True :
+            # secrets, réglages de risque). Pour les autres (déploiement,
+            # lancement, git), {} vaut le nom cherché, ou disparaît sans
+            # -name : le repère, que rien d'autre ne sait lire, rendait muets
+            # ces garde-fous (relecture de sécurité de la 0.5.0 : find -exec
+            # sed -i {} sur un réglage de risque ne demandait plus d'accord).
             cherche = repere_find(mots_cmd) if reperes else nom_cherche(mots_cmd)
             k = 1
             while k < len(mots_cmd):

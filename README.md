@@ -286,7 +286,8 @@ was edited. See [tests/README.md](tests/README.md).
   showed it: every form added opens another one and refuses ordinary work, so
   the list stops growing. These get through today: a loop `for f in .env …; do
   cat "$f"`; `xargs` after several pipes (`find … | sort | xargs cat`);
-  `find -exec sh -c '…'`; `cat $(pwd)/.env`; `read -r l < .env`; `source .env`
+  `find -exec sh -c '…'`; `cat $(pwd)/.env`; a computed command name
+  (`$(which cat) .env`, `$C .env`); `read -r l < .env`; `source .env`
   followed by an interpreter reading `os.environ`; `git log -U0`,
   `--patch-with-stat`, `reflog -p`, `format-patch --stdout` of a committed
   `.env`; `docker inspect`; an archive of a `.env` under a neutral name

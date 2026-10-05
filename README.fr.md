@@ -294,7 +294,8 @@ côté modifié. Voir [tests/README.md](tests/README.md).
   autre et refuse du travail ordinaire, donc la liste ne grandit plus. Passent
   aujourd'hui : une boucle `for f in .env …; do cat "$f"` ; `xargs` après
   plusieurs tubes (`find … | sort | xargs cat`) ; `find -exec sh -c '…'` ;
-  `cat $(pwd)/.env` ; `read -r l < .env` ; `source .env` suivi d'un interprète
+  `cat $(pwd)/.env` ; un nom de commande calculé (`$(which cat) .env`,
+  `$C .env`) ; `read -r l < .env` ; `source .env` suivi d'un interprète
   qui lit `os.environ` ; `git log -U0`, `--patch-with-stat`, `reflog -p`,
   `format-patch --stdout` d'un `.env` commité ; `docker inspect` ; une archive
   d'un `.env` sous un nom neutre (`tar -czf sauvegarde.tgz .env`), relue
