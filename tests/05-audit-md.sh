@@ -150,6 +150,14 @@ verifie "sans fichier de motifs : la formule propre n'est pas un statut" 0 "$(ec
 printf '# formules d attente de ce setup\nvalidation finale Martin\n' > "$BAC/maison/.claude/motifs-audit-md.txt"
 V=$(HOME="$BAC/maison" bash "$AUDIT" "$BAC/v050" 2>&1)
 verifie "avec ~/.claude/motifs-audit-md.txt : la formule est un statut" 1 "$(echo "$V" | grep -c 'validation finale Martin')"
+# Relecture de sécurité de la 0.5.0 : un fichier de motifs enregistré en
+# Latin-1 faisait planter le cœur de l'audit — liens cassés et statuts
+# disparaissaient, et l'audit affichait vert.
+printf '# Plan\n[absent](ABSENT-RACINE.md)\nRelecture : validation finale Martin\n' > "$BAC/v050/PLAN.md"
+printf 'validation finale \xe9quipe\nvalidation finale Martin\n' > "$BAC/maison/.claude/motifs-audit-md.txt"
+V=$(HOME="$BAC/maison" bash "$AUDIT" "$BAC/v050" 2>&1)
+verifie "motifs en Latin-1 : l'audit voit toujours le lien cassé et le statut" "1 1" \
+        "$(echo "$V" | grep -c 'ABSENT-RACINE.md') $(echo "$V" | grep -c 'validation finale Martin')"
 
 section "Audit des .md — le dépôt lui-même sort propre"
 bash "$AUDIT" "$RACINE" >/dev/null 2>&1

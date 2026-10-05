@@ -177,6 +177,8 @@ refuses = [
     # transmettent la variable, eval nourri par un <<EOF
     "git cf -n -m x", f"git cf {NV} -m x", f"git -c alias.z='!f() {{ git commit \"$@\"; }}; f' z {NV} -m x",
     "HUSKY=0 find . -maxdepth 0 -exec git commit -m x \\;", "HUSKY=0 tmux new -d 'git commit -m x'",
+    # zsh développe =git en chemin de git (relecture de sécurité de la 0.5.0)
+    f"=git commit {NV} -m x", "=git -c core.hooksPath=/dev/null commit -m x",
     f"eval \"$(cat <<'X'\ngit commit {NV} -m x\nX\n)\"",
     # relecture de sécurité du 2026-10-05 : ${@:N}, ${1:-x}, argument passé par
     # une variable dans un alias shell ; interprètes moins courants

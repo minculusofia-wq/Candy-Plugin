@@ -842,16 +842,28 @@ try:
     profond = "cat ~/.ssh/cle_serveur"
     for _ in range(8):
         profond = f'echo "$({profond})"'           # plus profond que PROFONDEUR : relu sur le texte
-    for cmd in ["cp -f .env /tmp/e.txt", "mv -f .env /tmp/e.txt", "rsync -a -x .env /tmp/e.txt",
+    for cmd in ["rsync --files-from=.env ./ /tmp/x/", "rsync -a --files-from .env ./ /tmp/x/",
+                # zsh développe =cat en chemin de cat ; bash lit $$ avant $'…'
+                "=cat .env", "=head -5 .env", "echo $$'\\' ; cat .env ; echo '\\'",
+                "bash -c \"echo $$'\\\\' ; cat .env ; echo '\\\\'\"",
+                "cp -f .env /tmp/e.txt", "mv -f .env /tmp/e.txt", "rsync -a -x .env /tmp/e.txt",
                 "ln -f .env /tmp/e.txt", "cp -fv .env /tmp/e.txt", "exec 3<> .env; cat <&3",
                 "echo \"$(echo $'c\\'est')\" ; cat ~/.ssh/cle_serveur", profond,
                 f"ssh srv \"cat {d50}/.env | grep '^DATABASE_URL='\""]:
         code, _, _ = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d50)
         attendre(f"Bash refusé : {cmd.replace(base, '…')[:70]!r}", 2, code)
     for cmd in ["cp -f .env .env.bak", "rsync -a --exclude .env src/ /tmp/x/", "cp -f src/app.py /tmp/a.py",
+                "rsync -a --files-from=src/liste.txt ./ /tmp/x/",
                 "rsync -a -x src/ /tmp/x/", "ssh srv \"cat /srv/app/.env | grep '^LOG_LEVEL='\""]:
         code, _, err = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d50)
         attendre(f"Bash permis : {cmd!r}", 0, code, err.strip()[:80])
+    # PowerShell : les gardes y sont branchés, mais ne connaissaient aucune
+    # commande de lecture PowerShell (relecture de sécurité de la 0.5.0).
+    for cmd, attendu in (("Get-Content .env", 2), ("gc .env", 2), ("type .env", 2), ("get-content -Path .env", 2),
+                         ("Select-String -Path .env -Pattern KEY", 2), ("sls KEY .env", 2),
+                         ("Get-Content src/app.py", 0), ("Get-ChildItem", 0)):
+        code, _, _ = lancer("protect-secrets.sh", "PowerShell", {"command": cmd}, cwd=d50)
+        attendre(f"PowerShell {'refusé' if attendu else 'permis'} : {cmd!r}", attendu, code)
     # git grep -e MOTIF : le motif était gardé parmi les chemins. « -e .env »
     # était refusé à tort, et un motif avec « : » ne faisait plus lancer git :
     # la ligne d'un .env suivi s'affichait.

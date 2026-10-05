@@ -304,7 +304,10 @@ côté modifié. Voir [tests/README.md](tests/README.md).
   dépôt déjà présent la porte, et une archive qui livre son dossier `.git`
   livre aussi son `info/exclude` : un conseil de phase rangé dedans est lu ;
   et la porte d'entrée cite les noms des fichiers non commités (`git status`),
-  donc un nom de fichier du dépôt arrive dans le contexte de Claude.
+  donc un nom de fichier du dépôt arrive dans le contexte de Claude. Les
+  commandes sont lues comme bash les lit, plus le `=cat` de zsh ; sous l'outil
+  PowerShell, seuls `Get-Content`, `gc`, `type`, `Select-String` et `sls` sont
+  reconnus comme des lectures — le reste de la syntaxe PowerShell ne l'est pas.
 - **Le garde des hooks git arrête le réflexe, pas un contournement voulu.** Un
   pre-commit qui refuse un commit indique souvent lui-même son contournement
   (`git commit --no-verify`) ; le garde refuse celui-ci, `-n`, `core.hooksPath`

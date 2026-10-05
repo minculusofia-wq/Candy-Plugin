@@ -75,7 +75,9 @@ try:
                # rapide sur le texte brut laissait passer la clôture.
                f"git -c 'alias.fin=!git commit' fin -m \"{MARQUEUR}\"",
                f'g\\it commit -m "{MARQUEUR}"', f"'g'it commit -m \"{MARQUEUR}\"",
-               f"$'\\x67it' commit -m \"{MARQUEUR}\""]
+               f"$'\\x67it' commit -m \"{MARQUEUR}\"",
+               # zsh développe =git en chemin de git (relecture de la 0.5.0)
+               f'=git commit -m "{MARQUEUR}"']
     for cmd in refuses:
         attendre(f"clôture refusée : {cmd.replace(depot, '…')[:55]!r}", 2, lancer(cmd, cwd=base if depot in cmd else depot))
     subprocess.run(["git", "-C", depot, "config", "alias.ci", "commit"], check=True)

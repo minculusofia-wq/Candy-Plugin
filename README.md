@@ -297,6 +297,9 @@ was edited. See [tests/README.md](tests/README.md).
   `.git` folder ships its `info/exclude` too: a phase advice stored there is
   read; and the phase gate quotes the names of uncommitted files
   (`git status`), so a file name from the repo reaches Claude's context.
+  Commands are read as bash reads them, with zsh's `=cat` expansion; under the
+  PowerShell tool, only `Get-Content`, `gc`, `type`, `Select-String` and `sls`
+  are recognized as reads — the rest of PowerShell's syntax is not.
 - **The git-hook guard stops the reflex, not a deliberate bypass.** A
   pre-commit hook that refuses a commit often prints its own way around it
   (`git commit --no-verify`); the guard refuses that, `-n`, `core.hooksPath` or

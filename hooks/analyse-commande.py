@@ -143,6 +143,11 @@ def fin_de_substitution(t, k):
         if c == "\\":
             i += 2
             continue
+        if c == "$" and t.startswith("$$", i):
+            # $$ (le numéro du processus) se lit d'un bloc : dans « $$'…' »,
+            # l'apostrophe ouvre une chaîne ordinaire, pas un $'…'.
+            i += 2
+            continue
         if c == "$" and t.startswith("$'", i):
             # $'c\'est' : l'apostrophe échappée ne ferme rien. Avant la 0.5.0,
             # elle faisait échouer le découpage de toute la ligne, et la
@@ -311,6 +316,11 @@ def lexer(texte):
                     morceau.append(c)
                     i += 1
             cur = (cur or "") + "".join(morceau)
+        elif c == "$" and t.startswith("$$", i):
+            # $$ se lit d'un bloc, comme bash : « echo $$'\' ; cat <f> ; echo '\' »
+            # cachait la lecture dans un faux $'…' (relecture de sécurité de la 0.5.0).
+            cur = (cur or "") + "$$"
+            i += 2
         elif c == "$" and t.startswith("$'", i):
             decode, i = chaine_ansi_c(t, i + 2)
             cur = (cur or "") + decode
@@ -374,14 +384,16 @@ def options_interprete(mots):
     return j, None, syntaxe
 
 
-def commandes_et_entrees(texte, prof=0, suite=False, heritage=None):
+def commandes_et_entrees(texte, prof=0, suite=False, heritage=None, reperes=False):
     """Chaque commande simple de la ligne, les mots de tête qui n'exécutent rien
     d'autre (sudo, env, if, VAR=x…) retirés, le code passé à bash -c, bash <<<,
     eval, env -S et find -exec ouvert et relu, avec ce qui entre dans chaque commande :
     [(mots, écrit, [(genre, valeur)])], genre = « fichier » (< f),
     « texte » (<<< t), « document » (corps d'un <<EOF), « prefixe » (VAR=…
     placé devant la commande). suite=True ajoute un 4e élément : le
-    séparateur qui suit la commande (« | » pour un tube), ou None."""
+    séparateur qui suit la commande (« | » pour un tube), ou None.
+    reperes=True (les secrets seulement) : le {} de find -exec devient le
+    repère qui porte les dossiers et les motifs ; sinon, le nom cherché."""
     if prof > PROFONDEUR:
         raise ValueError("imbrication trop profonde")
     res, cur, ecrit, entrees = [], [], False, []
@@ -448,7 +460,19 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None):
 
     sortie = []
     for orig, ecrit, entrees, sep in res:
+        # zsh, le shell de l'outil Bash sur macOS, développe « =cat » en chemin
+        # de cat : « =cat <fichier> » le lit. Lu comme la commande nommée
+        # (relecture de sécurité de la 0.5.0 : =cat, =ssh, =bash passaient).
+        if orig and re.fullmatch(r"=[A-Za-z_][\w.+-]*", orig[0]):
+            orig = [orig[0][1:]] + orig[1:]
         mots_cmd = sans_enveloppe(orig)
+        if mots_cmd and re.fullmatch(r"=[A-Za-z_][\w.+-]*", mots_cmd[0]):
+            mots_cmd = [mots_cmd[0][1:]] + mots_cmd[1:]
+        # PowerShell (les gardes y sont branchés) : ses commandes qui affichent
+        # un fichier se lisent comme cat, majuscules ou non. Select-String aussi :
+        # il affiche les lignes trouvées (relecture de sécurité de la 0.5.0).
+        if mots_cmd and mots_cmd[0].lower() in LECTEURS_POWERSHELL:
+            mots_cmd = ["cat"] + mots_cmd[1:]
         tete = orig[:len(orig) - len(mots_cmd)]
         entrees = entrees + [("prefixe", w.split("=", 1)[0]) for w in tete
                              if re.fullmatch(r"[A-Za-z_]\w*=.*", w)]
@@ -465,16 +489,21 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None):
                 mots_cmd = ["env"]                  # « env » seul affiche l'environnement
             elif any(g == "fichier" for g, _ in entrees):
                 mots_cmd = ["cat"]                  # exec 3< .env : le fichier est ouvert pour être lu
+            elif ecrit:
+                # exec > f, exec 3> f : le fichier est vidé, comme par « > f »
+                # seul. La commande était jetée : sur un serveur, elle passait
+                # pour une lecture (relecture de sécurité de la 0.5.0).
+                mots_cmd = [":"]
             else:
                 continue
         nom = os.path.basename(mots_cmd[0].lstrip("\\"))
         if nom in INTERPRETES or mots_cmd == ["sudo"]:
             j, code, _ = options_interprete(mots_cmd)
             if code is not None:
-                sortie.extend(commandes_et_entrees(code, prof + 1, suite))
+                sortie.extend(commandes_et_entrees(code, prof + 1, suite, reperes=reperes))
             for genre, cible in entrees:
                 if genre in ("texte", "document"):
-                    sortie.extend(commandes_et_entrees(cible, prof + 1, suite))
+                    sortie.extend(commandes_et_entrees(cible, prof + 1, suite, reperes=reperes))
                 elif genre == "fichier" and code is None and j >= len(mots_cmd):
                     mots_cmd = mots_cmd + [cible]   # bash < script.sh : comme bash script.sh
         elif nom == "eval":
@@ -484,7 +513,7 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None):
                 sortie.append(([INCONNU], ecrit, [("calcule", code)], None) if suite
                               else ([INCONNU], ecrit, [("calcule", code)]))
             else:
-                sortie.extend(commandes_et_entrees(code, prof + 1, suite))
+                sortie.extend(commandes_et_entrees(code, prof + 1, suite, reperes=reperes))
         elif nom == "tmux":
             # tmux new -d -s app 'cat .env' : la commande de la fenêtre est relue.
             k = 1
@@ -502,31 +531,57 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None):
                     reste.append(w)
                     k += 1
                 if reste:
-                    sortie.extend(commandes_et_entrees(" ".join(reste), prof + 1, suite))
+                    sortie.extend(commandes_et_entrees(" ".join(reste), prof + 1, suite, reperes=reperes))
         elif nom == "find":
             # {} vaut chaque fichier trouvé : il est remplacé par un repère qui
             # porte les dossiers et les motifs de find, jugé en parcourant le
             # dossier comme lui (fichiers cachés compris). Jusqu'à la relecture
             # de la 0.4.0, sans -name, {} était retiré et cat jugé sans argument.
-            cherche = repere_find(mots_cmd)
+            # Le repère ne sert qu'aux secrets (reperes=True). Pour les autres
+            # (déploiement, lancement, réglages de risque, git), {} vaut le
+            # nom cherché, ou disparaît sans -name : le repère, que rien
+            # d'autre ne sait lire, rendait muets ces garde-fous (relecture de
+            # sécurité de la 0.5.0 : find -exec sed -i {} sur un réglage de
+            # risque ne demandait plus d'accord).
+            cherche = repere_find(mots_cmd) if reperes else nom_cherche(mots_cmd)
             k = 1
             while k < len(mots_cmd):
                 if mots_cmd[k] in ("-exec", "-execdir", "-ok", "-okdir"):
                     fin = k + 1
                     while fin < len(mots_cmd) and mots_cmd[fin] not in ("+", ";"):
                         fin += 1
-                    code = " ".join(shlex.quote(cherche if w == "{}" else w) for w in mots_cmd[k + 1:fin])
-                    sortie.extend(commandes_et_entrees(code, prof + 1, suite))
+                    code = " ".join(shlex.quote(cherche if w == "{}" else w) for w in mots_cmd[k + 1:fin]
+                                    if w != "{}" or cherche)
+                    sortie.extend(commandes_et_entrees(code, prof + 1, suite, reperes=reperes))
                     k = fin
                 k += 1
         sortie.append((mots_cmd, ecrit, entrees, sep) if suite else (mots_cmd, ecrit, entrees))
     # $( ) et `…` : bash les exécute, on les relit.
     transmis = caches + [h for h in heritage or [] if not h[3]]
     for corps in subs:
-        sortie.extend(commandes_et_entrees(corps, prof + 1, suite, transmis))
+        sortie.extend(commandes_et_entrees(corps, prof + 1, suite, transmis, reperes))
     return sortie
 
 TROUVES_PAR_FIND = "\x00find\x00"
+LECTEURS_POWERSHELL = {"get-content", "gc", "type", "select-string", "sls"}
+
+
+def repere(racines, motifs):
+    """Le repère qui remplace le {} de find -exec quand les secrets le
+    demandent (reperes=True) : les dossiers parcourus et les motifs -name. Un
+    seul mot, en hexadécimal, sans espace ni guillemet : relu comme du shell
+    (bash -c {}, tmux, env -S), il restait coupé en deux et ne se lisait plus
+    (relecture de sécurité de la 0.5.0)."""
+    return TROUVES_PAR_FIND + json.dumps([racines, motifs]).encode("utf-8").hex()
+
+
+def lire_repere(mot):
+    """(racines, motifs) d'un repère, ou None s'il est illisible."""
+    try:
+        racines, motifs = json.loads(bytes.fromhex(mot[len(TROUVES_PAR_FIND):]).decode("utf-8"))
+        return racines, motifs
+    except (ValueError, TypeError):
+        return None
 
 
 def repere_find(mots):
@@ -536,7 +591,16 @@ def repere_find(mots):
         racines.append(mots[i])
         i += 1
     motifs = [mots[j + 1] for j in range(len(mots) - 1) if mots[j] in ("-name", "-iname", "-path", "-ipath")]
-    return TROUVES_PAR_FIND + json.dumps([racines or ["."], motifs])
+    return repere(racines or ["."], motifs)
+
+
+def nom_cherche(mots):
+    """Le dernier motif -name (ou -iname, -path, -ipath) de find, ou None : ce
+    que {} vaut pour qui juge la commande lancée par son nom (déploiement,
+    lancement, réglages de risque) — find -name run.py -exec python3 {} lance
+    run.py."""
+    motifs = [mots[j + 1] for j in range(1, len(mots) - 1) if mots[j] in ("-name", "-iname", "-path", "-ipath")]
+    return motifs[-1] if motifs else None
 
 
 LANCEURS_DE_PROJET = {"uv", "poetry", "pipenv", "pdm", "rye", "hatch"}
@@ -1078,7 +1142,7 @@ def noms_passes_a_xargs(cmds, k, dossier, distant, detection):
     if nom in ("fd", "fdfind"):
         motifs = [mots[i + 1] for i in range(len(mots) - 1) if mots[i] in ("-g", "--glob", "-e", "--extension")]
         racines = [a for a in mots[1:] if not a.startswith("-")][1:2] or ["."]
-        return trouves_par_find(TROUVES_PAR_FIND + json.dumps([racines, motifs]), dossier, distant, detection)
+        return trouves_par_find(repere(racines, motifs), dossier, distant, detection)
     if nom == "ls":
         options = "".join(a[1:] for a in mots[1:] if a.startswith("-") and not a.startswith("--"))
         tous = bool(set(options) & set("aA"))
@@ -1154,10 +1218,10 @@ ECHANTILLONS_DISTANTS = (".env", ".env.local", ".env.production", "id_rsa", "id_
 def trouves_par_find(repere, dossier, distant, detection):
     """Les fichiers de secrets que find trouverait : ses dossiers parcourus
     comme lui (cachés compris), filtrés par ses motifs -name."""
-    try:
-        racines, motifs = json.loads(repere[len(TROUVES_PAR_FIND):])
-    except ValueError:
+    lu = lire_repere(repere)
+    if lu is None:
         return ["?"]
+    racines, motifs = lu
     motifs = [m.split("/")[-1] for m in motifs]
     if distant:
         if not motifs:
@@ -1237,6 +1301,15 @@ def copie_d_un_secret(nom, args, dossier, distant, detection):
     Une copie sous un nom de secret (.env.bak, backend/.env, sauvegarde/) reste
     permise."""
     a_valeur = {"scp": "PioFSlcJ", "rsync": "ef", "install": "mogt", "ln": "t"}.get(nom, "")
+    if nom == "rsync":
+        # --files-from : rsync lit cette liste et affiche chaque ligne qu'il ne
+        # trouve pas comme fichier — un fichier de secrets y passe en clair
+        # (relecture de sécurité de la 0.5.0).
+        for k, a in enumerate(args):
+            liste = a.split("=", 1)[1] if a.startswith("--files-from=") else \
+                (args[k + 1] if a == "--files-from" and k + 1 < len(args) else None)
+            if liste and designe_un_secret(liste, dossier, distant, detection):
+                return True
     pos, sauter = [], False
     for a in args:
         if sauter:
@@ -1654,7 +1727,7 @@ def verdict_secret(texte, detection=None, prof=0, depart=None, distant=False, ch
     """charge_initial : l'environnement porte des secrets d'emblée (dans un
     conteneur, env et printenv seuls les affichent)."""
     detection = detection or _detection()
-    cmds = commandes_et_entrees(texte, suite=True)
+    cmds = commandes_et_entrees(texte, suite=True, reperes=True)
     dossier, pile, charge = depart, [], charge_initial
     locales = set(re.findall(r"\bfor\s+([A-Za-z_]\w*)\s+in\b", texte))
     for k, (mots, _, entrees, _) in enumerate(cmds):
@@ -1797,10 +1870,8 @@ def verdict_secret(texte, detection=None, prof=0, depart=None, distant=False, ch
                     x = os.path.expanduser(f)
                     reels.append(x if os.path.isabs(x) else os.path.join(dossier, x))
                     continue
-                try:
-                    racines = json.loads(f[len(TROUVES_PAR_FIND):])[0]
-                except ValueError:
-                    racines = ["?"]
+                lu = lire_repere(f)
+                racines = lu[0] if lu else ["?"]
                 if any("$" in r or "`" in r for r in racines):
                     inconnu = True                  # find "$APP" : le dossier parcouru ne se connaît pas d'ici
                 # Seuls les fichiers réellement trouvés sous un dossier connu comptent,

@@ -91,11 +91,15 @@ CIBLES="test lint typecheck audit"
 
 # Ce que la cible <cible> d'un Makefile fait vraiment, en suivant ses cibles
 # prealables (« test: test-back test-front »), les « $(MAKE) cible » et les
-# « make -C dossier cible » : « pytest » si elle lance pytest, « backend » si
-# elle entre dans backend/. Jusqu'a la 0.4.6, seule la recette de « test: »
-# etait lue : « test: test-back » (test-back: cd backend && pytest) faisait
-# relancer pytest depuis la racine, une seconde fois et sans sa configuration.
-# Une cible qui ne l'appelle pas (« test: @true ») ne masque toujours rien.
+# « make -C dossier cible » :
+#   pytest               elle lance pytest a la racine du projet ;
+#   pytest-backend       elle le lance dans backend/ (cd backend, make -C backend) ;
+#   make-backend:<c>     elle lance la cible <c> de backend/Makefile.
+# Jusqu'a la 0.4.6, seule la recette de « test: » etait lue : « test: test-back »
+# (test-back: cd backend && pytest) faisait relancer pytest depuis la racine.
+# Un controle n'est saute que s'il est SUR d'etre couvert : un « cd backend »
+# dans une cible d'installation faisait sauter les tests du backend (relecture
+# de securite de la 0.5.0 : TOUT PASSE sur une suite rouge).
 ce_que_fait_la_cible() {  # ce_que_fait_la_cible <Makefile> <cible>
     python3 -I - "$1" "$2" <<'PYEOF' 2>/dev/null
 import os, re, sys
@@ -151,23 +155,33 @@ def regles(chemin):
     return r
 
 trouve, vus = set(), set()
+RACINE = os.path.abspath(".")
+BACKEND = os.path.join(RACINE, "backend")
+ENTRE_BACKEND = re.compile(r"(?:^|[\s;&(])(?:cd|pushd)\s+(?:\./)?backend/?(?=[\s;&|)]|$)")
 
-def suivre(makefile, cible, prof=0):
+def dossier_de(makefile):
+    return os.path.abspath(os.path.dirname(makefile) or ".")
+
+def suivre(makefile, cible, prof=0, dans_backend=None):
     if prof > 8 or (makefile, cible) in vus:
         return
     vus.add((makefile, cible))
     r = regles(makefile)
     if cible not in r:
         return
+    if dans_backend is None:
+        dans_backend = dossier_de(makefile) == BACKEND
     pre, recette = r[cible]
     for p in pre:
-        suivre(makefile, p, prof + 1)
+        suivre(makefile, p, prof + 1, dans_backend)
     base = os.path.dirname(makefile)
     for l in recette:
-        if "pytest" in l:
-            trouve.add("pytest")
-        if re.search(r"(^|[\s;&(])(cd|pushd)\s+(\./)?backend\b|-C\s*(\./)?backend\b|--directory[= ](\./)?backend\b", l):
-            trouve.add("backend")
+        cd = ENTRE_BACKEND.search(l)
+        i_pytest = l.find("pytest")
+        if i_pytest >= 0:
+            # pytest après un « cd backend » de la même ligne tourne dans backend/
+            ici = dans_backend or (cd is not None and cd.start() < i_pytest)
+            trouve.add("pytest-backend" if ici else "pytest")
         # Un sous-make : ses options (-C dossier, -f fichier…), ses variables
         # (X=1) et ses cibles ; sans cible, la premiere regle du Makefile vise.
         for m in re.finditer(r"(?:\$\(MAKE\)|\$\{MAKE\}|\bmake\b)([^;&|)]*)", l):
@@ -185,18 +199,24 @@ def suivre(makefile, cible, prof=0):
                 elif not w.startswith("-") and "=" not in w:
                     cibles.append(w)
                 k += 1
+            if dossier is None and cd is not None and cd.start() < m.start():
+                dossier = "backend"              # cd backend && make test
             sous = os.path.join(base, dossier, "Makefile") if dossier else makefile
             if not cibles:
                 cibles = [c for c in regles(sous) if not c.startswith(".")][:1]
+            vers_backend = dossier_de(sous) == BACKEND
             for c in cibles:
-                suivre(sous, c, prof + 1)
+                if vers_backend:
+                    trouve.add("make-backend:" + c)
+                suivre(sous, c, prof + 1, vers_backend or dans_backend)
 
 suivre(sys.argv[1], sys.argv[2])
 print(" ".join(sorted(trouve)))
 PYEOF
 }
-PYTEST_PAR_MAKE=0
-BACKEND_PAR_MAKE=""
+PYTEST_PAR_MAKE=0           # pytest lance a la racine par une cible test : couvert
+PYTEST_BACKEND=0            # pytest lance dans backend/ : la racine tourne sans lui
+BACKEND_PAR_MAKE=""         # cibles de backend/Makefile deja lancees par la racine
 
 # --- Makefile : la source de vérité si elle existe ---
 if [ -f Makefile ]; then
@@ -205,7 +225,8 @@ if [ -f Makefile ]; then
             lancer "make $cible" make "$cible"
             FAIT=$(ce_que_fait_la_cible Makefile "$cible")
             [ "$cible" = test ] && [[ " $FAIT " == *" pytest "* ]] && PYTEST_PAR_MAKE=1
-            [[ " $FAIT " == *" backend "* ]] && BACKEND_PAR_MAKE="$BACKEND_PAR_MAKE $cible"
+            [ "$cible" = test ] && [[ " $FAIT " == *" pytest-backend "* ]] && PYTEST_BACKEND=1
+            [[ " $FAIT " == *" make-backend:$cible "* ]] && BACKEND_PAR_MAKE="$BACKEND_PAR_MAKE $cible"
         fi
     done
 fi
@@ -218,8 +239,8 @@ if [ -f backend/Makefile ]; then
         [[ " $BACKEND_PAR_MAKE " == *" $cible "* ]] && continue
         if grep -qE "^${cible}:" backend/Makefile; then
             lancer "backend: make $cible" make -C backend "$cible"
-            # Sans Makefile a la racine, c'est elle qui lance pytest (backend/tests).
-            [ "$cible" = test ] && [[ " $(ce_que_fait_la_cible backend/Makefile test) " == *" pytest "* ]] && PYTEST_PAR_MAKE=1
+            # Elle lance pytest dans backend/ : celui de la racine tourne sans backend/.
+            [ "$cible" = test ] && [[ " $(ce_que_fait_la_cible backend/Makefile test) " == *" pytest-backend "* ]] && PYTEST_BACKEND=1
         fi
     done
 fi
@@ -246,7 +267,19 @@ if [ -n "$PYTEST" ] && [ "$PYTEST_PAR_MAKE" -eq 0 ]; then
     # pytest depose un dossier .pytest_cache chez l'utilisateur — y compris dans
     # un projet qui n'a pas une seule ligne de Python. Un controle ne salit pas
     # ce qu'il controle.
-    lancer "pytest" "$PYTEST" -q -p no:cacheprovider
+    if [ "$PYTEST_BACKEND" -eq 1 ]; then
+        # Les tests de backend/ ont deja tourne (cd backend, make -C backend) :
+        # ceux de la racine tournent quand meme, sans eux — s'il y en a. Sans
+        # fichier de test hors de backend/, pytest n'a rien a lancer, et sur
+        # certains projets il rendait 0 sur « collected 0 items » : un vert qui
+        # n'aurait rien teste.
+        HORS_BACKEND=$(find . \( -name backend -o -name node_modules -o -name .venv -o -name venv \
+            -o -name .git -o -name build -o -name dist -o -name site-packages \) -prune \
+            -o \( -name 'test_*.py' -o -name '*_test.py' \) -print 2>/dev/null | head -1)
+        [ -n "$HORS_BACKEND" ] && lancer "pytest (hors backend/)" "$PYTEST" -q -p no:cacheprovider --ignore=backend
+    else
+        lancer "pytest" "$PYTEST" -q -p no:cacheprovider
+    fi
 fi
 
 for r in .venv/bin/ruff venv/bin/ruff; do

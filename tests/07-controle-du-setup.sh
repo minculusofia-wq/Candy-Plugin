@@ -551,7 +551,9 @@ printf 'Ne jamais commencer une réponse par une formule de politesse inutile.\n
 verifie "doublon voulu de relire-ma-reponse.sh : pas signalé" 0 \
         "$(VERIFIER_PLUGINS_JSON="$BAC/plugins.json" bash "$CONTROLE" "$L5" 2>&1 | grep -c 'rules/ton.md')"
 printf '#!/bin/bash\necho "  ✗ contrôle local : un point"\nexit 1\n' > "$L5/hooks/verifier-setup-local.sh"
-S5=$(VERIFIER_PLUGINS_JSON="$BAC/plugins.json" bash "$CONTROLE" "$L5" 2>&1)
+verifie "verifier-setup-local.sh d'un dossier autre que ~/.claude : jamais lancé" 0 \
+        "$(VERIFIER_PLUGINS_JSON="$BAC/plugins.json" bash "$CONTROLE" "$L5" 2>&1 | grep -c 'contrôle local')"
+S5=$(VERIFIER_SETUP_LOCAL=1 VERIFIER_PLUGINS_JSON="$BAC/plugins.json" bash "$CONTROLE" "$L5" 2>&1)
 verifie "verifier-setup-local.sh : lancé, et son point compte au bilan" "1 1" \
         "$(echo "$S5" | grep -c 'contrôle local : un point') $(echo "$S5" | grep -c '\[+\] Contrôles propres')"
 

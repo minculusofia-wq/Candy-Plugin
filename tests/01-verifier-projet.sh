@@ -117,7 +117,7 @@ section "Contrôle universel — ce que la 0.4.0 corrige"
 mkdir -p "$BAC/outils"
 cat > "$BAC/outils/pytest" <<'FIN'
 #!/bin/bash
-echo x >> "$COMPTEUR_PYTEST"
+echo "appel : $*" >> "$COMPTEUR_PYTEST"
 exit 0
 FIN
 chmod +x "$BAC/outils/pytest"
@@ -140,14 +140,14 @@ mkdir -p "$BAC/prealable/backend"
 printf 'test: test-back\n\ntest-back:\n\tcd backend && pytest -q\n' > "$BAC/prealable/Makefile"
 : > "$BAC/compte-prealable"
 env PATH="$BAC/outils:$PATH" COMPTEUR_PYTEST="$BAC/compte-prealable" bash "$CONTROLE" "$BAC/prealable" >/dev/null 2>&1
-verifie "test: test-back (qui lance pytest) : pytest ne tourne qu'une fois" 1 "$(grep -c . "$BAC/compte-prealable")"
+verifie "test: test-back (qui lance pytest) : les tests du backend ne tournent qu'une fois" 1 "$(grep -vc -- '--ignore=backend' "$BAC/compte-prealable")"
 # « $(MAKE) -C backend test » : ni la cible du backend ni pytest ne sont relancés.
 mkdir -p "$BAC/sousmake/backend"
 printf 'test:\n\t$(MAKE) -C backend test\n' > "$BAC/sousmake/Makefile"
 printf 'test:\n\tpytest -q\n' > "$BAC/sousmake/backend/Makefile"
 : > "$BAC/compte-sousmake"
 env PATH="$BAC/outils:$PATH" COMPTEUR_PYTEST="$BAC/compte-sousmake" bash "$CONTROLE" "$BAC/sousmake" >/dev/null 2>&1
-verifie "make -C backend test : les tests ne tournent qu'une fois" 1 "$(grep -c . "$BAC/compte-sousmake")"
+verifie "make -C backend test : les tests du backend ne tournent qu'une fois" 1 "$(grep -vc -- '--ignore=backend' "$BAC/compte-sousmake")"
 # pytest lancé par une variable de Make (« $(PYTEST) -q », la forme de quatre
 # projets réels) : sans développer la variable, pytest était relancé.
 mkdir -p "$BAC/variable"
@@ -160,7 +160,23 @@ mkdir -p "$BAC/seulbackend/backend"
 printf 'PYTEST := pytest\ntest:\n\t$(PYTEST) tests/ -v\n' > "$BAC/seulbackend/backend/Makefile"
 : > "$BAC/compte-seulbackend"
 env PATH="$BAC/outils:$PATH" COMPTEUR_PYTEST="$BAC/compte-seulbackend" bash "$CONTROLE" "$BAC/seulbackend" >/dev/null 2>&1
-verifie "backend/Makefile seul, test: \$(PYTEST) : pytest ne tourne qu'une fois" 1 "$(grep -c . "$BAC/compte-seulbackend")"
+verifie "backend/Makefile seul, test: \$(PYTEST) : les tests du backend ne tournent qu'une fois" 1 "$(grep -vc -- '--ignore=backend' "$BAC/compte-seulbackend")"
+# Relecture de sécurité de la 0.5.0 : sauter un contrôle n'est permis que s'il
+# est sûr d'être couvert. Un « cd backend » dans une cible d'installation
+# faisait sauter les tests du backend (TOUT PASSE sur une suite rouge) ; une
+# cible test du backend faisait sauter les tests de la racine.
+mkdir -p "$BAC/installe/backend"
+printf 'install:\n\tcd backend && echo x\n\ntest: install\n\t@echo ok\n' > "$BAC/installe/Makefile"
+printf 'test:\n\t@echo ECHEC; exit 1\n' > "$BAC/installe/backend/Makefile"
+bash "$CONTROLE" "$BAC/installe" >/dev/null 2>&1
+verifie "un cd backend sans tests à la racine ne masque pas l'échec du backend" 1 $?
+mkdir -p "$BAC/racine-et-backend/backend" "$BAC/racine-et-backend/tests"
+printf 'test:\n\tpytest -q\n' > "$BAC/racine-et-backend/backend/Makefile"
+printf 'def test_racine():\n    assert True\n' > "$BAC/racine-et-backend/tests/test_racine.py"
+: > "$BAC/compte-racine"
+env PATH="$BAC/outils:$PATH" COMPTEUR_PYTEST="$BAC/compte-racine" bash "$CONTROLE" "$BAC/racine-et-backend" >/dev/null 2>&1
+verifie "tests à la racine ET dans backend/ : la racine tourne aussi, sans le backend" "1 1" \
+        "$(grep -vc -- '--ignore=backend' "$BAC/compte-racine") $(grep -c -- '--ignore=backend' "$BAC/compte-racine")"
 # VERIFIER_A_BLANC=1 : la liste des contrôles, sans en lancer aucun.
 : > "$BAC/compte-blanc"
 SORTIE=$(env PATH="$BAC/outils:$PATH" COMPTEUR_PYTEST="$BAC/compte-blanc" VERIFIER_A_BLANC=1 bash "$CONTROLE" "$BAC/masque" 2>&1); CODE=$?

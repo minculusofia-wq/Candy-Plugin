@@ -877,8 +877,11 @@ fi
 
 # ------------------------------------------------- Contrôles propres au setup ---
 # hooks/verifier-setup-local.sh, s'il existe : il écrit ses lignes et sort avec
-# son nombre de points à regarder (0 = rien).
-if [ -f "$CLAUDE/hooks/verifier-setup-local.sh" ]; then
+# son nombre de points à regarder (0 = rien). Seulement pour l'installation
+# réelle (~/.claude) : contrôler un autre dossier n'exécute pas son script
+# (relecture de sécurité de la 0.5.0) — VERIFIER_SETUP_LOCAL=1 pour les essais.
+if [ -f "$CLAUDE/hooks/verifier-setup-local.sh" ] && { [ "${VERIFIER_SETUP_LOCAL:-0}" = 1 ] || \
+        [ "$(cd "$CLAUDE" && pwd -P)" = "$(cd "$HOME/.claude" 2>/dev/null && pwd -P)" ]; }; then
     echo
     echo "[+] Contrôles propres à ce setup (hooks/verifier-setup-local.sh)"
     bash "$CLAUDE/hooks/verifier-setup-local.sh" "$CLAUDE"

@@ -106,10 +106,12 @@ def cible_du_lien(brute):
 # <nom> ») s'ajoutent une par ligne dans ~/.claude/motifs-audit-md.txt, lu s'il
 # existe (lignes vides et « # » ignorees ; texte exact, pas une regex).
 _MOTIFS = ["à créer", "a creer", "à trancher", "a trancher", "non commencé", "non commence"]
+# Un fichier mal encode (Latin-1) ne doit pas faire planter l'audit : il
+# s'eteignait en silence et affichait vert (relecture de la 0.5.0).
 try:
-    with open(os.path.expanduser("~/.claude/motifs-audit-md.txt"), encoding="utf-8") as _h:
+    with open(os.path.expanduser("~/.claude/motifs-audit-md.txt"), encoding="utf-8", errors="replace") as _h:
         _MOTIFS += [l.strip() for l in _h if l.strip() and not l.lstrip().startswith("#")]
-except OSError:
+except (OSError, ValueError):
     pass
 STATUTS = re.compile("(" + "|".join(re.escape(m) for m in _MOTIFS) + ")", re.I)
 
