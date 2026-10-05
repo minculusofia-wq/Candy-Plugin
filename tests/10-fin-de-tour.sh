@@ -74,19 +74,23 @@ verifie "déjà relancé par un hook Stop, sans relevé : rien" \
         0 "$(printf '{"cwd": "%s", "stop_hook_active": true}' "$D_ROUGE" | bash "$HOOK" >/dev/null 2>&1; echo $?)"
 
 section "Fin de tour — il rend la main à temps"
-LENT=$(depot lent "sleep 999")
+# Un marqueur propre à cette passe : pgrep voit les sleep de toute la machine,
+# et une autre passe de la suite lancée en même temps (le contrôle de fin de
+# tour qui la relance pendant qu'elle tourne) faisait rougir ce cas.
+M=$$
+LENT=$(depot lent "sleep 999.$M")
 printf 'x = 2\n' > "$LENT/app.py"
 debut=$(date +%s); code=$(BUDGET=3 fin "$LENT"); duree=$(( $(date +%s) - debut ))
 verifie "contrôle trop long : il rend la main, et refuse" 2 "$code"
 verifie "  en moins de 15 s" 1 "$([ "$duree" -lt 15 ] && echo 1 || echo 0)"
 verifie "  et le dit à Claude" 1 "$(grep -qi 'interrompu' "$BAC/stderr" && echo 1 || echo 0)"
-verifie "  aucun processus du contrôle ne survit" 0 "$(pgrep -f 'sleep 999' >/dev/null && echo 1 || echo 0)"
-FOND=$(depot fond "(sleep 998 &); true")
+verifie "  aucun processus du contrôle ne survit" 0 "$(pgrep -f "sleep 999\.$M( |\$)" >/dev/null && echo 1 || echo 0)"
+FOND=$(depot fond "(sleep 998.$M &); true")
 printf 'x = 2\n' > "$FOND/app.py"
 debut=$(date +%s); code=$(BUDGET=20 fin "$FOND"); duree=$(( $(date +%s) - debut ))
 verifie "un processus laissé en arrière-plan : vert" 0 "$code"
 verifie "  en moins de 15 s" 1 "$([ "$duree" -lt 15 ] && echo 1 || echo 0)"
-verifie "  et il est tué" 0 "$(pgrep -f 'sleep 998' >/dev/null && echo 1 || echo 0)"
+verifie "  et il est tué" 0 "$(pgrep -f "sleep 998\.$M( |\$)" >/dev/null && echo 1 || echo 0)"
 verifie "hooks.json donne au hook plus de temps que son budget (300 s > 240 s)" \
         1 "$(python3 -I -c 'import json, sys
 d = json.load(open(sys.argv[1]))["hooks"]["Stop"]

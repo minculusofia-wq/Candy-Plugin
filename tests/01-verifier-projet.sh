@@ -218,9 +218,11 @@ TMPDIR="$BAC/nexiste-pas" bash "$CONTROLE" "$BAC/sanstmp" >/dev/null 2>&1
 verifie "fichier temporaire impossible : échec, pas « aucun contrôle »" 1 $?
 # Un test qui laisse un processus en arrière-plan ne fait plus attendre.
 mkdir -p "$BAC/fond"
-printf 'test:\n\t@(sleep 997 &); true\n' > "$BAC/fond/Makefile"
+# Marqueur propre à cette passe : un pkill sur « sleep 997 » seul tuait aussi
+# celui d'une autre suite lancée en même temps.
+printf 'test:\n\t@(sleep 997.%s &); true\n' "$$" > "$BAC/fond/Makefile"
 debut=$(date +%s); bash "$CONTROLE" "$BAC/fond" >/dev/null 2>&1; duree=$(( $(date +%s) - debut ))
-pkill -f 'sleep 997' 2>/dev/null
+pkill -f "sleep 997\.$$( |\$)" 2>/dev/null
 verifie "un processus laissé en arrière-plan ne fait pas attendre le contrôle" 1 "$([ "$duree" -lt 10 ] && echo 1 || echo 0)"
 
 bilan
