@@ -235,7 +235,10 @@ version that had the defect: they must fail there — a test that always passes
 is worth nothing. Group 09 replays the incident that gave birth to the
 document-set check, and the failures it must report instead of staying quiet.
 The groups run in parallel, so the whole suite fits in the time the end-of-turn
-check gives it. See [tests/README.md](tests/README.md).
+check gives it. If you keep a local copy of these hooks in `~/.claude/hooks`,
+list the shared files in `~/.claude/candy-copie-locale.txt`: group 12 then fails
+as soon as a copy no longer matches the plugin byte for byte, whichever side
+was edited. See [tests/README.md](tests/README.md).
 
 ## Requirements
 

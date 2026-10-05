@@ -20,6 +20,7 @@ même chose : *j'envoie ceci à ce hook, j'attends ce verdict*.
 | `09-jeu-de-documents.sh` | le jeu de documents : l'incident rejoué (bot à roadmap sans STRATEGY, JOURNAL, DEPLOY), chaque règle du tableau, le point rouge à la porte, et aucune panne qui passe pour un silence ; la porte d'entrée tient sous la limite de sortie d'un hook, alertes git en tête |
 | `10-fin-de-tour.sh` | le contrôle de fin de tour part de la racine du dépôt, seulement sur ce qui a bougé pendant le tour, rend la main à temps, ne croit pas un relevé qu'un autre compte a pu écrire ; la relecture de la réponse ne plante pas sur une transcription mal formée |
 | `11-lecteur-de-commandes.sh` | les garde-fous qui lisent une commande comme bash : secrets (valeur, lecture d'un fichier de secrets, `git add`), clôture de phase et hooks git sautés (`--no-verify`…). Les cas vivent dans `essais/*.py`, un fichier par garde-fou, plus `secrets-copie-locale.py` : les cas écrits pendant les relectures d'une copie locale de ces hooks, rejoués tels quels |
+| `12-copie-locale.sh` | si un setup tient une copie locale de ces hooks et la déclare dans `~/.claude/candy-copie-locale.txt` : chaque fichier « identique » l'est octet pour octet, bit d'exécution compris (`~/.claude/scripts/alignement-candy.py`, lancé contre cet arbre). Sans liste déclarée, le groupe est sauté |
 
 ## Les cas sautés
 

@@ -239,7 +239,11 @@ avait le défaut : ils doivent y échouer — un test qui passe toujours ne vaut
 rien. Le groupe 09 rejoue l'incident qui a fait naître le contrôle du jeu de
 documents, et les pannes qu'il doit signaler au lieu de se taire. Les groupes
 tournent en parallèle : la suite entière tient dans le temps que lui laisse le
-contrôle de fin de tour. Voir [tests/README.md](tests/README.md).
+contrôle de fin de tour. Si vous tenez une copie locale de ces hooks dans
+`~/.claude/hooks`, listez les fichiers partagés dans
+`~/.claude/candy-copie-locale.txt` : le groupe 12 passe alors au rouge dès
+qu'une copie ne correspond plus au plugin octet pour octet, quel que soit le
+côté modifié. Voir [tests/README.md](tests/README.md).
 
 ## Prérequis
 
