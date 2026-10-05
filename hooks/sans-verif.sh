@@ -41,9 +41,12 @@
 # argument calculé (git commit $(echo …)), GIT_CONFIG_GLOBAL vers un fichier,
 # coproc, difftool -x, core.pager, et les variables d'arrêt d'autres
 # gestionnaires que husky et pre-commit (LEFTHOOK, OVERCOMMIT_DISABLE), et une
-# variable posée dans le texte d'env -S (env -S 'HUSKY=0 git commit'). Refusés
-# par prudence : un préfixe sur make ou sur un script (SKIP=1 make test && git
-# commit), qui transmettent la variable à des git qu'on ne voit pas.
+# variable posée dans le texte d'env -S (env -S 'HUSKY=0 git commit'). Passe
+# aussi un script lancé directement (HUSKY=0 ./release.sh && git commit).
+# Refusés par prudence : un
+# préfixe sur make, un shell ou un interprète qui lance un script (SKIP=1 make
+# test && git commit, HUSKY=0 bash x.sh), qui transmettent la variable à des git
+# qu'on ne voit pas.
 #
 # Le message est un texte fixe : ni chemin ni nom n'y figure (la raison d'un
 # refus arrive à Claude, et un nom choisi y deviendrait une consigne). Un

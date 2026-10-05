@@ -28,6 +28,7 @@
 
 import fnmatch
 import glob
+import functools
 import json
 import os
 import re
@@ -1821,9 +1822,15 @@ def alias_en_ligne(globales):
 def valeur_alias(nom, dossier, en_ligne):
     """La valeur de alias.<nom> : posée sur la ligne, sinon lue dans git config
     (rien n'est exécuté). None si ce n'est pas un alias."""
-    import subprocess
     if nom.lower() in en_ligne:
         return en_ligne[nom.lower()]
+    return alias_dans_la_config(nom, dossier)
+
+
+@functools.lru_cache(maxsize=256)
+def alias_dans_la_config(nom, dossier):
+    """git config --get alias.<nom>, lu une fois par dossier."""
+    import subprocess
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     try:
         r = subprocess.run(["git", *GIT_SUR] + (["-C", dossier] if dossier and os.path.isdir(dossier) else [])
@@ -1842,15 +1849,20 @@ def texte_alias_shell(corps, args):
     corps. « !f() { git commit "$@"; }; f » perdait ses arguments, dans les
     quatre garde-fous (relecture de sécurité de la 0.4.5)."""
     tous = " ".join(shlex.quote(a) for a in args)
-    t = re.sub(r'"\$\{?[@*]\}?"|\$\{?[@*]\}?', lambda m: tous, corps)
+    # ${@:2}, ${*}, "$@" : la forme entière, guillemets compris ; un décalage
+    # (${@:2}) est ignoré, tous les arguments sont gardés — prudent. Avant, le
+    # « :2} » restait collé au dernier argument (relecture du 2026-10-05).
+    t = re.sub(r'"\$\{[@*][^}]*\}"|\$\{[@*][^}]*\}|"\$[@*]"|\$[@*]', lambda m: tous, corps)
 
     def un(m):
-        k = int(m.group(1))
+        k = int(next(g for g in m.groups() if g))
         return shlex.quote(args[k - 1]) if k <= len(args) else "''"
-    t = re.sub(r'"\$\{?([1-9])\}?"|\$\{?([1-9])\}?', lambda m: un(re.match(r"(\d)", m.group(1) or m.group(2))), t)
+    # $1, "$1", ${1}, ${1:-x} : l'argument (sa valeur par défaut est ignorée).
+    t = re.sub(r'"\$\{([1-9])[^}]*\}"|\$\{([1-9])[^}]*\}|"\$([1-9])"|\$([1-9])', un, t)
     return " ".join([t] + [shlex.quote(a) for a in args])
 
 
+@functools.lru_cache(maxsize=64)
 def racine_du_depot(dossier):
     """La racine de l'arbre de travail qui contient « dossier », ou None : git
     lance un alias shell depuis là, pas depuis le dossier courant (relecture de
@@ -1883,8 +1895,9 @@ def git_resolu(mots, dossier, repli, en_ligne=None):
     garde-fou ne résolvait qu'un maillon, sauf sans-verif qui avait sa boucle à
     lui : « git p2 » n'était pas vu comme un push (relecture xhigh de la 0.4.4).
     Un alias qui commence par des options (« -c x=y commit ») les ajoute aux
-    globales. Un alias shell (« !… ») rend SHELL et le texte que git donne au
-    shell (le corps, suivi des arguments) : il est relu par commandes_git.
+    globales. Un alias shell (« !… ») rend SHELL, le texte que git donne au
+    shell (le corps, suivi des arguments), puis les arguments : il est relu par
+    commandes_git.
     en_ligne : alias posés par -c alias.* sur cette ligne ou par le git qui a
     lancé celui-ci (git les transmet par GIT_CONFIG_PARAMETERS)."""
     d, i = depot_vise(mots, dossier)
@@ -1898,7 +1911,7 @@ def git_resolu(mots, dossier, repli, en_ligne=None):
         if valeur is None:
             break                                   # commande externe (git-lfs…), ou inconnue
         if valeur.startswith("!"):
-            return d, globales, SHELL, [texte_alias_shell(valeur[1:], args)], en_ligne
+            return d, globales, SHELL, [texte_alias_shell(valeur[1:], args)] + args, en_ligne
         try:
             mots_alias = shlex.split(valeur)
         except ValueError:
@@ -1913,14 +1926,28 @@ def git_resolu(mots, dossier, repli, en_ligne=None):
     return d, globales, sous, args, en_ligne
 
 
-def commandes_git(texte, depart, prof=0, en_ligne=None, parents=()):
+class TropDAlias(ValueError):
+    """Des alias shell imbriqués au-delà du raisonnable : la ligne est jugée
+    sans être lue (refusée par sans-verif, contrôlée par le push)."""
+
+
+# Corps d'alias shell relus pour une commande : 6 niveaux de 6 appels
+# prenaient 60 s, et au-delà de PROFONDEUR la lecture abandonnait et laissait
+# passer (relecture de sécurité du 2026-10-05).
+LIMITE_ALIAS = 64
+DEPLIAGES = [0]
+
+
+def commandes_git(texte, depart, prof=0, en_ligne=None, parents=(), args_alias=()):
     """Le parcours commun des garde-fous git : chaque commande de la ligne,
     (mots, entrées, dossier courant, g), cd / pushd / popd suivis. g vaut None
     hors git ; pour un git, {d, globales, sous, args, alias, parents}, alias
     résolus par git_resolu. Le corps d'un alias shell est relu comme une ligne
     de shell, ses git à la suite ; « parents » porte alors (globales, entrées)
     des git qui l'ont lancé : leur -c et leurs variables passent aux git du
-    corps. Jusqu'à la 0.4.4, ce parcours était recopié dans quatre fonctions,
+    corps. Dans ce corps, un git dont un argument est calculé (a=$1; git add
+    $a) reçoit en plus les arguments de l'alias : prudent (relecture du
+    2026-10-05). Jusqu'à la 0.4.4, ce parcours était recopié dans quatre fonctions,
     et un alias shell n'y était jugé que sur son premier git (relecture xhigh)."""
     dossier, pile = depart, []
     for mots, _, entrees in commandes_et_entrees(texte, prof):
@@ -1931,12 +1958,17 @@ def commandes_git(texte, depart, prof=0, en_ligne=None, parents=()):
             yield mots, entrees, dossier, None
             continue
         d, globales, sous, args, alias = git_resolu(mots, dossier, depart, en_ligne)
+        if args_alias and sous != SHELL and any("$" in a or "`" in a for a in args):
+            args = args + list(args_alias)
         yield mots, entrees, dossier, {"d": d, "globales": globales, "sous": sous, "args": args,
                                        "alias": alias, "parents": parents}
         if sous == SHELL:
+            DEPLIAGES[0] += 1
+            if DEPLIAGES[0] > LIMITE_ALIAS or prof + 1 > PROFONDEUR:
+                raise TropDAlias("alias shell trop imbriqués")
             lieu = d or dossier or depart
             yield from commandes_git(args[0], racine_du_depot(lieu) or lieu, prof + 1, alias,
-                                     parents + ((globales, entrees),))
+                                     parents + ((globales, entrees),), args[1:])
 
 
 def dossier_de_git_dir(valeur, dossier):
@@ -2582,6 +2614,8 @@ def main():
     elif mode == "pousses":
         try:
             pousses = depots_pousses(texte, depart)
+        except TropDAlias:
+            pousses = [(depart, ["HEAD"])]
         except ValueError:
             # Illisible : si la ligne parle de push, on contrôle le départ.
             pousses = [(depart, ["HEAD"])] if re.search(r"\bpush\b", texte) else []
@@ -2598,6 +2632,8 @@ def main():
     elif mode == "sans-verif":
         try:
             print(contourne_les_hooks(texte, depart))
+        except TropDAlias:
+            print("CONTOURNE")
         except ValueError:
             # Guillemets déséquilibrés (bash ne lancerait rien), ou imbrication
             # au-delà de PROFONDEUR (bash, lui, la lancerait) : un git qui parle

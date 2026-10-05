@@ -41,6 +41,12 @@ ALIAS = {"ci": "commit -n", "envoie": "!git -c core.hooksPath=/x commit", "c2": 
          "shc": "!sh -c 'git commit -m x'", "p": "push", "p2": "p", "sp": "!git push origin HEAD",
          "opt": "-c core.hooksPath=/x commit", "cf": '!f() { git commit "$@"; }; f',
          "fp": '!f() { git push "$@"; }; f', "af": '!f() { git add "$@"; }; f', "aall": "!git add ."}
+# Relecture de sécurité du 2026-10-05 : des alias shell imbriqués coûtaient un
+# temps exponentiel (60 s pour 6 niveaux de 6 appels) avant le verdict.
+for k in range(6):
+    ALIAS[f"l{k}"] = "!" + "; ".join([f"git l{k + 1}"] * 6)
+ALIAS["l6"] = "!git status"
+ALIAS["profond"] = "!git l0; git commit -n -m x"
 
 
 def lancer(cmd=None, cwd=depot, brut=None, env=None):
@@ -172,6 +178,14 @@ refuses = [
     "git cf -n -m x", f"git cf {NV} -m x", f"git -c alias.z='!f() {{ git commit \"$@\"; }}; f' z {NV} -m x",
     "HUSKY=0 find . -maxdepth 0 -exec git commit -m x \\;", "HUSKY=0 tmux new -d 'git commit -m x'",
     f"eval \"$(cat <<'X'\ngit commit {NV} -m x\nX\n)\"",
+    # relecture de sécurité du 2026-10-05 : ${@:N}, ${1:-x}, argument passé par
+    # une variable dans un alias shell ; interprètes moins courants
+    f"git -c alias.z='!f() {{ git commit \"${{@:2}}\"; }}; f' z x {NV} -m x",
+    f"git -c alias.z='!f() {{ git commit \"${{@:1}}\"; }}; f' z {NV} -m x",
+    f"git -c alias.z='!f() {{ git commit \"${{1:-x}}\" -m y; }}; f' z {NV}",
+    f"git -c alias.z='!f() {{ a=$1; git commit $a -m x; }}; f' z {NV}",
+    "HUSKY=0 bun x.js && git commit -m x", "HUSKY=0 php x.php && git commit -m x",
+    "HUSKY=0 pypy3 x.py && git commit -m x", "HUSKY=0 nodejs x.js && git commit -m x",
 ]
 
 try:
@@ -225,6 +239,15 @@ try:
     attendre("protection : « git af .env » refusé", True, mode("protection", "git af .env").startswith("AJOUT"))
     attendre("protection : « git aall » depuis un sous-dossier voit le .env de la racine", True,
              mode("protection", "git aall", sous).startswith("AJOUT"))
+    for ligne in ("git -c alias.z='!f() { git add \"${@:1}\"; }; f' z .env",
+                  "git -c alias.z='!f() { a=$1; git add $a; }; f' z .env"):
+        attendre(f"protection : {ligne[:50]!r}", True, mode("protection", ligne).startswith("AJOUT"))
+    attendre("pousses : « ${@:1} origin main » contrôle main", True,
+             mode("pousses", "git -c alias.z='!f() { git push \"${@:1}\"; }; f' z origin main").endswith("main"))
+    import time
+    debut = time.time()
+    attendre("alias imbriqués (6 × 6) : refusé", 2, lancer("git profond"))
+    attendre("alias imbriqués : verdict en moins de 10 s", True, time.time() - debut < 10)
 
     section("Aucun nom global défini deux fois dans l'analyseur")
     arbre = ast.parse(open(os.path.join(H, "analyse-commande.py"), encoding="utf-8").read())
