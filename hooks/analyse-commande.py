@@ -47,7 +47,7 @@ ENVELOPPES = {"sudo", "env", "nohup", "time", "exec", "command", "builtin", "caf
 MOTS_CLES = {"!", "if", "then", "do", "else", "elif", "while", "until", "function"}
 INTERPRETES = {"bash", "sh", "zsh", "dash", "ksh"}
 OPTIONS_ENVELOPPES = {"sudo": "ugphCDrtU", "doas": "uC", "timeout": "sk", "nice": "n",
-                      "env": "uC", "xargs": "IanLPdsE", "stdbuf": "ioe", "exec": "a", "watch": "nd",
+                      "env": "uC", "xargs": "IJanLPdsE", "stdbuf": "ioe", "exec": "a", "watch": "nd",
                       "screen": "Stc"}
 SEPARATEURS = {";", "&&", "||", "|", "&", "(", ")", "()", "|&", ";;", ";&", "{", "}"}
 REDIRECTIONS = {">", ">>", "<", "<<", "<<<", ">&", "<&", ">|", "&>", "&>>"}
@@ -551,8 +551,9 @@ def commandes_et_entrees(texte, prof=0, suite=False, heritage=None, reperes=Fals
                     fin = k + 1
                     while fin < len(mots_cmd) and mots_cmd[fin] not in ("+", ";"):
                         fin += 1
-                    code = " ".join(shlex.quote(cherche if w == "{}" else w) for w in mots_cmd[k + 1:fin]
-                                    if w != "{}" or cherche)
+                    # ./{} vaut {} : find le remplace aussi (relecture du 2026-10-05).
+                    code = " ".join(shlex.quote(cherche if w in ("{}", "./{}") else w) for w in mots_cmd[k + 1:fin]
+                                    if w not in ("{}", "./{}") or cherche)
                     sortie.extend(commandes_et_entrees(code, prof + 1, suite, reperes=reperes))
                     k = fin
                 k += 1
@@ -586,8 +587,21 @@ def lire_repere(mot):
 
 
 def repere_find(mots):
-    """Le repère qui remplace {} : les dossiers parcourus et les motifs -name."""
+    """Le repère qui remplace {} : les dossiers parcourus et les motifs -name.
+    Les options de tête (find -L, -H, -E, -x…, -f dossier) viennent avant les
+    dossiers : jusqu'à la relecture du 2026-10-05, « find -L ailleurs … »
+    faisait parcourir le dossier courant à la place."""
     racines, i = [], 1
+    while i < len(mots):
+        if re.fullmatch(r"-[HLPEXsxd]+|-O\d*", mots[i]):
+            i += 1
+        elif mots[i] == "-D" and i + 1 < len(mots):
+            i += 2                                  # -D options de mise au point (GNU)
+        elif mots[i] == "-f" and i + 1 < len(mots):
+            racines.append(mots[i + 1])             # find -f dossier (BSD)
+            i += 2
+        else:
+            break
     while i < len(mots) and not mots[i].startswith(("-", "(", "!")):
         racines.append(mots[i])
         i += 1

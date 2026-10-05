@@ -295,7 +295,10 @@ côté modifié. Voir [tests/README.md](tests/README.md).
   aujourd'hui : une boucle `for f in .env …; do cat "$f"` ; `xargs` après
   plusieurs tubes (`find … | sort | xargs cat`) ; `find -exec sh -c '…'` ;
   `cat $(pwd)/.env` ; un nom de commande calculé (`$(which cat) .env`,
-  `$C .env`) ; `read -r l < .env` ; `source .env` suivi d'un interprète
+  `$C .env`) ; des motifs de `find` groupés par `\(` … `\)`
+  (`find . \( -name .env \) -exec cat {} \;`) ; un `$( )` dans le corps d'un
+  document `<<EOF` non protégé (`cat <<EOF`, puis `$(cat .env)` dans le corps) ;
+  `read -r l < .env` ; `source .env` suivi d'un interprète
   qui lit `os.environ` ; `git log -U0`, `--patch-with-stat`, `reflog -p`,
   `format-patch --stdout` d'un `.env` commité ; `docker inspect` ; une archive
   d'un `.env` sous un nom neutre (`tar -czf sauvegarde.tgz .env`), relue
@@ -305,8 +308,9 @@ côté modifié. Voir [tests/README.md](tests/README.md).
   dépôt déjà présent la porte, et une archive qui livre son dossier `.git`
   livre aussi son `info/exclude` : un conseil de phase rangé dedans est lu ;
   et la porte d'entrée cite les noms des fichiers non commités (`git status`),
-  donc un nom de fichier du dépôt arrive dans le contexte de Claude. Les
-  commandes sont lues comme bash les lit, plus le `=cat` de zsh ; sous l'outil
+  donc un nom de fichier du dépôt arrive dans le contexte de Claude. Hors les
+  motifs de `find` groupés et les corps de documents ci-dessus, les commandes
+  sont lues comme bash les lit, plus le `=cat` de zsh ; sous l'outil
   PowerShell, seuls `Get-Content`, `gc`, `type`, `Select-String` et `sls` sont
   reconnus comme des lectures — le reste de la syntaxe PowerShell ne l'est pas.
 - **Le garde des hooks git arrête le réflexe, pas un contournement voulu.** Un

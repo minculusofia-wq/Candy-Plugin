@@ -287,7 +287,10 @@ was edited. See [tests/README.md](tests/README.md).
   the list stops growing. These get through today: a loop `for f in .env …; do
   cat "$f"`; `xargs` after several pipes (`find … | sort | xargs cat`);
   `find -exec sh -c '…'`; `cat $(pwd)/.env`; a computed command name
-  (`$(which cat) .env`, `$C .env`); `read -r l < .env`; `source .env`
+  (`$(which cat) .env`, `$C .env`); `find` patterns grouped with `\(` … `\)`
+  (`find . \( -name .env \) -exec cat {} \;`); a `$( )` inside the body of an
+  unquoted here-document (`cat <<EOF`, then `$(cat .env)` in the body);
+  `read -r l < .env`; `source .env`
   followed by an interpreter reading `os.environ`; `git log -U0`,
   `--patch-with-stat`, `reflog -p`, `format-patch --stdout` of a committed
   `.env`; `docker inspect`; an archive of a `.env` under a neutral name
@@ -298,7 +301,8 @@ was edited. See [tests/README.md](tests/README.md).
   `.git` folder ships its `info/exclude` too: a phase advice stored there is
   read; and the phase gate quotes the names of uncommitted files
   (`git status`), so a file name from the repo reaches Claude's context.
-  Commands are read as bash reads them, with zsh's `=cat` expansion; under the
+  Apart from the grouped `find` patterns and here-document bodies above,
+  commands are read as bash reads them, with zsh's `=cat` expansion; under the
   PowerShell tool, only `Get-Content`, `gc`, `type`, `Select-String` and `sls`
   are recognized as reads — the rest of PowerShell's syntax is not.
 - **The git-hook guard stops the reflex, not a deliberate bypass.** A

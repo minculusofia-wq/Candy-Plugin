@@ -884,6 +884,24 @@ try:
     # chaque commande était refusée comme une panne de Python.
     code, _, err = lancer("protect-secrets.sh", "Bash", {"command": "ls"}, cwd=d50, env={"CANDY_LIMITE_PARCOURS": "abc"})
     attendre("CANDY_LIMITE_PARCOURS illisible : ls permis, pas de panne", 0, code, err.strip()[:80])
+
+    section("Secrets — relecture du 2026-10-05 : xargs -J, ./{}, options de find avant le dossier")
+    # xargs -J % (macOS) prend une valeur : % passait pour la commande. find
+    # remplace aussi ./{}. find -L ailleurs : le dossier courant était parcouru
+    # à la place de « ailleurs ».
+    for cmd, attendu in (("find . -name .env | xargs -J % cat %", 2), ("find . -name .env -exec cat ./{} \\;", 2),
+                         ("find src -name app.py | xargs -J % cat %", 0), ("find src -name app.py -exec cat ./{} \\;", 0)):
+        code, _, err = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=d50)
+        attendre(f"Bash {'refusé' if attendu else 'permis'} : {cmd!r}", attendu, code, err.strip()[:80])
+    d52 = os.path.join(base, "d52")
+    os.makedirs(os.path.join(d52, "ici"))
+    os.makedirs(os.path.join(d52, "la"))
+    open(os.path.join(d52, "ici", "a.txt"), "w").write("x\n")
+    open(os.path.join(d52, "la", ".env"), "w").write("DATABASE_URL=none\n")
+    for cmd, attendu in (("find -L ../la -type f -exec cat {} \\;", 2), ("find -H -x ../la -type f -exec cat {} +", 2),
+                         ("find -f ../la -type f -exec cat {} \\;", 2), ("find -L ../ici -type f -exec cat {} \\;", 0)):
+        code, _, err = lancer("protect-secrets.sh", "Bash", {"command": cmd}, cwd=os.path.join(d52, "ici"))
+        attendre(f"Bash {'refusé' if attendu else 'permis'} : {cmd!r}", attendu, code, err.strip()[:80])
 finally:
     shutil.rmtree(base, ignore_errors=True)
 
