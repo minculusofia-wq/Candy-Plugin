@@ -101,18 +101,23 @@ transverse. Signaler le surcoût et les 30 jours de conservation des données.
 **Avant toute bascule** : les agents délégués n'entament pas le contexte du fil
 principal. C'est le premier réflexe. Mais déléguer ne fait **pas** passer sur
 Sonnet : Explore, Plan et general-purpose tournent sur le modèle de la
-conversation, tant que `CLAUDE_CODE_SUBAGENT_MODEL` n'est pas réglé (doc Claude
-Code, sub-agents).
+conversation, tant que `CLAUDE_CODE_SUBAGENT_MODEL` n'est pas réglé (sous Fable,
+Explore passe sur l'Opus de l'alias `opus`) ; un subagent dont la définition
+porte `model: opus` tourne sur Opus quel que soit le modèle de la conversation
+(doc Claude Code, sub-agents).
 
 ### La bascule que personne n'a demandée : le message signalé
 
-Fable 5.1, Fable 5 et Opus 5.5 passent chaque requête à des classifieurs de
-sécurité. Par défaut, une requête signalée en cybersécurité est relancée sur
-Opus 4.8, en biologie sur Opus 5 — et **toute la suite de la session reste sur
-cet ancien modèle**, avec un simple avis dans la transcription (doc Claude Code,
-model-config, « Automatic model fallback »). Le contrôle porte sur tout le
-contexte, CLAUDE.md et état git compris : un dépôt qui parle de sécurité peut
-déclencher la bascule dès la première requête.
+Fable, Opus 5.5, Sonnet 5.5 et Opus 5 passent chaque requête à des classifieurs
+de sécurité. Par défaut, une requête signalée est relancée sur un modèle plus
+ancien — sous Fable et Opus 5.5 : Opus 4.8 en cybersécurité, Opus 5 en
+biologie ; sous Sonnet 5.5 : Sonnet 5 en cybersécurité, un refus en biologie —
+et **toute la suite de la session reste sur cet ancien modèle**, au même cran
+d'effort, avec un simple avis dans la transcription (doc Claude Code,
+model-config, « Automatic model fallback »). La première requête porte
+`CLAUDE.md` et l'état git : un dépôt qui parle de sécurité peut déclencher la
+bascule d'entrée. `claude --safe-mode` dit si ce sont les personnalisations
+(CLAUDE.md, skills, hooks) qui la déclenchent.
 
 Pour décider soi-même, mettre dans `~/.claude/settings.json` :
 
@@ -122,8 +127,8 @@ Pour décider soi-même, mettre dans `~/.claude/settings.json` :
 
 (ou `/config` → « Switch models when a message is flagged »). La session se met
 alors en pause : passer sur l'ancien modèle, ou reformuler sur le modèle
-courant. En mode non interactif (`claude -p`), la requête signalée s'arrête sur
-une erreur au lieu de basculer.
+courant. En mode non interactif (`claude -p`), la requête signalée se termine
+par un refus au lieu de basculer.
 
 Quand cette pause arrive, Claude le signale en une ligne et propose de
 reformuler plutôt que de basculer.
