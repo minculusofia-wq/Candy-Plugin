@@ -212,6 +212,15 @@ En complément, sans facturation à part et sans coût de contexte — ils conso
 tout de même le quota, sur le modèle de la session : les subagents
 `relecteur-securite` et `relecteur-de-phase` (les agents fournis par le plugin).
 
+**Relancer un relecteur après une correction** : lui donner le numéro du tour,
+les constats déjà rapportés et le commit du passage précédent — sans eux, il
+relit tout et redit les mêmes constats (section « Relecture en plusieurs tours »
+des deux agents). Au troisième tour qui trouve encore, arrêter de corriger et
+revoir l'approche (`reflexes-de-travail.md` §4). Pas de REVIEW.md dans les
+projets : seul le service Code Review de GitHub (offres Team / Enterprise) le
+lit, pas `/code-review` (doc code-review-local, relue le 2026-10-17) — les pièges
+à relire vont dans le `CLAUDE.md` du projet.
+
 ## Format du conseil, et quoi faire si le cran se révèle trop bas
 
 **Cinq lignes** — le modèle, puis les quatre réglages —, avant de commencer,
