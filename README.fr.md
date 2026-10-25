@@ -43,13 +43,13 @@ depuis votre dossier personnel. Copiez celles qui vous intéressent :
 cp -R rules/*.md ~/.claude/rules/
 ```
 
-Elles fonctionnent séparément — prenez-en une, pas toutes.
+Elles fonctionnent séparément — prenez-en une, pas toutes. Seule exception : choix du modèle, relecture et advisor se renvoient l'une à l'autre (les cinq familles de la relecture déclenchent l'advisor) — prenez les trois ensemble.
 
 ## Ce que ça contient
 
 | | |
 |---|---|
-| **Règles** | vérifier avant d'affirmer · honnêteté brutale · discipline de code · porte de phase · choix du modèle · réflexes de travail · style de communication · routage des commandes · une information, un seul fichier |
+| **Règles** | vérifier avant d'affirmer · honnêteté brutale · discipline de code · porte de phase · choix du modèle · relecture · advisor · réflexes de travail · style de communication · routage des commandes · une information, un seul fichier |
 | **Commandes** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
 | **Agents** | `relecteur-securite` · `relecteur-de-phase` (contexte neuf, ne consomment pas la conversation) |
 | **Hooks et scripts** | rappel d'ouverture de phase, rappel du modèle et des quatre réglages à recommander en début de tâche (mode, effort, ultracode, advisor), rappel des tâches en attente sur un projet, rappel d'entretien du setup, contrôle du jeu de documents à chaque ouverture (fichiers manquants, hors du jeu, CLAUDE.md trop long), fichiers de secrets gardés en écriture et en lecture, protection des secrets (une valeur écrite, un `.env` affiché, un `git add` qui l'emporterait), contrôle avant push (le dépôt et les commits réellement poussés), refus d'un git qui sauterait les hooks du dépôt (`--no-verify`, `core.hooksPath`, `HUSKY=0`…), contrôle du projet en fin de tour (borné dans le temps, seulement sur ce qui a bougé pendant le tour), relecture de la réponse en fin de tour, contrôle du setup lui-même |
@@ -133,12 +133,9 @@ moment, avec la commande à taper.
 | Commande | Ce qu'elle fait | Quand elle est proposée |
 |---|---|---|
 | `/effort` | Change le niveau de réflexion du modèle, et active ultracode | Au début de chaque tâche (`choix-du-modele.md`) |
-| `/advisor` | Fait consulter un second modèle, plus fort, pendant la tâche | Conception difficile, défaut qui résiste |
-| `/code-review` | Relecture du code à la recherche de bugs | Code qui touche l'argent, les secrets, l'irréversible |
-| `/rewind` | Ramène le code et la conversation à un point précédent | Une mauvaise direction a été prise |
-| `/context` puis `/clear` | Montre ce qui remplit la conversation, puis repart à neuf | Conversation longue, deuxième échec sur le même défaut |
-| `/btw` | Pose une question à côté, sans l'ajouter à l'historique | Question hors du sujet en cours |
-| `/usage` | Coût de la session et limites du forfait | Fin d'une longue tâche, doute sur la dépense |
+| `/advisor` | Fait consulter un second modèle, plus fort, aux moments qui décident | Le régler une fois ; consulté sur l'argent, les secrets, les données, une alerte, l'irréversible (`advisor.md`) |
+| `/code-review` | Relecture du code à la recherche de bugs | Les mêmes cinq familles (`relecture.md`), avant l'essai sur l'appareil |
+| `/clear` | Repart d'une conversation neuve dans la même fenêtre | Conversation longue, ou défaut qui demande de repartir à neuf |
 | `/doctor`, `/skill-doctor` | Bilan de l'installation ; coût en contexte de chaque skill | Pendant `/maintenance` |
 
 ## Pour quels projets ? Bots, apps, et tout le reste
@@ -149,7 +146,7 @@ grande partie ne dépend ni de l'un ni de l'autre.
 
 | Ce qui marche partout | Spécifique aux bots et services qui tournent | Spécifique aux apps découpées en phases |
 |---|---|---|
-| **Règles** : vérifier avant d'affirmer · honnêteté brutale · discipline de code · réflexes de travail · choix du modèle · routage des commandes · une information, un seul fichier | La section « stratégies de bots » de `brutal-honesty.md` | `porte-de-phase.md` |
+| **Règles** : vérifier avant d'affirmer · honnêteté brutale · discipline de code · réflexes de travail · choix du modèle · relecture · advisor · routage des commandes · une information, un seul fichier | La section « stratégies de bots » de `brutal-honesty.md` | `porte-de-phase.md` |
 | **Commandes** : `/verifier` · `/maj-docs` · `/maintenance` | `/debug` (mode simulation, jamais sur le serveur) · `/fin-session` | `/fin-phase` |
 | **Agents** : `relecteur-securite` | Sa section « fonds et transactions » | `relecteur-de-phase` |
 | **Hooks** : contrôle du projet, contrôle du setup, protection des secrets, garde avant écriture, relecture de la réponse, audit des `.md`, contrôle du jeu de documents, rappel des tâches en attente, rappel d'entretien | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |

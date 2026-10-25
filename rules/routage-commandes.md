@@ -17,16 +17,13 @@ phases (bot compris), `/fin-session` sinon.
 ## Commandes intégrées à proposer
 
 Claude ne peut pas les lancer : il les propose en une ligne, avec la commande à
-taper, sans s'arrêter. `/effort`, `/advisor` et `/code-review` sont déjà
-proposés par `choix-du-modele.md` — pas répétés ici. Source : doc Claude Code,
-`commands.md`, relue le 2026-10-02.
+taper, sans s'arrêter. `/effort` et `/advisor` sont proposés par
+`choix-du-modele.md`, `/code-review` par `relecture.md`.
 
-| Quand Claude constate… | Proposer |
-|---|---|
-| Une mauvaise direction prise, du code à défaire | `/rewind` — ramène le code et la conversation à un point précédent |
-| Une conversation longue, ou un deuxième échec sur le même défaut | `/context` (ce qui remplit la conversation), puis `/clear` |
-| Une question de l'utilisateur hors du sujet en cours | `/btw <question>` — répondue sans entrer dans l'historique |
-| Une longue tâche finie, ou un doute sur la dépense | `/usage` — coût de la session et limites du forfait |
+Conversation longue, ou défaut qui demande une conversation neuve
+(`reflexes-de-travail.md` §4) : proposer **une** conversation neuve — `/clear`
+dans cette fenêtre, ou une nouvelle conversation ; l'un ou l'autre, jamais les
+deux.
 
 ## Règle absolue
 

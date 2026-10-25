@@ -27,13 +27,16 @@ Sauter cette étape quand le changement tient en une phrase (corriger une faute,
 
 **Avant d'écrire un plan**, auditer le jeu de `.md` : le contrôle du jeu de documents de `/verifier`, puis relire les documents contre le code. Corriger chaque écart **dans la même conversation, avant de livrer le plan** — jamais en faire une tâche du plan. Un plan de phases suit en plus `porte-de-phase.md` : sa première phase doit pouvoir s'ouvrir le jour où il est livré.
 
-Pour une grosse fonctionnalité : interroger l'utilisateur d'abord avec l'outil de questions — sur le métier seulement : ce que la fonctionnalité doit faire, les cas limites vus côté utilisateur, les arbitrages de stratégie ; l'implémentation, Claude la tranche — jusqu'à ce que tout soit couvert, écrire la spec dans un fichier, puis l'exécuter dans une conversation neuve.
+Pour une grosse fonctionnalité : interroger l'utilisateur d'abord avec l'outil de questions — sur le métier seulement : ce que la fonctionnalité doit faire, les cas limites vus côté utilisateur, les arbitrages de stratégie ; l'implémentation, Claude la tranche — jusqu'à ce que tout soit couvert — la seule exception à « une seule question » de `communication-style.md` ; écrire la spec dans un fichier, puis l'exécuter dans une conversation neuve.
 
-## 4. Repartir propre après deux échecs
+## 4. Repartir propre après un échec
 
-Si une même erreur a été corrigée deux fois sans succès, la conversation est encombrée d'approches ratées qui polluent le raisonnement.
-
-Le dire à l'utilisateur et proposer de repartir d'une conversation neuve avec une consigne plus précise, enrichie de ce qui a été appris. Une session propre avec une bonne consigne bat presque toujours une longue session pleine de corrections.
+Une correction ratée sur un même défaut : ne pas relancer au même cran. Monter
+d'un cran (`/effort`, le cache est gardé). Si le défaut est dur, passer sur
+Fable dans une conversation neuve (`choix-du-modele.md`) : celle en cours est
+encombrée d'approches ratées qui polluent le raisonnement. Le dire à
+l'utilisateur et lui donner la consigne de la conversation neuve, enrichie de ce
+qui a été appris.
 
 ## 5. Un défaut repéré se dit, dans la réponse
 

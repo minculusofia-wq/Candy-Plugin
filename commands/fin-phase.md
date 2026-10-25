@@ -81,7 +81,7 @@ Le proposer, avec le niveau d'insistance qui correspond à la phase :
 
 | La phase touche à | Formulation |
 |---|---|
-| Chiffrement, clés, secrets, micro, position, données personnelles | « Cette phase touche à `<quoi>`. Je te conseille `/code-review <niveau> <cible>` avant de passer à l'appareil réel, parce que <raison>. En complément, ou à la place si tu ne veux pas cette dépense, je peux passer les subagents `relecteur-securite` et `relecteur-de-phase`. » Niveau et cible : `rules/choix-du-modele.md`, « Relecture ». |
+| Une des cinq familles de la règle « relecture » (argent ; secrets, clés, chiffrement, protocole ; données personnelles ou enregistrées — micro, position ; une alerte qui doit partir ; l'irréversible) | « Cette phase touche à `<quoi>`. Je te conseille `/code-review <niveau> <cible>` avant de passer à l'appareil réel, parce que <raison>. En complément, ou à la place si tu ne veux pas cette dépense, je peux passer les subagents `relecteur-securite` et `relecteur-de-phase`. » Niveau et cible : `rules/relecture.md`, « Quel niveau ». |
 | Écrans, navigation, réglages seulement | Le mentionner en une ligne, puis passer. |
 
 **Ne jamais la lancer.** C'est une dépense de l'utilisateur — du quota aux niveaux
@@ -245,16 +245,17 @@ le cache ; tôt de préférence sur un autre modèle, où chaque changement fait
 relire toute la conversation sans cache.
 
 Lire la section `### Phase Y` de `ROADMAP.md` et choisir le cran avec le
-tableau « Quel cran pour quelle demande » de la règle « choix du modèle »
+tableau « Le curseur d'effort » de la règle « choix du modèle »
 (`${CLAUDE_PLUGIN_ROOT}/rules/choix-du-modele.md`, ou sa copie installée), qui
 fait foi — ne pas le recopier ici : une grille recopiée finit par contredire
-l'originale. Une phase **sensible et large** (chiffrement, micro, position,
-déclencheurs, alerte réelle) ajoute l'interrupteur **ultracode** au cran qui
-convient.
+l'originale. Ultracode s'ajoute au cran quand la phase passe les deux questions
+de la règle (découpable, et une erreur y coûterait cher) — chiffrement, micro,
+position, alerte réelle. Un défaut dur qu'Opus a déjà échoué à corriger
+(sinon, d'abord monter d'un cran) : conversation neuve, et proposer Fable 5.1 (surcoût, données gardées 30 jours).
 
-Une phase d'app descend rarement sous `high`, et `max` ne se conseille **pas**
-parce qu'une phase est longue : une phase est longue, pas dure. En cas de doute
-sur la présence d'une zone sensible : ne pas descendre.
+Une phase longue fait monter d'un cran, mais `max` ne se conseille pas pour la
+seule longueur. En cas de doute sur la présence d'une zone sensible : ne pas
+descendre.
 
 **Ultracode est un interrupteur indépendant du cran** (Claude Code v2.1.284 ou
 plus récent ; doc model-config : « a Claude Code setting rather than a level »).
@@ -275,7 +276,7 @@ se taire sur l'un des quatre est une faute, y compris pour dire « non » :
 | **Le mode** | plan / edit / auto |
 | **Le curseur** | `low` · `medium` · `high` · `xhigh` · `max` |
 | **Ultracode** | interrupteur oui / non, indépendant du curseur (`Tab` dans le sélecteur `/effort`, ou `/effort ultracode` — le cran ne bouge pas ; c'est le drapeau `claude --effort ultracode` qui met aussi `xhigh`) |
-| **L'advisor** | non, ou un modèle conseiller (`/advisor fable`) — section « Advisor » de la règle « choix du modèle » |
+| **L'advisor** | consulté aux moments qui décident, pas consulté, ou `/advisor off` sous Fable — règle « advisor » |
 
 Mode, curseur et ultracode se fixent **avant le premier message** (`/effort`
 peut encore changer le curseur ensuite — sur Opus 5.5 et Fable 5.1, sans perdre
@@ -286,12 +287,16 @@ plus. Le curseur ne bouge pas quand le plan est accepté, et ultracode tourne
 Écrire donc, toujours dans cette forme :
 
 > « Le modèle et quatre réglages pour la phase Y, à mettre avant ton premier message :
->   - modèle **<Opus 5.5 / Sonnet 5.5 / Fable 5.1>**, parce que <motif> ;
+>   - modèle **<Opus 5.5 / Fable 5.1>**, parce que <motif> ;
 >   - mode **plan**, parce que <motif> ;
 >   - curseur **`<cran>`**, parce que <motif> ;
 >   - ultracode **<oui / non>**, parce que <motif> ;
->   - advisor **<non / Fable : `/advisor fable`, surcoût à chaque
->     consultation>**, parce que <motif>. »
+>   - advisor **<consulté avant … / pas consulté / `/advisor fable` / `/advisor
+>     off`>**, parce que <motif>. »
+
+L'advisor se choisit avec la règle « advisor » : consulté aux moments qui
+décident sur une phase d'une des cinq familles, pas consulté sur une phase
+d'écrans ou de documentation, `/advisor off` quand la phase tourne sur Fable.
 
 ### Le PROMPT COMPLET, pas une phrase
 
@@ -364,10 +369,11 @@ suivante.
 ```bash
 cat > "$(git -C "${CLAUDE_PROJECT_DIR}" rev-parse --show-toplevel 2>/dev/null || pwd)/.claude-phase-suivante" <<'FIN'
 Phase <N+1> — <titre>
+Modèle : <Opus 5.5 / Fable 5.1>, parce que <motif> — un changement de modèle se fait en ouvrant la conversation
 Mode : plan (non négociable pour ouvrir une phase)
 Effort : <cran>, parce que <motif en une ligne>
 Ultracode : <oui, parce que …> / <non, le goulot est l'appareil réel>
-Advisor : <non, parce que …> / <Fable (/advisor fable, surcoût à chaque consultation), parce que …>
+Advisor : <consulté avant … (règle « advisor »), parce que …> / <pas consulté, parce que …> / </advisor off, la phase tourne sur Fable>
 Relecture adversariale à la sortie : <oui, parce que …> / <non>
 FIN
 ```

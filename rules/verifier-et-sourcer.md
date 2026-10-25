@@ -38,10 +38,7 @@ Ni valeur, ni seuil, ni nom de fichier, ni comportement d'API, ni « probablemen
 
 Une mémoire est une piste, pas une preuve : elle dit ce qui était vrai le jour
 où elle a été écrite, et le travail fait dans un autre projet ne la met pas à
-jour. Faute réelle : « le rangement des documents reste à faire sur quatre
-projets », affirmé d'après une mémoire vieille de deux jours alors que les
-quatre étaient faits — et la liste des rappels, relue la même heure, n'en
-annonçait plus qu'un.
+jour.
 
 ## Principe
 
@@ -54,4 +51,4 @@ le problème n'est pas le résultat, c'est le processus.
 *Procédure détaillée pour un rapport (workflow de rédaction, relecture finale,
 exemple de faute réelle) : injectée par le hook `rule13-source-or-silence.sh`
 au moment où elle sert. La recopier ici l'enverrait deux fois dans la même
-conversation — le contrôle du setup le signalait.*
+conversation.*

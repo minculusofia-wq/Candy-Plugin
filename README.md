@@ -46,13 +46,13 @@ Rules are not loaded by the plugin — Claude Code reads them from your own fold
 cp -R rules/*.md ~/.claude/rules/
 ```
 
-They work on their own. Take one, not all of them.
+They work on their own. Take one, not all of them. One exception: model choice, code review and advisor refer to each other (the five families of code review trigger the advisor) — take the three together.
 
 ## What's inside
 
 | | |
 |---|---|
-| **Rules** | verify before asserting · brutal honesty · code discipline · phase gate · model choice · working reflexes · communication style · command routing · one piece of information, one file |
+| **Rules** | verify before asserting · brutal honesty · code discipline · phase gate · model choice · code review · advisor · working reflexes · communication style · command routing · one piece of information, one file |
 | **Commands** | `/verifier` `/debug` `/fin-phase` `/fin-session` `/maj-docs` `/maintenance` |
 | **Agents** | `relecteur-securite` · `relecteur-de-phase` — security and phase reviewers running in a fresh context, so they don't eat your conversation |
 | **Hooks and scripts** | phase-opening reminder, reminder of the model and the four settings to recommend at the start of a task (mode, effort, ultracode, advisor), reminder of the task waiting on a project, setup maintenance reminder, document-set check at every session start (missing files, files outside the set, oversized CLAUDE.md), secret files guarded against both writing and reading, secret protection (a value written out, a `.env` printed, a `git add` that would take it along), pre-push check (the repo and the commits actually pushed), a git that would skip the repo's own hooks (`--no-verify`, `core.hooksPath`, `HUSKY=0`…) refused, end-of-turn project check (time-boxed, only on what changed during the turn), answer review at the end of each turn, a check on the setup itself |
@@ -134,12 +134,9 @@ moment, with the command to type.
 | Command | What it does | When it is suggested |
 |---|---|---|
 | `/effort` | Changes how much the model reasons, and turns ultracode on | At the start of every task (`choix-du-modele.md`) |
-| `/advisor` | Has a second, stronger model consulted during the task | Hard design work, a defect that resists |
-| `/code-review` | Reviews the code for bugs | Code touching money, secrets, anything irreversible |
-| `/rewind` | Rolls the code and the conversation back to an earlier point | A wrong direction was taken |
-| `/context` then `/clear` | Shows what fills the conversation, then starts fresh | Long conversation, second failure on the same defect |
-| `/btw` | Asks a side question without adding it to the history | A question off the current topic |
-| `/usage` | Session cost and plan limits | End of a long task, doubt about spending |
+| `/advisor` | Has a second, stronger model consulted at the moments that decide | Set once; consulted on money, secrets, data, an alert, anything irreversible (`advisor.md`) |
+| `/code-review` | Reviews the code for bugs | The same five families (`relecture.md`), before testing on the device |
+| `/clear` | Starts a fresh conversation in the same window | Long conversation, or a defect that calls for a fresh start |
 | `/doctor`, `/skill-doctor` | Installation checkup; context cost of each skill | During `/maintenance` |
 
 ## Which projects is this for? Bots, apps, and everything else
@@ -149,7 +146,7 @@ server, and an **iOS app** built phase by phase. Most of it depends on neither.
 
 | Works anywhere | Specific to bots and long-running services | Specific to apps built in phases |
 |---|---|---|
-| **Rules**: verify before asserting · brutal honesty · code discipline · working reflexes · model choice · command routing · one piece of information, one file | The "bot strategies" section of `brutal-honesty.md` | `porte-de-phase.md` |
+| **Rules**: verify before asserting · brutal honesty · code discipline · working reflexes · model choice · code review · advisor · command routing · one piece of information, one file | The "bot strategies" section of `brutal-honesty.md` | `porte-de-phase.md` |
 | **Commands**: `/verifier` · `/maj-docs` · `/maintenance` | `/debug` (dry-run mode, never on the server) · `/fin-session` | `/fin-phase` |
 | **Agents**: `relecteur-securite` | Its "funds and transactions" section | `relecteur-de-phase` |
 | **Hooks**: project check, secret protection, pre-write guard, answer review, `.md` audit, document-set check, waiting-task reminder, maintenance reminder | `rule13-source-or-silence.sh` | `ouverture-de-phase.sh` · `rule12-phase-debug-required.sh` |

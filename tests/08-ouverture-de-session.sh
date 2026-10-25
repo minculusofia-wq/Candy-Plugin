@@ -181,8 +181,8 @@ verifie "le rappel nomme les quatre réglages (mode, effort, ultracode, advisor)
         4 "$(echo '{}' | bash "$REGLAGES_HOOK" | grep -o -i -E 'mode|effort|ultracode|advisor' | sort -u | wc -l | tr -d ' ')"
 # Le modèle est la cinquième ligne : « l'un des quatre » laissait croire que
 # l'omettre n'était pas une faute (relecture xhigh de la 0.4.4).
-verifie "le rappel exige cinq lignes, le modèle compris, et les trois conditions de Sonnet" \
-        "1 1 1" "$(R=$(echo '{}' | bash "$REGLAGES_HOOK"); for m in "CINQ lignes" "le modèle compris" "aucun jugement critique"; do printf '%s ' "$(grep -c -F "$m" <<< "$R")"; done | sed 's/ $//')"
+verifie "le rappel exige cinq lignes, le modèle compris, et le principe du premier coup" \
+        "1 1 1" "$(R=$(echo '{}' | bash "$REGLAGES_HOOK"); for m in "CINQ lignes" "le modèle compris" "premier coup"; do printf '%s ' "$(grep -c -F "$m" <<< "$R")"; done | sed 's/ $//')"
 verifie "le rappel sort en une seule ligne" \
         1 "$(echo '{}' | bash "$REGLAGES_HOOK" | wc -l | tr -d ' ')"
 verifie "le rappel est branché sur SessionStart dans hooks.json" \
