@@ -51,8 +51,11 @@ INPUT=$(cat)
 
 # Si la commande ne peut pas etre lue (Python absent ou en panne), le push est
 # REFUSE : un garde-fou qui ne voit rien ne laisse rien passer.
+. "$H/motif-panne.sh" 2>/dev/null || motif_panne() { echo "Lecture impossible (code ${1:-?}) : Python introuvable ou en panne, ou lecteur du plugin en panne." >&2; echo "Un garde-fou qui ne voit rien ne laisse rien passer." >&2; }
 DOSSIERS=$(printf '%s' "$INPUT" | python3 -I "$H/analyse-commande.py" pousses 2>/dev/null) || {
-    echo "Push refuse : le controle avant push n'a pas pu lire la commande (Python introuvable ou en panne)." >&2
+    CODE=$?
+    echo "Push refuse : le controle avant push n'a pas pu lire la commande." >&2
+    motif_panne "$CODE"
     exit 2
 }
 # Une ligne par push : « dossier<tab>references poussees » (HEAD par defaut).

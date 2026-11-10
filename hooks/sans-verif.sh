@@ -56,9 +56,11 @@ set -u
 H="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INPUT=$(cat)
 
+. "$H/motif-panne.sh" 2>/dev/null || motif_panne() { echo "Lecture impossible (code ${1:-?}) : Python introuvable ou en panne, ou lecteur du plugin en panne." >&2; echo "Un garde-fou qui ne voit rien ne laisse rien passer." >&2; }
 VERDICT=$(printf '%s' "$INPUT" | python3 -I "$H/analyse-commande.py" sans-verif 2>/dev/null) || {
-    echo "Action refusee : ce garde-fou n'a pas pu lire l'action (Python introuvable ou en panne)." >&2
-    echo "Reparer Python, puis relancer. Un garde-fou qui ne voit rien ne laisse rien passer." >&2
+    CODE=$?
+    echo "Action refusee : ce garde-fou n'a pas pu lire l'action." >&2
+    motif_panne "$CODE"
     exit 2
 }
 
