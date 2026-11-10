@@ -96,13 +96,16 @@ print("oui" if ok else "non")' "$H/analyse-commande.py" 2>/dev/null) || exit 0
     exit 0
 fi
 
-SORTIE=$(printf '%s' "$INPUT" | python3 -I "$H/analyse-commande.py" cloture 2>/dev/null) || SORTIE="illisible"
+CODE=0
+SORTIE=$(printf '%s' "$INPUT" | python3 -I "$H/analyse-commande.py" cloture 2>/dev/null) || { CODE=$?; SORTIE="illisible"; }
 
-# Si la lecture echoue (python3 absent ou en panne), le commit est REFUSE :
-# « CLOTURE="" » laissait passer une cloture (/code-review du 2026-09-24).
+# Si la lecture echoue (python3 absent ou en panne, ou lecteur qui plante), le
+# commit est REFUSE : « CLOTURE="" » laissait passer une cloture (/code-review
+# du 2026-09-24). Le motif dit lequel des trois (motif-panne.sh).
 if [[ "$SORTIE" == "illisible" || -z "$SORTIE" ]]; then
-    echo "Action refusee : ce garde-fou n'a pas pu lire la commande (Python introuvable ou en panne)." >&2
-    echo "Reparer Python, puis relancer. Un garde-fou qui ne voit rien ne laisse rien passer." >&2
+    . "$H/motif-panne.sh" 2>/dev/null || motif_panne() { echo "Lecture impossible (code ${1:-?}) : Python introuvable ou en panne, ou lecteur du plugin en panne." >&2; echo "Un garde-fou qui ne voit rien ne laisse rien passer." >&2; }
+    echo "Action refusee : ce garde-fou n'a pas pu lire la commande." >&2
+    motif_panne "$CODE"
     exit 2
 fi
 [[ "$SORTIE" == OUI$'\t'* ]] || exit 0

@@ -2344,8 +2344,15 @@ def lire_message(chemin):
     """Un fichier ordinaire, lu sans bloquer (ni tube ni /dev/zero) ; un lien
     est suivi. None s'il n'existe pas encore."""
     import stat
+    # os.O_NONBLOCK n'existe pas sous Windows : y toucher levait AttributeError,
+    # le lecteur sortait en 3 et tout « git commit -F » était refusé au faux
+    # motif « Python introuvable ». Sans lui, le type est vérifié AVANT
+    # l'ouverture : un périphérique (CON) ferait attendre la lecture.
+    sans_blocage = getattr(os, "O_NONBLOCK", 0)
     try:
-        fd = os.open(chemin, os.O_RDONLY | os.O_NONBLOCK)
+        if not sans_blocage and not stat.S_ISREG(os.stat(chemin).st_mode):
+            return ""
+        fd = os.open(chemin, os.O_RDONLY | sans_blocage | getattr(os, "O_BINARY", 0))
     except OSError:
         return None
     with os.fdopen(fd, "rb") as f:

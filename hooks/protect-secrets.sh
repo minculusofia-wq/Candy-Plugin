@@ -41,13 +41,15 @@ INPUT=$(cat)
 # Si l'analyse echoue (python3 absent ou en panne), l'action est REFUSEE : un
 # hook qui sort en 1 ou 127 ne bloque rien, et l'action passait
 # (/code-review du 2026-09-24).
+. "$H/motif-panne.sh" 2>/dev/null || motif_panne() { echo "Lecture impossible (code ${1:-?}) : Python introuvable ou en panne, ou lecteur du plugin en panne." >&2; echo "Un garde-fou qui ne voit rien ne laisse rien passer." >&2; }
 refuser_illisible() {
-    echo "Action refusee : ce garde-fou n'a pas pu lire l'action (Python introuvable ou en panne)." >&2
-    echo "Reparer Python, puis relancer. Un garde-fou qui ne voit rien ne laisse rien passer." >&2
+    local code="${1:-?}"
+    echo "Action refusee : ce garde-fou n'a pas pu lire l'action." >&2
+    motif_panne "$code"
     exit 2
 }
 
-VERDICT=$(printf '%s' "$INPUT" | python3 -I "$H/analyse-commande.py" protection 2>/dev/null) || refuser_illisible
+VERDICT=$(printf '%s' "$INPUT" | python3 -I "$H/analyse-commande.py" protection 2>/dev/null) || refuser_illisible $?
 
 case "$VERDICT" in
     VALEUR*)

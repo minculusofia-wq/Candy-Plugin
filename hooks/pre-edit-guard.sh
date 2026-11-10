@@ -29,9 +29,11 @@ sys.stdout.buffer.write(str(v).encode('utf-8', 'replace') + b'\\n')
 # Si la lecture de l'entree echoue (python3 absent ou en panne), l'action est
 # REFUSEE : sous set -e, le hook sortait en 1 ou 127, que Claude Code traite
 # comme non bloquant, et l'action passait (/code-review du 2026-09-24).
+. "$H/motif-panne.sh" 2>/dev/null || motif_panne() { echo "Lecture impossible (code ${1:-?}) : Python introuvable ou en panne, ou lecteur du plugin en panne." >&2; echo "Un garde-fou qui ne voit rien ne laisse rien passer." >&2; }
 refuser_illisible() {
-    echo "Action refusee : ce garde-fou n'a pas pu lire l'action (Python introuvable ou en panne)." >&2
-    echo "Reparer Python, puis relancer. Un garde-fou qui ne voit rien ne laisse rien passer." >&2
+    local code="${1:-?}"
+    echo "Action refusee : ce garde-fou n'a pas pu lire l'action." >&2
+    motif_panne "$code"
     exit 2
 }
 # Outil Grep : son chemin est dans « path », pas « file_path ». En mode
@@ -96,9 +98,9 @@ if os.path.isdir(chemin):
     if trouves and ac.motif_trouve('rg', trouves, [str(t.get('pattern') or '')], drapeaux, ds):
         print('SECRET'); sys.exit(0)
 print('OK')
-" "$H/detection-secrets.py" "$H/analyse-commande.py" 2>/dev/null) || refuser_illisible
+" "$H/detection-secrets.py" "$H/analyse-commande.py" 2>/dev/null) || refuser_illisible $?
 
-FILE_PATH=$(json_get file_path) || refuser_illisible
+FILE_PATH=$(json_get file_path) || refuser_illisible $?
 
 if [[ -z "$FILE_PATH" && "$GREP" == "NON" ]]; then
     exit 0
@@ -157,11 +159,11 @@ OUTIL=$(printf '%s' "$INPUT" | python3 -I -c "
 import sys, json
 d = json.loads(sys.stdin.buffer.read().decode('utf-8', 'replace'))
 print((d.get('tool_name') or '') if isinstance(d, dict) else '')
-" 2>/dev/null) || refuser_illisible
+" 2>/dev/null) || refuser_illisible $?
 # Toutes les variantes de .env (.env.local, backend.env, .env-prod, .env~…)
 # portent des secrets ; seuls les modeles sans valeur (.env.example,
 # *.template) et les cles publiques (.pub) restent libres.
-SECRET=$(printf '%s' "$INPUT" | python3 -I "$H/detection-secrets.py" fichier 2>/dev/null) || refuser_illisible
+SECRET=$(printf '%s' "$INPUT" | python3 -I "$H/detection-secrets.py" fichier 2>/dev/null) || refuser_illisible $?
 if [[ "$SECRET" == "SECRET" ]]; then
     [[ "$OUTIL" == "Read" ]] && refuser_lecture
     refuser_secret
