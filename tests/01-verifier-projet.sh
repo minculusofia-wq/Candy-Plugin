@@ -259,16 +259,29 @@ verifie "fausse ligne de make « *** … Error » : ÉCHEC (1)" 1 \
         "$(rep rep-faux-make 'echo "CONTROLE-REPORTE: x"; echo "make: *** 3 tests FAILED -- Error 1"; exit 1')"
 verifie "fausse ligne « Entering directory » : ÉCHEC (1)" 1 \
         "$(rep rep-faux-dir 'echo "CONTROLE-REPORTE: x"; echo "make[2]: Entering directory whatever FAILED"; exit 1')"
-# La recette de verrou donnée dans le README : verrou pris → reporté ; tests
-# rouges, même silencieux → échec.
-mkdir -p "$BAC/verrou"
-printf 'test:\n\t@mkdir .verrou-tests 2>/dev/null || { echo "CONTROLE-REPORTE: un autre make test tourne"; exit 75; }\n\t@./t.sh; r=$$?; rmdir .verrou-tests; exit $$r\n' > "$BAC/verrou/Makefile"
-printf '#!/bin/bash\nexit 1\n' > "$BAC/verrou/t.sh"; chmod +x "$BAC/verrou/t.sh"
-bash "$CONTROLE" "$BAC/verrou" >/dev/null 2>&1
-verifie "recette du README, tests rouges silencieux : ÉCHEC (1)" 1 $?
-mkdir "$BAC/verrou/.verrou-tests"
-bash "$CONTROLE" "$BAC/verrou" >/dev/null 2>&1
-verifie "recette du README, verrou pris : REPORTÉ (3)" 3 $?
+# La recette de verrou donnée dans le README : un verrou que le système libère
+# quand son détenteur meurt (lockf sur macOS, flock sur Linux). Relecteur
+# sécurité, tour 2 de la 0.7.2 : avec mkdir/rmdir, un make test tué (Ctrl-C,
+# ou la fin de tour à court de temps) laissait le verrou, et tout contrôle
+# suivant était « reporté » pour toujours, tests rouges compris.
+if outil lockf; then VERROU="lockf -s -t 0"; elif outil flock; then VERROU="flock -n -E 75"; else VERROU=""; fi
+if [ -n "$VERROU" ]; then
+    mkdir -p "$BAC/verrou"
+    printf 'test:\n\t@%s .test-lock ./t.sh; r=$$?; [ $$r -ne 75 ] || echo "CONTROLE-REPORTE: un autre make test tourne"; exit $$r\n' "$VERROU" > "$BAC/verrou/Makefile"
+    printf '#!/bin/bash\nexit 1\n' > "$BAC/verrou/t.sh"; chmod +x "$BAC/verrou/t.sh"
+    bash "$CONTROLE" "$BAC/verrou" >/dev/null 2>&1
+    verifie "recette du README, tests rouges silencieux : ÉCHEC (1)" 1 $?
+    (cd "$BAC/verrou" && exec $VERROU .test-lock sleep "30.$$") & DETENTEUR=$!
+    sleep 1
+    bash "$CONTROLE" "$BAC/verrou" >/dev/null 2>&1
+    verifie "recette du README, verrou pris : REPORTÉ (3)" 3 $?
+    kill -9 "$DETENTEUR" 2>/dev/null; wait "$DETENTEUR" 2>/dev/null; pkill -9 -f "sleep 30\.$$( |\$)" 2>/dev/null   # marqueur propre à cette passe
+    sleep 1
+    bash "$CONTROLE" "$BAC/verrou" >/dev/null 2>&1
+    verifie "recette du README, détenteur tué net : le verrou est libéré, ÉCHEC (1)" 1 $?
+else
+    saute "recette de verrou du README" "ni lockf ni flock sur cette machine"
+fi
 mkdir -p "$BAC/rep-lint"
 printf 'test:\n\t@echo "CONTROLE-REPORTE: x"; exit 75\nlint:\n\t@echo "E501 ligne trop longue"; exit 1\n' > "$BAC/rep-lint/Makefile"
 bash "$CONTROLE" "$BAC/rep-lint" >/dev/null 2>&1

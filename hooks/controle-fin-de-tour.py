@@ -408,7 +408,7 @@ def main():
         print(json.dumps({"systemMessage": "Controle du projet REPORTE (un autre controle tournait deja) : "
                                             "rien prouve pour ce tour. A relancer (make test, ou /verifier) "
                                             "avant de tenir le travail pour termine. S'il revient a chaque tour, "
-                                            "un verrou est peut-etre reste apres un arret brutal."}))
+                                            "verifier que le verrou du projet se libere quand ses tests s'arretent."}))
         return 0
     # La sortie vient du dépôt : encadrée comme une donnée, jamais comme une
     # consigne. Le cadre porte un jeton tiré à chaque passage : une sortie qui

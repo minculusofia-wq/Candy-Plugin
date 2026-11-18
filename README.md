@@ -70,18 +70,18 @@ lint, types, build) and returns one of four verdicts:
   holds the project's test lock) and nothing failed. Nothing was proven; the
   end-of-turn check warns instead of blocking. Your check signals it by printing
   a single line starting with `CONTROLE-REPORTE:` and exiting non-zero, with no
-  other output (use `@` so make doesn't echo the command). Take the lock in its
-  own line, before the tests run:
+  other output (use `@` so make doesn't echo the command). Use a lock the system
+  releases when its holder dies, so a killed run can't leave it behind
+  (`lockf` on macOS; on Linux, `flock -n -E 75` instead of `lockf -s -t 0`):
 
   ```make
   test:
-  	@mkdir .test-lock 2>/dev/null || { echo "CONTROLE-REPORTE: another make test is running"; exit 75; }
-  	@./run-tests.sh; r=$$?; rmdir .test-lock; exit $$r
+  	@lockf -s -t 0 .test-lock ./run-tests.sh; r=$$?; [ $$r -ne 75 ] || echo "CONTROLE-REPORTE: another make test is running"; exit $$r
   ```
-  Never `<tests> || echo CONTROLE-REPORTE…` (or `flock -n … || …`): a test run
-  that fails without printing anything would then pass for a postponement. If a
-  run is killed, the lock stays and every check is postponed: the warning comes
-  back each turn until you remove `.test-lock`.
+  Never `<tests> || echo CONTROLE-REPORTE…`: a test run that fails without
+  printing anything would then pass for a postponement. And no `mkdir`/`rmdir`
+  lock: a run killed midway (Ctrl-C, or the end-of-turn check running out of
+  time) leaves it, and every later check is postponed, failing tests included.
 
 A `make test` target is followed through its prerequisites and sub-makes
 (`test: test-back`, `$(MAKE) -C backend test`), so the same tests never run
