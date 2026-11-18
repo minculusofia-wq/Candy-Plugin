@@ -225,4 +225,32 @@ debut=$(date +%s); bash "$CONTROLE" "$BAC/fond" >/dev/null 2>&1; duree=$(( $(dat
 pkill -f "sleep 997\.$$( |\$)" 2>/dev/null
 verifie "un processus laissé en arrière-plan ne fait pas attendre le contrôle" 1 "$([ "$duree" -lt 10 ] && echo 1 || echo 0)"
 
+section "Contrôle universel — un contrôle reporté n'est ni un vert ni un rouge (ticket n° 1)"
+# Plusieurs sessions sur un même dépôt : le projet interdit deux make test en
+# même temps, et le second s'arrête sans rien lancer. make rend 2 quel que soit
+# le code de la commande : seule une ligne convenue peut le dire. Elle ne vaut
+# que si RIEN d'autre n'a tourné — sinon un vrai échec qui l'afficherait
+# passerait pour un report.
+rep() {  # rep <nom> <recette make> → code du contrôle ; la sortie dans $BAC/<nom>.out
+    mkdir -p "$BAC/$1"
+    printf 'test:\n\t@%s\n' "$2" > "$BAC/$1/Makefile"
+    bash "$CONTROLE" "$BAC/$1" > "$BAC/$1.out" 2>&1; echo $?
+}
+verifie "seule la ligne de report, code non nul : REPORTÉ (3)" 3 \
+        "$(rep rep-seul 'echo "CONTROLE-REPORTE: un autre make test tourne deja"; exit 75')"
+verifie "  le verdict dit que rien n'a été prouvé" 1 "$(grep -c "rien n'a ete prouve" "$BAC/rep-seul.out")"
+verifie "  et jamais « TOUT PASSE »" 0 "$(grep -c 'TOUT PASSE' "$BAC/rep-seul.out")"
+verifie "ligne de report après une autre sortie : ÉCHEC (1)" 1 \
+        "$(rep rep-apres 'echo "test_a FAILED"; echo "CONTROLE-REPORTE: x"; exit 1')"
+verifie "ligne de report en double : ÉCHEC (1)" 1 \
+        "$(rep rep-double 'echo "CONTROLE-REPORTE: x"; echo "CONTROLE-REPORTE: y"; exit 1')"
+verifie "ligne de report en retrait : ÉCHEC (1)" 1 \
+        "$(rep rep-retrait 'echo "  CONTROLE-REPORTE: x"; exit 1')"
+verifie "ligne de report, code 0 : TOUT PASSE (0)" 0 \
+        "$(rep rep-zero 'echo "CONTROLE-REPORTE: x"')"
+mkdir -p "$BAC/rep-lint"
+printf 'test:\n\t@echo "CONTROLE-REPORTE: x"; exit 75\nlint:\n\t@echo "E501 ligne trop longue"; exit 1\n' > "$BAC/rep-lint/Makefile"
+bash "$CONTROLE" "$BAC/rep-lint" >/dev/null 2>&1
+verifie "un test reporté et un lint en échec : ÉCHEC (1), l'échec l'emporte" 1 $?
+
 bilan

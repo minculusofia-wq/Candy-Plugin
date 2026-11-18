@@ -60,12 +60,17 @@ They work on their own. Take one, not all of them. One exception: model choice, 
 ### The most useful piece: `hooks/verifier-projet.sh`
 
 A zero-config script that, on any project, looks for a way to verify it (tests,
-lint, types, build) and returns one of three verdicts:
+lint, types, build) and returns one of four verdicts:
 
 - `0` everything passes
 - `1` at least one check fails
 - `2` **there is no way to verify this project** — the most useful case, and the
   one nothing else tells you about
+- `3` postponed: a check stopped without running anything (say, another session
+  holds the project's test lock) and nothing failed. Nothing was proven; the
+  end-of-turn check warns instead of blocking. Your check signals it by printing
+  a single line starting with `CONTROLE-REPORTE:` and exiting non-zero, with no
+  other output (use `@` so make doesn't echo the command)
 
 A `make test` target is followed through its prerequisites and sub-makes
 (`test: test-back`, `$(MAKE) -C backend test`), so the same tests never run

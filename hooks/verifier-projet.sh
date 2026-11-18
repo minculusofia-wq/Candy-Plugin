@@ -14,6 +14,8 @@
 #   0 = tout passe
 #   1 = au moins un contrôle échoue
 #   2 = aucun moyen de vérification trouvé dans ce projet
+#   3 = REPORTE : un controle s'est mis en attente sans rien lancer (verrou du
+#       projet), aucun autre n'a echoue — rien n'a ete prouve
 #
 
 set -u
@@ -27,6 +29,7 @@ echo
 
 TROUVE=0
 ECHECS=0
+REPORTES=0
 RESUME=""
 
 # CODE_NEUTRE : code retour qui signifie « ce controle n'a rien a faire ici ».
@@ -39,6 +42,22 @@ CODE_NEUTRE=""
 # aucun (pour comparer deux versions de ce script sur un projet sans executer
 # son code). Code 0, verdict « A BLANC ».
 A_BLANC="${VERIFIER_A_BLANC:-0}"
+
+# est_report <fichier de sortie> : vrai si le controle n'a RIEN fait d'autre
+# que dire qu'il se reporte. Une seule ligne « CONTROLE-REPORTE: … » en debut
+# de ligne, et sinon seulement les lignes que make ajoute lui-meme (make rend 2
+# quel que soit le code de la commande : un code dedie ne le traverse pas).
+# Une ligne de plus — une sortie de test — et c'est un echec : un vrai rouge
+# qui afficherait la ligne ne doit pas passer pour un report (ticket n° 1).
+est_report() {
+    awk '
+        /^[[:space:]]*$/ { next }
+        /^CONTROLE-REPORTE:/ { n++; next }
+        /^g?make(\[[0-9]+\])?: \*\*\* .*Error [0-9]+/ { next }
+        /^g?make(\[[0-9]+\])?: (Entering|Leaving) directory/ { next }
+        { autre = 1 }
+        END { exit !(n == 1 && !autre) }' "$1" 2>/dev/null
+}
 
 lancer() {
     local nom="$1"; shift
@@ -68,12 +87,18 @@ lancer() {
         [ "$sortie" = /dev/null ] || rm -f "$sortie"
         return 0
     fi
+    local reporte=0
+    [ "$code" -ne 0 ] && [ "$sortie" != /dev/null ] && est_report "$sortie" && reporte=1
     echo "--- $nom ---"
     tail -25 "$sortie"
     [ "$sortie" = /dev/null ] || rm -f "$sortie"
     if [ "$code" -eq 0 ]; then
         echo "  [OK] $nom"
         RESUME="${RESUME}  OK     $nom\n"
+    elif [ "$reporte" = 1 ]; then
+        echo "  [REPORTE] $nom"
+        RESUME="${RESUME}  REPORTE $nom\n"
+        REPORTES=$((REPORTES+1))
     else
         echo "  [ECHEC] $nom"
         RESUME="${RESUME}  ECHEC  $nom\n"
@@ -317,7 +342,11 @@ if [ "$A_BLANC" = 1 ]; then
     echo "A BLANC : rien n'a ete lance."
     exit 0
 fi
-if [ "$ECHECS" -eq 0 ]; then
+if [ "$ECHECS" -eq 0 ] && [ "$REPORTES" -gt 0 ]; then
+    echo "REPORTE : $REPORTES controle(s) mis en attente sans rien lancer — rien n'a ete prouve."
+    echo "Le relancer quand l'autre controle aura fini, avant d'annoncer que c'est fait."
+    exit 3
+elif [ "$ECHECS" -eq 0 ]; then
     echo "TOUT PASSE."
     exit 0
 else

@@ -400,6 +400,15 @@ def main():
         return 2
     if p.returncode in (0, 2):
         return 0                                    # vert, ou aucun moyen de vérification
+    if p.returncode == 3:
+        # Reporté (verrou du projet, ticket n° 1) : ni vert ni rouge. Bloquer à
+        # chaque tour quand plusieurs sessions se partagent un dépôt ne prouvait
+        # rien de plus. L'utilisateur est prévenu (systemMessage), sans relancer
+        # la conversation — additionalContext la relancerait.
+        print(json.dumps({"systemMessage": "Controle du projet REPORTE (un autre controle tournait deja) : "
+                                            "rien prouve pour ce tour. A relancer (make test, ou /verifier) "
+                                            "avant de tenir le travail pour termine."}))
+        return 0
     # La sortie vient du dépôt : encadrée comme une donnée, jamais comme une
     # consigne. Le cadre porte un jeton tiré à chaque passage : une sortie qui
     # l'imite (même avec un O cyrillique, qui passait le filtre) ne peut pas le

@@ -57,12 +57,18 @@ Elles fonctionnent séparément — prenez-en une, pas toutes. Seule exception :
 ### La pièce la plus utile : `hooks/verifier-projet.sh`
 
 Un script sans configuration qui, sur n'importe quel projet, cherche de quoi le
-vérifier (tests, lint, types, build) et rend trois verdicts possibles :
+vérifier (tests, lint, types, build) et rend quatre verdicts possibles :
 
 - `0` tout passe
 - `1` au moins un contrôle échoue
 - `2` **aucun moyen de vérification n'existe dans ce projet** — le cas le plus
   utile, celui que personne ne signale d'habitude
+- `3` reporté : un contrôle s'est arrêté sans rien lancer (par exemple, une autre
+  session tient le verrou des tests du projet) et rien n'a échoué. Rien n'est
+  prouvé ; le contrôle de fin de tour prévient au lieu de bloquer. Votre contrôle
+  le signale en affichant une seule ligne qui commence par `CONTROLE-REPORTE:` et
+  en sortant avec un code non nul, sans autre sortie (`@` devant la commande, pour
+  que make ne la recopie pas)
 
 Une cible `make test` est suivie dans ses cibles préalables et ses sous-make
 (`test: test-back`, `$(MAKE) -C backend test`) : les mêmes tests ne tournent

@@ -19,6 +19,8 @@ Le script détecte seul comment vérifier le projet — Makefile, tests Python, 
 
 **Un ou plusieurs échecs** → le travail n'est pas terminé. Corriger **un seul** problème, relancer le contrôle, puis passer au suivant. Ne jamais corriger plusieurs choses d'un coup : en cas de régression, on ne sait plus laquelle est en cause.
 
+**Reporté** → un contrôle s'est mis en attente sans rien lancer (un autre tournait déjà) et rien n'a échoué. Rien n'est prouvé : le dire tel quel, relancer quand l'autre contrôle a fini, et ne pas annoncer que c'est fait d'ici là.
+
 **Aucun moyen de vérification trouvé** → c'est le cas le plus important. Le projet n'a rien qui permette de savoir si une modification casse quelque chose.
 
 Dans ce cas :

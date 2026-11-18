@@ -232,4 +232,16 @@ verifie "formule seulement citée : rien" 0 "$(relire "Le contrôle attrape « b
 verifie "entrée qui n'est pas un objet : rien, sans planter" \
         0 "$(printf '[1]' | env TMPDIR="$BAC" python3 -I "$RELIRE" >/dev/null 2>&1; echo $?)"
 
+section "Fin de tour — un contrôle reporté prévient sans bloquer (ticket n° 1)"
+D_REP=$(depot reporte 'echo "CONTROLE-REPORTE: un autre make test tourne deja"; exit 75')
+printf 'x = 2\n' > "$D_REP/app.py"
+SORTIE_REP=$(python3 -I -c 'import json, sys; print(json.dumps({"cwd": sys.argv[1], "stop_hook_active": False}))' "$D_REP" \
+    | env CONTROLE_BUDGET=60 bash "$HOOK" 2>"$BAC/stderr"); CODE_REP=$?
+verifie "contrôle reporté : la fin du tour n'est PAS refusée" 0 "$CODE_REP"
+verifie "  un avertissement à l'utilisateur dit que rien n'a été prouvé" 1 \
+        "$(printf '%s' "$SORTIE_REP" | python3 -I -c 'import json, sys; m = json.load(sys.stdin).get("systemMessage", ""); print(int("rien prouve" in m))' 2>/dev/null || echo 0)"
+D_REP2=$(depot reporte-mais 'echo "1 test en echec"; echo "CONTROLE-REPORTE: x"; exit 1')
+printf 'x = 2\n' > "$D_REP2/app.py"
+verifie "report mêlé à une autre sortie : REFUSE la fin du tour" 2 "$(fin "$D_REP2")"
+
 bilan
