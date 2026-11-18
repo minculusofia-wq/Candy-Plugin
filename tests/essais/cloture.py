@@ -178,11 +178,20 @@ try:
                  ac.porte_cloture(ac.lire_message(os.path.join(depot, "msg-cloture.txt")) or ""))
         attendre("sans O_NONBLOCK, lien vers le fichier : suivi et lu", True, ac.porte_cloture(ac.lire_message(lien) or ""))
         attendre("sans O_NONBLOCK, fichier absent : None", None, ac.lire_message(os.path.join(depot, "absent.txt")))
-        attendre("sans O_NONBLOCK, dossier : vide", "", ac.lire_message(depot))
-        attendre("sans O_NONBLOCK, /dev/zero : vide, sans lire", "", ac.lire_message("/dev/zero"))
-        attendre("sans O_NONBLOCK, tube sans écrivain : vide, sans attendre", "", ac.lire_message(tube))
+        attendre("sans O_NONBLOCK, dossier : None", None, ac.lire_message(depot))
+        attendre("sans O_NONBLOCK, /dev/zero : None, sans lire", None, ac.lire_message("/dev/zero"))
+        attendre("sans O_NONBLOCK, tube sans écrivain : None, sans attendre", None, ac.lire_message(tube))
     finally:
         os.O_NONBLOCK = gardee
+
+    # Relecteur sécurité, tour 2 de la PR n° 2 : lire_message rendait "" pour un
+    # fichier non ordinaire, et "" ne déclenchait pas le repli sur les mots de la
+    # commande — un tube nommé rempli par la même commande faisait passer la clôture.
+    os.mkfifo(os.path.join(depot, "tube-msg"))
+    attendre("-F tube nommé rempli par la même commande : refusé", 2,
+             lancer(f"(printf %s '{MARQUEUR}' > tube-msg &); git commit --allow-empty -F tube-msg"))
+    attendre("-F tube nommé, sans clôture dans la commande : permis", 0,
+             lancer("(printf %s 'fix: x' > tube-msg &); git commit --allow-empty -F tube-msg"))
 
     section("Lecture impossible — le refus dit laquelle des trois pannes")
     casse = os.path.join(base, "hooks-casses")

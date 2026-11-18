@@ -2342,7 +2342,11 @@ def porte_cloture_quelque_part(texte):
 
 def lire_message(chemin):
     """Un fichier ordinaire, lu sans bloquer (ni tube ni /dev/zero) ; un lien
-    est suivi. None s'il n'existe pas encore."""
+    est suivi. None s'il n'existe pas encore, ou si ce n'est pas un fichier
+    ordinaire : son contenu est alors inconnu, et l'appelant juge les mots et
+    les documents de la commande. Jusqu'à la 0.7.0, un tube rendait "" : « (printf
+    'cloture…' > tube &); git commit -F tube » passait sans /fin-phase
+    (relecteur sécurité, PR n° 2)."""
     import stat
     # os.O_NONBLOCK n'existe pas sous Windows : y toucher levait AttributeError,
     # le lecteur sortait en 3 et tout « git commit -F » était refusé au faux
@@ -2351,13 +2355,13 @@ def lire_message(chemin):
     sans_blocage = getattr(os, "O_NONBLOCK", 0)
     try:
         if not sans_blocage and not stat.S_ISREG(os.stat(chemin).st_mode):
-            return ""
+            return None
         fd = os.open(chemin, os.O_RDONLY | sans_blocage | getattr(os, "O_BINARY", 0))
     except OSError:
         return None
     with os.fdopen(fd, "rb") as f:
         if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
-            return ""
+            return None
         return f.read(160000).decode("utf-8", "replace")[:40000]
 
 
