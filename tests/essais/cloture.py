@@ -60,8 +60,8 @@ try:
     open(os.path.join(depot, "msg-ordinaire.txt"), "w").write("fix: une correction\n")
     attendre("-F fichier de clôture écrit plus tôt : refusé", 2, lancer("git commit -F msg-cloture.txt"))
     attendre("--file=fichier de clôture : refusé", 2, lancer("git commit --file=msg-cloture.txt"))
-    attendre("-F chemin absolu, depuis ailleurs : refusé", 2, lancer(f"git -C {DS} commit -F {DS}/msg-cloture.txt", cwd=base))
-    attendre("cd dépôt && git commit -F fichier : refusé", 2, lancer(f"cd {DS} && git commit -F msg-cloture.txt", cwd=base))
+    attendre("-F chemin absolu, depuis ailleurs : refusé", 2, lancer(f"git -C '{DS}' commit -F '{DS}/msg-cloture.txt'", cwd=base))
+    attendre("cd dépôt && git commit -F fichier : refusé", 2, lancer(f"cd '{DS}' && git commit -F msg-cloture.txt", cwd=base))
     attendre("-F fichier ordinaire : permis", 0, lancer("git commit -F msg-ordinaire.txt"))
     attendre("-F fichier créé par la même commande, ordinaire : permis", 0,
              lancer("printf 'fix: x' > m.txt && git commit -F m.txt"))
@@ -77,7 +77,7 @@ try:
     refuses = [f'git \\\n  commit -m "{MARQUEUR}"', "git commit \\\n  -F msg-cloture.txt",
                f"git commit -m \"$(cat <<'EOF'\n{MARQUEUR}\n\ndétail\nEOF\n)\"",
                f"git commit -F - <<'FIN'\n{MARQUEUR}\nFIN", "git commit -aF msg-cloture.txt",
-               f'git merge -m "{MARQUEUR}" autre', f"(cd {DS} && git commit -F msg-cloture.txt)",
+               f'git merge -m "{MARQUEUR}" autre', f"(cd '{DS}' && git commit -F msg-cloture.txt)",
                'git commit -m "$(cat msg-cloture.txt)"', "git commit -F lien.txt",
                f'git -c alias.fin=commit fin -m "{MARQUEUR}"',
                # relecture xhigh : un $( ) sans cat ni document laissait passer le marqueur
@@ -91,7 +91,7 @@ try:
                # zsh développe =git en chemin de git (relecture de la 0.5.0)
                f'=git commit -m "{MARQUEUR}"']
     for cmd in refuses:
-        attendre(f"clôture refusée : {cmd.replace(depot, '…')[:55]!r}", 2, lancer(cmd, cwd=base if depot in cmd else depot))
+        attendre(f"clôture refusée : {cmd.replace(DS, '…')[:55]!r}", 2, lancer(cmd, cwd=base if DS in cmd else depot))
     subprocess.run(["git", "-C", depot, "config", "alias.ci", "commit"], check=True)
     attendre("alias git ci = commit : refusé", 2, lancer(f'git ci -m "{MARQUEUR}"'))
     permis = [f'git log --grep "{MARQUEUR}" && git commit -m "fix: x"',
@@ -159,6 +159,30 @@ try:
     code, err = refus("git commit -F msg-cloture.txt")
     attendre("hook, -F clôture : refusé pour /fin-phase, pas pour Python", (2, 0),
              (code, int("pas pu lire" in err)), err[:200])
+
+    # Sur macOS et Linux, O_NONBLOCK existe : les cas ci-dessus ne passent pas
+    # par la branche Windows de lire_message (relecture xhigh de la PR n° 2).
+    # On la force ici, dans ce processus, en retirant l'option le temps de l'essai.
+    section("Clôture de phase — lire_message sans O_NONBLOCK (branche Windows)")
+    spec = importlib.util.spec_from_file_location("ac_sans_nb", os.path.join(H, "analyse-commande.py"))
+    ac = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ac)
+    tube = os.path.join(base, "tube")
+    os.mkfifo(tube)
+    lien = os.path.join(base, "lien-msg")
+    os.symlink(os.path.join(depot, "msg-cloture.txt"), lien)
+    gardee = os.O_NONBLOCK
+    del os.O_NONBLOCK
+    try:
+        attendre("sans O_NONBLOCK, fichier ordinaire : lu", True,
+                 ac.porte_cloture(ac.lire_message(os.path.join(depot, "msg-cloture.txt")) or ""))
+        attendre("sans O_NONBLOCK, lien vers le fichier : suivi et lu", True, ac.porte_cloture(ac.lire_message(lien) or ""))
+        attendre("sans O_NONBLOCK, fichier absent : None", None, ac.lire_message(os.path.join(depot, "absent.txt")))
+        attendre("sans O_NONBLOCK, dossier : vide", "", ac.lire_message(depot))
+        attendre("sans O_NONBLOCK, /dev/zero : vide, sans lire", "", ac.lire_message("/dev/zero"))
+        attendre("sans O_NONBLOCK, tube sans écrivain : vide, sans attendre", "", ac.lire_message(tube))
+    finally:
+        os.O_NONBLOCK = gardee
 
     section("Lecture impossible — le refus dit laquelle des trois pannes")
     casse = os.path.join(base, "hooks-casses")

@@ -96,6 +96,9 @@ print("oui" if ok else "non")' "$H/analyse-commande.py" 2>/dev/null) || exit 0
     exit 0
 fi
 
+# motif-panne.sh est LANCE, jamais charge par « . » : absent ou casse, il ne
+# peut pas faire sortir ce hook en 1 (non bloquant) ; le repli prend le relais.
+motif_panne() { bash "$H/motif-panne.sh" "${1:-?}" || echo "Lecture impossible (code ${1:-?}) : Python introuvable ou en panne, ou lecteur du plugin en panne." >&2; echo "Un garde-fou qui ne voit rien ne laisse rien passer." >&2; }
 CODE=0
 SORTIE=$(printf '%s' "$INPUT" | python3 -I "$H/analyse-commande.py" cloture 2>/dev/null) || { CODE=$?; SORTIE="illisible"; }
 
@@ -103,7 +106,6 @@ SORTIE=$(printf '%s' "$INPUT" | python3 -I "$H/analyse-commande.py" cloture 2>/d
 # commit est REFUSE : « CLOTURE="" » laissait passer une cloture (/code-review
 # du 2026-09-24). Le motif dit lequel des trois (motif-panne.sh).
 if [[ "$SORTIE" == "illisible" || -z "$SORTIE" ]]; then
-    . "$H/motif-panne.sh" 2>/dev/null || motif_panne() { echo "Lecture impossible (code ${1:-?}) : Python introuvable ou en panne, ou lecteur du plugin en panne." >&2; echo "Un garde-fou qui ne voit rien ne laisse rien passer." >&2; }
     echo "Action refusee : ce garde-fou n'a pas pu lire la commande." >&2
     motif_panne "$CODE"
     exit 2

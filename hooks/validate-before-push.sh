@@ -51,7 +51,9 @@ INPUT=$(cat)
 
 # Si la commande ne peut pas etre lue (Python absent ou en panne), le push est
 # REFUSE : un garde-fou qui ne voit rien ne laisse rien passer.
-. "$H/motif-panne.sh" 2>/dev/null || motif_panne() { echo "Lecture impossible (code ${1:-?}) : Python introuvable ou en panne, ou lecteur du plugin en panne." >&2; echo "Un garde-fou qui ne voit rien ne laisse rien passer." >&2; }
+# motif-panne.sh est LANCE, jamais charge par « . » : absent ou casse, il ne
+# peut pas faire sortir ce hook en 1 (non bloquant) ; le repli prend le relais.
+motif_panne() { bash "$H/motif-panne.sh" "${1:-?}" || echo "Lecture impossible (code ${1:-?}) : Python introuvable ou en panne, ou lecteur du plugin en panne." >&2; echo "Un garde-fou qui ne voit rien ne laisse rien passer." >&2; }
 DOSSIERS=$(printf '%s' "$INPUT" | python3 -I "$H/analyse-commande.py" pousses 2>/dev/null) || {
     CODE=$?
     echo "Push refuse : le controle avant push n'a pas pu lire la commande." >&2
@@ -207,7 +209,9 @@ if disque or tout or ajouts:
             st = os.lstat(p)
             if not stat.S_ISREG(st.st_mode) or st.st_size > 2_000_000:
                 continue
-            fd = os.open(p, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            # getattr : O_NOFOLLOW et O_NONBLOCK manquent sous Windows (PR n° 2) ;
+            # le lstat ci-dessus a deja ecarte liens et peripheriques.
+            fd = os.open(p, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
             with os.fdopen(fd, "rb") as f:
                 contenu = f.read()
         except OSError:

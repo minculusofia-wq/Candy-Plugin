@@ -384,7 +384,9 @@ for c in ['echo "abc', "echo $'a\\'b'", "printf $'x\\ty\\n'", "cat $'notes\\x2et
 for c in ['cat .env "', "cat $'\\x2eenv'", "cat $'.e\\156v'"]:
     code, err = bash_7(c)
     attendre(f"Bash refusé (guillemets) : {c!r}", 2, code)
-    attendre(f"  sans le faux motif « Python introuvable » : {c!r}", 0, int("Python introuvable" in err))
+    # « pas pu lire » et non « Python introuvable » : depuis motif-panne.sh (0.7.1),
+    # un lecteur qui plante le dit en mettant Python hors de cause.
+    attendre(f"  refusé par la lecture, pas par une panne du lecteur : {c!r}", 0, int("pas pu lire" in err))
 
 # Redirections : le « 1 » de « -f 1 > f » était retiré comme le « 2 » de « 2> f »,
 # et cut -d= -f (sans champ) passait pour un affichage de la ligne entière.
