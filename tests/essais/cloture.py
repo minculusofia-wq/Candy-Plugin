@@ -163,35 +163,40 @@ try:
     # Sur macOS et Linux, O_NONBLOCK existe : les cas ci-dessus ne passent pas
     # par la branche Windows de lire_message (relecture xhigh de la PR n° 2).
     # On la force ici, dans ce processus, en retirant l'option le temps de l'essai.
-    section("Clôture de phase — lire_message sans O_NONBLOCK (branche Windows)")
-    spec = importlib.util.spec_from_file_location("ac_sans_nb", os.path.join(H, "analyse-commande.py"))
-    ac = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(ac)
-    tube = os.path.join(base, "tube")
-    os.mkfifo(tube)
-    lien = os.path.join(base, "lien-msg")
-    os.symlink(os.path.join(depot, "msg-cloture.txt"), lien)
-    gardee = os.O_NONBLOCK
-    del os.O_NONBLOCK
-    try:
-        attendre("sans O_NONBLOCK, fichier ordinaire : lu", True,
-                 ac.porte_cloture(ac.lire_message(os.path.join(depot, "msg-cloture.txt")) or ""))
-        attendre("sans O_NONBLOCK, lien vers le fichier : suivi et lu", True, ac.porte_cloture(ac.lire_message(lien) or ""))
-        attendre("sans O_NONBLOCK, fichier absent : None", None, ac.lire_message(os.path.join(depot, "absent.txt")))
-        attendre("sans O_NONBLOCK, dossier : None", None, ac.lire_message(depot))
-        attendre("sans O_NONBLOCK, /dev/zero : None, sans lire", None, ac.lire_message("/dev/zero"))
-        attendre("sans O_NONBLOCK, tube sans écrivain : None, sans attendre", None, ac.lire_message(tube))
-    finally:
-        os.O_NONBLOCK = gardee
+    # Tubes nommés et O_NONBLOCK n'existent que sous Unix : sous Windows, la
+    # branche sans O_NONBLOCK est déjà la vraie, jouée plus haut.
+    if hasattr(os, "mkfifo") and hasattr(os, "O_NONBLOCK"):
+        section("Clôture de phase — lire_message sans O_NONBLOCK (branche Windows)")
+        spec = importlib.util.spec_from_file_location("ac_sans_nb", os.path.join(H, "analyse-commande.py"))
+        ac = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ac)
+        tube = os.path.join(base, "tube")
+        os.mkfifo(tube)
+        lien = os.path.join(base, "lien-msg")
+        os.symlink(os.path.join(depot, "msg-cloture.txt"), lien)
+        gardee = os.O_NONBLOCK
+        del os.O_NONBLOCK
+        try:
+            attendre("sans O_NONBLOCK, fichier ordinaire : lu", True,
+                     ac.porte_cloture(ac.lire_message(os.path.join(depot, "msg-cloture.txt")) or ""))
+            attendre("sans O_NONBLOCK, lien vers le fichier : suivi et lu", True, ac.porte_cloture(ac.lire_message(lien) or ""))
+            attendre("sans O_NONBLOCK, fichier absent : None", None, ac.lire_message(os.path.join(depot, "absent.txt")))
+            attendre("sans O_NONBLOCK, dossier : None", None, ac.lire_message(depot))
+            attendre("sans O_NONBLOCK, /dev/zero : None, sans lire", None, ac.lire_message("/dev/zero"))
+            attendre("sans O_NONBLOCK, tube sans écrivain : None, sans attendre", None, ac.lire_message(tube))
+        finally:
+            os.O_NONBLOCK = gardee
 
-    # Relecteur sécurité, tour 2 de la PR n° 2 : lire_message rendait "" pour un
-    # fichier non ordinaire, et "" ne déclenchait pas le repli sur les mots de la
-    # commande — un tube nommé rempli par la même commande faisait passer la clôture.
-    os.mkfifo(os.path.join(depot, "tube-msg"))
-    attendre("-F tube nommé rempli par la même commande : refusé", 2,
-             lancer(f"(printf %s '{MARQUEUR}' > tube-msg &); git commit --allow-empty -F tube-msg"))
-    attendre("-F tube nommé, sans clôture dans la commande : permis", 0,
-             lancer("(printf %s 'fix: x' > tube-msg &); git commit --allow-empty -F tube-msg"))
+        # Relecteur sécurité, tour 2 de la PR n° 2 : lire_message rendait "" pour un
+        # fichier non ordinaire, et "" ne déclenchait pas le repli sur les mots de la
+        # commande — un tube nommé rempli par la même commande faisait passer la clôture.
+        os.mkfifo(os.path.join(depot, "tube-msg"))
+        attendre("-F tube nommé rempli par la même commande : refusé", 2,
+                 lancer(f"(printf %s '{MARQUEUR}' > tube-msg &); git commit --allow-empty -F tube-msg"))
+        attendre("-F tube nommé, sans clôture dans la commande : permis", 0,
+                 lancer("(printf %s 'fix: x' > tube-msg &); git commit --allow-empty -F tube-msg"))
+    else:
+        print("  (sauté sous cette plateforme : ni tube nommé ni O_NONBLOCK à retirer ; la branche sans O_NONBLOCK est celle jouée plus haut)")
 
     section("Lecture impossible — le refus dit laquelle des trois pannes")
     casse = os.path.join(base, "hooks-casses")

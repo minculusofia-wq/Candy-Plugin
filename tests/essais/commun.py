@@ -38,7 +38,9 @@ def lancer(hooks, hook, outil, entree, cwd=None, env=None, arguments=()):
     if cwd:
         donnees["cwd"] = cwd
     e = dict(os.environ, **(env or {}))
-    r = subprocess.run(["bash", os.path.join(hooks, hook), *arguments], input=json.dumps(donnees).encode(),
+    # « / » et non os.path.join : sous Windows, le « \ » ferait remonter d'un cran
+    # le ${BASH_SOURCE[0]%/*} des hooks, qui ne trouveraient plus leur dossier (PR n° 2).
+    r = subprocess.run(["bash", hooks.replace(os.sep, "/") + "/" + hook, *arguments], input=json.dumps(donnees).encode(),
                        capture_output=True, env=e, cwd=cwd or None, timeout=120)
     return r.returncode, r.stdout.decode(errors="replace"), r.stderr.decode(errors="replace")
 
