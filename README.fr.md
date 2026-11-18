@@ -68,7 +68,18 @@ vérifier (tests, lint, types, build) et rend quatre verdicts possibles :
   prouvé ; le contrôle de fin de tour prévient au lieu de bloquer. Votre contrôle
   le signale en affichant une seule ligne qui commence par `CONTROLE-REPORTE:` et
   en sortant avec un code non nul, sans autre sortie (`@` devant la commande, pour
-  que make ne la recopie pas)
+  que make ne la recopie pas). Prendre le verrou sur une ligne à part, avant de
+  lancer les tests :
+
+  ```make
+  test:
+  	@mkdir .verrou-tests 2>/dev/null || { echo "CONTROLE-REPORTE: un autre make test tourne"; exit 75; }
+  	@./lancer-tests.sh; r=$$?; rmdir .verrou-tests; exit $$r
+  ```
+  Jamais `<tests> || echo CONTROLE-REPORTE…` (ni `flock -n … || …`) : des tests
+  qui échouent sans rien afficher passeraient alors pour un report. Si des tests
+  sont tués en cours de route, le verrou reste et chaque contrôle est reporté :
+  l'avertissement revient à chaque tour tant que `.verrou-tests` n'est pas retiré.
 
 Une cible `make test` est suivie dans ses cibles préalables et ses sous-make
 (`test: test-back`, `$(MAKE) -C backend test`) : les mêmes tests ne tournent

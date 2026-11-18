@@ -248,6 +248,27 @@ verifie "ligne de report en retrait : ÉCHEC (1)" 1 \
         "$(rep rep-retrait 'echo "  CONTROLE-REPORTE: x"; exit 1')"
 verifie "ligne de report, code 0 : TOUT PASSE (0)" 0 \
         "$(rep rep-zero 'echo "CONTROLE-REPORTE: x"')"
+# Relecteur sécurité (0.7.2) : un octet nul masquait une ligne pour l'awk de
+# macOS, un retour chariot cachait du texte derrière la ligne de report, et
+# les lignes « de make » tolérées acceptaient n'importe quelle suite.
+verifie "octet nul devant une ligne de test : ÉCHEC (1)" 1 \
+        "$(rep rep-nul 'printf "CONTROLE-REPORTE: x\n\0003 failed\n"; exit 1')"
+verifie "texte caché derrière un retour chariot : ÉCHEC (1)" 1 \
+        "$(rep rep-cr 'printf "CONTROLE-REPORTE: x\rFAILED test_a\n"; exit 1')"
+verifie "fausse ligne de make « *** … Error » : ÉCHEC (1)" 1 \
+        "$(rep rep-faux-make 'echo "CONTROLE-REPORTE: x"; echo "make: *** 3 tests FAILED -- Error 1"; exit 1')"
+verifie "fausse ligne « Entering directory » : ÉCHEC (1)" 1 \
+        "$(rep rep-faux-dir 'echo "CONTROLE-REPORTE: x"; echo "make[2]: Entering directory whatever FAILED"; exit 1')"
+# La recette de verrou donnée dans le README : verrou pris → reporté ; tests
+# rouges, même silencieux → échec.
+mkdir -p "$BAC/verrou"
+printf 'test:\n\t@mkdir .verrou-tests 2>/dev/null || { echo "CONTROLE-REPORTE: un autre make test tourne"; exit 75; }\n\t@./t.sh; r=$$?; rmdir .verrou-tests; exit $$r\n' > "$BAC/verrou/Makefile"
+printf '#!/bin/bash\nexit 1\n' > "$BAC/verrou/t.sh"; chmod +x "$BAC/verrou/t.sh"
+bash "$CONTROLE" "$BAC/verrou" >/dev/null 2>&1
+verifie "recette du README, tests rouges silencieux : ÉCHEC (1)" 1 $?
+mkdir "$BAC/verrou/.verrou-tests"
+bash "$CONTROLE" "$BAC/verrou" >/dev/null 2>&1
+verifie "recette du README, verrou pris : REPORTÉ (3)" 3 $?
 mkdir -p "$BAC/rep-lint"
 printf 'test:\n\t@echo "CONTROLE-REPORTE: x"; exit 75\nlint:\n\t@echo "E501 ligne trop longue"; exit 1\n' > "$BAC/rep-lint/Makefile"
 bash "$CONTROLE" "$BAC/rep-lint" >/dev/null 2>&1

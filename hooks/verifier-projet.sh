@@ -45,16 +45,22 @@ A_BLANC="${VERIFIER_A_BLANC:-0}"
 
 # est_report <fichier de sortie> : vrai si le controle n'a RIEN fait d'autre
 # que dire qu'il se reporte. Une seule ligne « CONTROLE-REPORTE: … » en debut
-# de ligne, et sinon seulement les lignes que make ajoute lui-meme (make rend 2
-# quel que soit le code de la commande : un code dedie ne le traverse pas).
-# Une ligne de plus — une sortie de test — et c'est un echec : un vrai rouge
-# qui afficherait la ligne ne doit pas passer pour un report (ticket n° 1).
+# de ligne, et sinon seulement les lignes que make ajoute lui-meme, sous leur
+# forme exacte (make rend 2 quel que soit le code de la commande : le projet ne
+# peut pas dire « reporte » par son code de sortie). Une ligne de plus — une
+# sortie de test — et c'est un echec : un vrai rouge qui afficherait la ligne
+# ne doit pas passer pour un report (ticket n° 1).
+# Relecteur securite (0.7.2) : un octet nul coupait la ligne pour l'awk de
+# macOS, et un retour chariot cachait du texte derriere le marqueur — les deux
+# sont refuses d'emblee.
 est_report() {
-    awk '
+    [ -s "$1" ] || return 1
+    LC_ALL=C tr -d '\000\r' < "$1" | cmp -s - "$1" || return 1
+    LC_ALL=C awk -v q="'" '
         /^[[:space:]]*$/ { next }
         /^CONTROLE-REPORTE:/ { n++; next }
-        /^g?make(\[[0-9]+\])?: \*\*\* .*Error [0-9]+/ { next }
-        /^g?make(\[[0-9]+\])?: (Entering|Leaving) directory/ { next }
+        /^g?make(\[[0-9]+\])?: \*\*\* \[[^]]*\] Error [0-9]+$/ { next }
+        $0 ~ ("^g?make(\\[[0-9]+\\])?: (Entering|Leaving) directory [`" q "][^`" q "]*" q "$") { next }
         { autre = 1 }
         END { exit !(n == 1 && !autre) }' "$1" 2>/dev/null
 }
